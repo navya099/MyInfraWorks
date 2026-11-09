@@ -1,0 +1,4 @@
+env = SConscript('godot-cpp/SConstruct')
+env.Append(CPPPATH=['src'])
+library = env.SharedLibrary('project/bin/kroad_core' + env['suffix'] + env['SHLIBSUFFIX'], source=Glob('src/*.cpp'))
+Default(library)

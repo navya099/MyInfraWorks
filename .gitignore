@@ -1,0 +1,28 @@
+# Build output
+**/bin/
+**/obj/
+*.obj
+*.lib
+*.exp
+*.pdb
+*.dll
+*.exe
+.sconsign*
+# Godot/editor state
+**/.godot/
+.vs/
+.vscode/
+__pycache__/
+*.pyc
+.venv/
+# Local terrain, projects and scratch files
+work/
+data/
+*.tif
+*.tiff
+*.TIF
+*.TIFF
+*.hgt
+*.dem
+*.kroad
+*.zip
