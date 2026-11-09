@@ -1,5 +1,13 @@
 config_version=5
 [application]
-config/name="K-ROAD Native Core"
+config/name="MyInfraWorks"
+run/main_scene="res://main.tscn"
+[display]
+window/size/viewport_width=1440
+window/size/viewport_height=940
+window/size/window_width_override=1440
+window/size/window_height_override=940
+window/stretch/mode="canvas_items"
 [rendering]
 renderer/rendering_method="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.04,0.065,0.095,1)
