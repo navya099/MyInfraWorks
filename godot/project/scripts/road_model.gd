@@ -4,6 +4,12 @@ var core = ClassDB.instantiate("KRoadCore")
 var terrain = {}
 var source = {}
 var route = PackedVector3Array()
+var radii = PackedFloat64Array()
+var spirals = PackedFloat64Array()
+var vertical_lengths = PackedFloat64Array()
+var alignment = ClassDB.instantiate("KRoadAlignment")
+var alignment_data = {"length":0.0,"pi_stations":PackedFloat64Array(),"elements":[]}
+var centerline = PackedVector3Array()
 var road_width = 20.0
 var offset = 0.0
 var slope = 1.5
@@ -75,6 +81,10 @@ func set_terrain(t, detail={}):
  terrain.Max = high
  source=detail if not detail.is_empty() else terrain.duplicate()
  route = PackedVector3Array()
+ radii=PackedFloat64Array()
+ spirals=PackedFloat64Array()
+ vertical_lengths=PackedFloat64Array()
+ rebuild_alignment()
  var image = Image.create(nx, ny, false, Image.FORMAT_RGBA8)
  var span = max(1.0, high - low)
  for y in range(ny):
@@ -92,27 +102,54 @@ func ground(x, y):
  return core.sample_height(source, x, y)
 
 func design(x, y):
- return core.design_height(source, route, x, y, road_width, offset, slope)
+ return core.design_height(source, centerline, x, y, road_width, offset, slope)
+
+func rebuild_alignment():
+ var count=route.size()
+ var old_size=radii.size()
+ radii.resize(count)
+ spirals.resize(count)
+ vertical_lengths.resize(count)
+ for i in range(old_size,count):
+  radii[i]=0
+  spirals[i]=0
+  vertical_lengths[i]=0
+ if count>0:
+  radii[0]=0
+  spirals[0]=0
+  vertical_lengths[0]=0
+  radii[count-1]=0
+  spirals[count-1]=0
+  vertical_lengths[count-1]=0
+ for radius in radii:
+  if radius>0 and radius<=road_width/2:
+   return "R must exceed half the road width to avoid an inverted inner edge"
+ var result=alignment.configure(route,radii,spirals,vertical_lengths)
+ if not result.ok:
+  return result.error
+ alignment_data=result
+ centerline=alignment.polyline()
+ core.prepare_corridor(centerline,road_width,offset,slope,terrain.get("Min",0),terrain.get("Max",0),max(terrain.get("Dx",1),terrain.get("Dy",1))*2)
+ return ""
+
+func restore(snapshot_data):
+ route=snapshot_data.pi_route.duplicate()
+ radii=snapshot_data.radii.duplicate()
+ spirals=snapshot_data.spirals.duplicate()
+ vertical_lengths=snapshot_data.vertical_lengths.duplicate()
+ road_width=snapshot_data.width
+ offset=snapshot_data.offset
+ slope=snapshot_data.slope
+ rebuild_alignment()
 
 func length():
- var total = 0.0
- for i in range(1, route.size()):
-  total += Vector2(route[i].x-route[i-1].x, route[i].z-route[i-1].z).length()
- return total
+ return float(alignment_data.length)
+
+func pi_station(index):
+ return alignment_data.pi_stations[index] if index>=0 and index<alignment_data.pi_stations.size() else 0.0
 
 func sample(distance):
- for i in range(1, route.size()):
-  var a = route[i-1]
-  var b = route[i]
-  var direction = Vector2(b.x-a.x,b.z-a.z)
-  var segment = direction.length()
-  if segment < 0.001:
-   continue
-  if distance <= segment or i == route.size()-1:
-   var f = clamp(distance/segment,0.0,1.0)
-   return {"point":a.lerp(b,f), "normal":Vector2(-direction.y,direction.x)/segment}
-  distance -= segment
- return {"point":Vector3.ZERO,"normal":Vector2.UP}
+ return alignment.sample(distance)
 
 func world(point):
  var size = extent()
@@ -120,30 +157,15 @@ func world(point):
 
 func snapshot():
  # Packed arrays use copy-on-write. Main thread replaces route, never mutates worker data.
- return {"source":source.duplicate(),"terrain":terrain.duplicate(),"route":route.duplicate(),"width":road_width,"offset":offset,"slope":slope,"refinement":refinement()}
+ return {"source":source.duplicate(),"terrain":terrain.duplicate(),"pi_route":route.duplicate(),"radii":radii.duplicate(),"spirals":spirals.duplicate(),"vertical_lengths":vertical_lengths.duplicate(),"route":centerline.duplicate(),"width":road_width,"offset":offset,"slope":slope,"refinement":refinement()}
 
 func refinement():
  var desired=max(5.0,max(min(source.Dx,source.Dy)/2.0,road_width/3.0))
  return clampi(ceili(max(terrain.Dx,terrain.Dy)/desired),2,16)
 
 static func affected(snapshot_data, tile_size):
- var t = snapshot_data.terrain
- var r = snapshot_data.route
- var result = {}
- var nx = ceili(float(t.Nx-1)/tile_size)
- var ny = ceili(float(t.Ny-1)/tile_size)
- for i in range(1,r.size()):
-  var a = r[i-1]
-  var b = r[i]
-  var low = min(a.y,b.y)+snapshot_data.offset
-  var high = max(a.y,b.y)+snapshot_data.offset
-  var delta = max(abs(low-t.Max),abs(high-t.Min))
-  var margin = snapshot_data.width/2.0 + delta*snapshot_data.slope + max(t.Dx,t.Dy)*2
-  var x0 = clampi(floori((min(a.x,b.x)-margin)/(t.Dx*tile_size)),0,nx-1)
-  var x1 = clampi(floori((max(a.x,b.x)+margin)/(t.Dx*tile_size)),0,nx-1)
-  var y0 = clampi(floori((min(a.z,b.z)-margin)/(t.Dy*tile_size)),0,ny-1)
-  var y1 = clampi(floori((max(a.z,b.z)+margin)/(t.Dy*tile_size)),0,ny-1)
-  for y in range(y0,y1+1):
-   for x in range(x0,x1+1):
-    result[Vector2i(x,y)] = true
+ var result={}
+ var engine=ClassDB.instantiate("KRoadCore")
+ for point in engine.affected_tiles(snapshot_data.terrain,snapshot_data.route,snapshot_data.width,snapshot_data.offset,snapshot_data.slope,tile_size):
+  result[Vector2i(point)]=true
  return result

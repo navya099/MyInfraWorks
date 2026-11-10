@@ -1,6 +1,7 @@
 extends Control
 signal point_added(point)
 signal elevation_changed(index, elevation)
+signal point_selected(index)
 var model
 var mode = "plan"
 var edit_index = -1
@@ -47,16 +48,40 @@ func _draw():
   draw_texture_rect(model.texture,r,false)
   var ext = model.extent()
   var points = PackedVector2Array()
+  for i in range(1,model.route.size()):
+   var a=model.route[i-1]
+   var b=model.route[i]
+   draw_line(r.position+Vector2(a.x,a.z)/ext*r.size,r.position+Vector2(b.x,b.z)/ext*r.size,Color(0.65,0.74,0.80,0.35),1,true)
   for i in range(model.route.size()):
    var v = model.route[i]
    var q = r.position+Vector2(v.x,v.z)/ext*r.size
-   points.append(q)
    draw_circle(q,4,ORANGE)
    label(str(i+1),q+Vector2(6,-6),ORANGE)
+  for point in model.centerline:
+   points.append(r.position+Vector2(point.x,point.z)/ext*r.size)
   if points.size()>1:
    draw_polyline(points,ORANGE,2.5,true)
+  for element in model.alignment_data.elements:
+   var marker=""
+   var s=element.station
+   if element.type=="spiral_in":
+    marker="TS"
+   elif element.type=="arc":
+    marker="SC" if model.spirals[element.pi]>0 else "BC"
+   elif element.type=="spiral_out":
+    marker="CS"
+   if marker!="":
+    var point=model.sample(s).point
+    var q=r.position+Vector2(point.x,point.z)/ext*r.size
+    draw_circle(q,3,Color("a8d4ef"))
+    label(marker,q+(Vector2(-18,-8) if element.type=="spiral_in" else Vector2(4,20) if element.type=="arc" else Vector2(8,-8)),Color("a8d4ef"))
+   if element.type=="spiral_out" or (element.type=="arc" and model.spirals[element.pi]==0):
+    var point=model.sample(element.station+element.length).point
+    var q=r.position+Vector2(point.x,point.z)/ext*r.size
+    draw_circle(q,3,Color("a8d4ef"))
+    label("ST" if element.type=="spiral_out" else "EC",q+Vector2(8,20),Color("a8d4ef"))
   label("N ↑  |  %.1f × %.1f km" % [ext.x/1000,ext.y/1000],Vector2(14,18))
-  label("클릭: 노선 점 추가",Vector2(14,size.y-10))
+  label("클릭: PI 추가 / 우클릭: PI 선택",Vector2(14,size.y-10))
   return
  if model.route.size()<2:
   label("평면에 노선 점을 두 개 이상 추가하세요.",Vector2(24,38))
@@ -90,9 +115,17 @@ func _draw():
   var station = 0.0
   for i in range(model.route.size()):
    if i>0:
-    station+=Vector2(model.route[i].x-model.route[i-1].x,model.route[i].z-model.route[i-1].z).length()
+    station=model.pi_station(i)
    var q = Vector2(r.position.x+station/length*r.size.x,r.end.y-(model.route[i].y+model.offset-bounds.x)/span*r.size.y)
    draw_circle(q,5,ORANGE)
+  for i in range(1,model.route.size()-1):
+   var length_v=model.vertical_lengths[i]
+   if length_v<=0:
+    continue
+   for station_v in [model.pi_station(i)-length_v/2,model.pi_station(i)+length_v/2]:
+    var p=model.sample(station_v).point
+    var marker=Vector2(r.position.x+station_v/length*r.size.x,r.end.y-(p.y+model.offset-bounds.x)/span*r.size.y)
+    draw_circle(marker,3,Color("a8d4ef"))
   var sx = r.position.x+r.size.x*model.station
   draw_line(Vector2(sx,r.position.y),Vector2(sx,r.end.y),Color("d1e6ef"),1)
   label("%.0fm" % bounds.y,Vector2(2,r.position.y+5))
@@ -128,7 +161,20 @@ func _draw():
 func _gui_input(event):
  if model == null or model.terrain.is_empty():
   return
- if mode == "plan" and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and event.pressed:
+ if mode == "plan" and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_RIGHT and event.pressed:
+  var r=map_rect()
+  var best=INF
+  var selected=-1
+  for i in range(model.route.size()):
+   var point=model.route[i]
+   var screen=r.position+Vector2(point.x,point.z)/model.extent()*r.size
+   var distance=screen.distance_to(event.position)
+   if distance<best:
+    best=distance
+    selected=i
+  if selected>=0:
+   point_selected.emit(selected)
+ elif mode == "plan" and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and event.pressed:
   var r=map_rect()
   if r.has_point(event.position):
    point_added.emit((event.position-r.position)/r.size*model.extent())
@@ -142,10 +188,11 @@ func _gui_input(event):
     var station=0.0
     for i in range(model.route.size()):
      if i>0:
-      station+=Vector2(model.route[i].x-model.route[i-1].x,model.route[i].z-model.route[i-1].z).length()
+      station=model.pi_station(i)
      if abs(station-target)<best:
       best=abs(station-target)
       edit_index=i
+    point_selected.emit(edit_index)
     change_height(event.position.y)
    else:
     edit_index=-1

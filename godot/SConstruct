@@ -1,4 +1,9 @@
 env = SConscript('godot-cpp/SConstruct')
 env.Append(CPPPATH=['src'])
-library = env.SharedLibrary('project/bin/kroad_core' + env['suffix'] + env['SHLIBSUFFIX'], source=Glob('src/*.cpp'))
+# Geometry validation uses caught C++ exceptions within the DLL only.
+if env['platform'] == 'windows' and not env.get('use_mingw', False):
+    env.Append(CXXFLAGS=['/EHsc'])
+else:
+    env.Append(CXXFLAGS=['-fexceptions'])
+library = env.SharedLibrary('project/bin/kroad_core_v05' + env['suffix'] + env['SHLIBSUFFIX'], source=Glob('src/*.cpp'))
 Default(library)

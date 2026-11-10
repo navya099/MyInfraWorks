@@ -1,3 +1,6 @@
+#include "corridor_index.h"
+#include <godot_cpp/variant/packed_vector2_array.hpp>
+#include "alignment.h"
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
@@ -15,6 +18,8 @@
 using namespace godot;
 class KRoadCore : public RefCounted {
  GDCLASS(KRoadCore, RefCounted)
+ CorridorIndex corridor;
+ double evaluate(double g,const PackedVector3Array &r,double x,double y,double width,double offset,double slope) const {return corridor.ready?corridor.evaluate(g,x,y):design(g,r,x,y,width,offset,slope);}
  static double missing() { return std::numeric_limits<double>::quiet_NaN(); }
  struct Grid {
   int nx=0,ny=0;
@@ -52,6 +57,8 @@ class KRoadCore : public RefCounted {
  }
 protected:
  static void _bind_methods() {
+  ClassDB::bind_method(D_METHOD("prepare_corridor","route","width","offset","slope","ground_min","ground_max","padding"),&KRoadCore::prepare_corridor);
+  ClassDB::bind_method(D_METHOD("affected_tiles","terrain","route","width","offset","slope","tile_size"),&KRoadCore::affected_tiles);
   ClassDB::bind_method(D_METHOD("interpolate_elevation","a","b","fraction"),&KRoadCore::interpolate_elevation);
   ClassDB::bind_method(D_METHOD("get_build_info"),&KRoadCore::get_build_info);
   ClassDB::bind_method(D_METHOD("sample_height","terrain","x","y"),&KRoadCore::sample_height);
@@ -61,13 +68,31 @@ protected:
   ClassDB::bind_method(D_METHOD("build_tile","terrain","route","x0","y0","cells","width","offset","slope"),&KRoadCore::build_tile);
  }
 public:
+ void prepare_corridor(const PackedVector3Array &r,double width,double offset,double slope,double low,double high,double padding) {
+  if(width<=0||slope<=0||!std::isfinite(width)||!std::isfinite(slope)||!std::isfinite(offset)||!std::isfinite(low)||!std::isfinite(high)||!std::isfinite(padding)){corridor=CorridorIndex();return;}
+  for(int i=0;i<r.size();i++)if(!r[i].is_finite()){corridor=CorridorIndex();return;}
+  corridor.prepare(r,width,offset,slope,low,high,std::max(0.0,padding));
+ }
+ PackedVector2Array affected_tiles(const Dictionary &t,const PackedVector3Array &r,double width,double offset,double slope,int tile_size) const {
+  PackedVector2Array out;Grid grid(t);if(!grid.valid()||tile_size<1)return out;
+  std::unordered_map<uint64_t,bool> keys;int nx=(grid.nx-2)/tile_size+1,ny=(grid.ny-2)/tile_size+1;double low=t.get("Min",0.0),high=t.get("Max",0.0);
+  double route_low=low,route_high=high;
+  if(!r.is_empty()){route_low=r[0].y+offset;route_high=route_low;for(int i=0;i<r.size();i++){route_low=std::min(route_low,double(r[i].y)+offset);route_high=std::max(route_high,double(r[i].y)+offset);}}
+  double radius=width/2+std::max(std::abs(route_low-high),std::abs(route_high-low))*slope+std::max(grid.dx,grid.dy)*2;
+  for(int i=1;i<r.size();i++){
+   auto a=r[i-1],b=r[i];
+   int x0=std::clamp(int(std::floor((std::min(double(a.x),double(b.x))-radius)/(grid.dx*tile_size))),0,nx-1),x1=std::clamp(int(std::floor((std::max(double(a.x),double(b.x))+radius)/(grid.dx*tile_size))),0,nx-1);
+   int y0=std::clamp(int(std::floor((std::min(double(a.z),double(b.z))-radius)/(grid.dy*tile_size))),0,ny-1),y1=std::clamp(int(std::floor((std::max(double(a.z),double(b.z))+radius)/(grid.dy*tile_size))),0,ny-1);
+   for(int y=y0;y<=y1;y++)for(int x=x0;x<=x1;x++){uint64_t key=(uint64_t(uint32_t(x))<<32)|uint32_t(y);if(keys.emplace(key,true).second)out.push_back(Vector2(x,y));}
+  }return out;
+ }
  double interpolate_elevation(double a,double b,double f) const{return a+(b-a)*std::clamp(f,0.0,1.0);}
  String get_build_info() const{return "K-ROAD C++ / MSVC x64 / GDExtension";}
  double sample_height(const Dictionary &t,double x,double y) const {
   return Grid(t).sample(x,y);
  }
  double design_height(const Dictionary &t,const PackedVector3Array &r,double x,double y,double width,double offset,double slope) const {
-  return design(sample_height(t,x,y),r,x,y,width,offset,slope);
+  return evaluate(sample_height(t,x,y),r,x,y,width,offset,slope);
  }
  Dictionary build_tile(const Dictionary &t,const PackedVector3Array &r,int x0,int y0,int cells,double width,double offset,double slope) const {
   Dictionary out;if(!valid(t)||cells<1||cells>256||x0<0||y0<0)return out;
@@ -110,9 +135,10 @@ public:
   const double base=t.get("Min",0.0),range=std::max(1.0,double(t.get("Max",1.0))-base);
   const double extent_x=(view.nx-1)*view.dx,extent_y=(view.ny-1)*view.dy;
   const double epsilon=std::max(0.1,std::min(grid.dx,grid.dy)/2);
-  auto planned=[&](double x,double y){return design(grid.sample(x,y),r,x,y,width,offset,slope);};
+  auto planned=[&](double x,double y){return evaluate(grid.sample(x,y),r,x,y,width,offset,slope);};
   auto refine=[&](int cx,int cy){
    if(factor==1||cx<0||cy<0||cx>=view.nx-1||cy>=view.ny-1)return false;
+   if(corridor.ready)return corridor.near((cx+.5)*view.dx,(cy+.5)*view.dy,std::hypot(view.dx,view.dy));
    double px=(cx+0.5)*view.dx,py=(cy+0.5)*view.dy;
    for(int i=1;i<r.size();i++){
     Vector3 a=r[i-1],b=r[i];double vx=b.x-a.x,vy=b.z-a.z,ll=vx*vx+vy*vy;if(ll<1e-12)continue;
@@ -130,7 +156,7 @@ public:
    uint64_t key=(uint64_t(uint32_t(kx))<<32)|uint32_t(ky);
    auto found=cache.find(key);if(found!=cache.end())return found->second;
    double x=double(kx)/denom*view.dx,y=double(ky)/denom*view.dy;
-   double g=grid.sample(x,y),z=design(g,r,x,y,width,offset,slope);bool ok=std::isfinite(z);
+   double g=grid.sample(x,y),z=evaluate(g,r,x,y,width,offset,slope);bool ok=std::isfinite(z);
    int index=vertices.size();cache[key]=index;finite.push_back(ok);
    vertices.push_back(Vector3(x-extent_x/2,ok?z-base:0,y-extent_y/2));
    double xl=std::max(0.0,x-epsilon),xr=std::min(extent_x,x+epsilon),yu=std::max(0.0,y-epsilon),yd=std::min(extent_y,y+epsilon);
@@ -171,7 +197,7 @@ public:
  }
 
 };
-void initialize_kroad(ModuleInitializationLevel level){if(level==MODULE_INITIALIZATION_LEVEL_SCENE)ClassDB::register_class<KRoadCore>();}
+void initialize_kroad(ModuleInitializationLevel level){if(level==MODULE_INITIALIZATION_LEVEL_SCENE){ClassDB::register_class<KRoadCore>();ClassDB::register_class<KRoadAlignment>();}}
 void uninitialize_kroad(ModuleInitializationLevel){}
 extern "C" GDExtensionBool GDE_EXPORT kroad_library_init(GDExtensionInterfaceGetProcAddress proc,GDExtensionClassLibraryPtr library,GDExtensionInitialization *init){
  GDExtensionBinding::InitObject obj(proc,library,init);obj.register_initializer(initialize_kroad);obj.register_terminator(uninitialize_kroad);obj.set_minimum_library_initialization_level(MODULE_INITIALIZATION_LEVEL_SCENE);return obj.init();
