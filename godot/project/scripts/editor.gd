@@ -42,6 +42,7 @@ var demo_button: Button
 var open_button: Button
 var load_button: Button
 var clear_button: Button
+var save_button: Button
 
 func _ready():
  build_ui()
@@ -125,11 +126,12 @@ func build_ui():
  root.add_child(toolbar)
  open_button=button(toolbar,"DEM 열기",func():dem_dialog.popup_centered_ratio(0.75))
  demo_button=button(toolbar,"데모",func():model.demo();reset_terrain())
- button(toolbar,"저장",func():save_dialog.popup_centered_ratio(0.65))
+ save_button=button(toolbar,"저장",func():save_dialog.popup_centered_ratio(0.65))
  load_button=button(toolbar,"프로젝트 열기",func():load_dialog.popup_centered_ratio(0.65))
  button(toolbar,"마지막 점 취소",remove_last)
  clear_button=button(toolbar,"노선 초기화",clear_route)
  button(toolbar,"화면 맞춤",fit_camera)
+ button(toolbar,"측점 보기",focus_station)
  var settings=HBoxContainer.new()
  root.add_child(settings)
  width_input=number(settings,"전체 폭(m)",20,1,200,0.5)
@@ -137,7 +139,7 @@ func build_ui():
  slope_input=number(settings,"사면 H:V",1.5,0.1,10,0.1)
  button(settings,"적용",apply_parameters)
  var hint=Label.new()
- hint.text="  직선 노선 · 단순 사면 · DEM 미리보기"
+ hint.text="  직선 노선 · 원본 해상도 높이 조회 · 도로 주변 세분화"
  hint.add_theme_color_override("font_color",Color("94a8ba"))
  settings.add_child(hint)
  status=Label.new()
@@ -269,6 +271,15 @@ func fit_camera():
  camera.far=max(10000,distance*15)
  update_camera()
 
+func focus_station():
+ if model.route.size()<2:
+  return
+ var point=model.sample(model.length()*model.station).point
+ point.y+=model.offset
+ target=model.world(point)
+ distance=max(200.0,model.road_width*12)
+ update_camera()
+
 func update_camera():
  camera.position=target+Vector3(sin(yaw)*cos(pitch),sin(pitch),cos(yaw)*cos(pitch))*distance
  camera.look_at(target,Vector3.UP)
@@ -351,7 +362,7 @@ func update_road():
  var vertices=PackedVector3Array()
  var indices=PackedInt32Array()
  var length=model.length()
- var steps=max(2,ceili(length/max(5.0,min(model.terrain.Dx,model.terrain.Dy)/4)))
+ var steps=max(2,ceili(length/max(5.0,min(model.source.Dx,model.source.Dy)/2)))
  for i in range(steps+1):
   var at=model.sample(length*i/steps)
   for side in [-1,1]:
@@ -373,7 +384,7 @@ static func build_job(snapshot_data,keys):
  var core=ClassDB.instantiate("KRoadCore")
  var result=[]
  for key in keys:
-  var data=core.build_tile(snapshot_data.terrain,snapshot_data.route,key.x*TILE,key.y*TILE,TILE,snapshot_data.width,snapshot_data.offset,snapshot_data.slope)
+  var data=core.build_render_tile(snapshot_data.terrain,snapshot_data.source,snapshot_data.route,key.x*TILE,key.y*TILE,TILE,snapshot_data.width,snapshot_data.offset,snapshot_data.slope,snapshot_data.refinement)
   result.append({"key":key,"data":data})
  return {"items":result,"ms":(Time.get_ticks_usec()-start)/1000.0}
 
@@ -382,10 +393,13 @@ func _process(_delta):
   var result=import_worker.wait_to_finish()
   import_worker=null
   open_button.disabled=false
+  save_button.disabled=false
   demo_button.disabled=false
   load_button.disabled=false
   if result.has("error"):
    show_error(result.error)
+  elif result.get("saved",false):
+   status_note="프로젝트 저장 완료"
   else:
    apply_document(result.document,result.get("is_project",false))
  if worker != null and not worker.is_alive():
@@ -429,12 +443,13 @@ func _process(_delta):
    status_note="계산 스레드를 시작하지 못했습니다."
   next_launch=Time.get_ticks_msec()+70
  metrics.text="%d FPS  |  C++ %.1f ms  |  %d / %d tiles" % [Engine.get_frames_per_second(),last_build_ms,last_applied,tiles.size()]
- status.text="%s  |  %d×%d / %.0fm  |  노선 %.0fm  |  %s" % [str(model.terrain.get("Name","")),model.terrain.Nx,model.terrain.Ny,model.terrain.Dx,model.length(),"계산/반영 중" if worker!=null or not dirty.is_empty() else status_note]
+ status.text="%s  |  계산 %.1fm / 화면 %.0fm / 국부 ×%d  |  노선 %.0fm  |  %s" % [str(model.terrain.get("Name","")).get_file(),model.source.Dx,model.terrain.Dx,model.refinement(),model.length(),"계산/반영 중" if worker!=null or not dirty.is_empty() else status_note]
 
 func start_import(callable):
  if import_worker!=null:
   return
  open_button.disabled=true
+ save_button.disabled=true
  demo_button.disabled=true
  load_button.disabled=true
  status_note="DEM/프로젝트 읽는 중 · 카메라는 계속 사용할 수 있습니다."
@@ -442,6 +457,7 @@ func start_import(callable):
  if import_worker.start(callable)!=OK:
   import_worker=null
   open_button.disabled=false
+  save_button.disabled=false
   demo_button.disabled=false
   load_button.disabled=false
   show_error("파일 읽기 스레드를 시작하지 못했습니다.")
@@ -456,27 +472,51 @@ static func import_dem_job(path,script,destination):
  var exit_code=OS.execute("python",PackedStringArray([script,path,destination]),output,true,false)
  if exit_code!=0:
   return {"error":"DEM 변환 실패. Python/numpy/rasterio를 확인하세요.\n"+"\n".join(output)}
- return read_document(destination,false)
+ var result=read_document(destination,false)
+ if result.has("temporary_binary"):
+  DirAccess.remove_absolute(result.temporary_binary)
+  result.erase("temporary_binary")
+ return result
 
 static func read_document(path,is_project):
- var text=FileAccess.get_file_as_string(path)
- if FileAccess.get_open_error()!=OK:
+ var file=FileAccess.open(path,FileAccess.READ)
+ if file==null:
   return {"error":"파일을 읽지 못했습니다: "+path}
+ if is_project and file.get_length()>=7 and file.get_buffer(7).get_string_from_ascii()=="KROAD2\n":
+  var document=file.get_var(false)
+  if not document is Dictionary:
+   return {"error":"프로젝트 바이너리가 올바르지 않습니다."}
+  return {"document":document,"is_project":true}
+ file.seek(0)
  var parser=JSON.new()
- var error=parser.parse(text)
- if error!=OK or not parser.data is Dictionary:
-  return {"error":"올바른 JSON 지형/프로젝트가 아닙니다."}
- return {"document":parser.data,"is_project":is_project}
+ if parser.parse(file.get_as_text())!=OK or not parser.data is Dictionary:
+  return {"error":"올바른 지형/프로젝트 파일이 아닙니다."}
+ var document=parser.data
+ var result={"document":document,"is_project":is_project}
+ if not is_project and document.has("SourceFile"):
+  var name=str(document.SourceFile)
+  if name!=name.get_file() or document.get("SourceEncoding","")!="float32-le" or not document.get("Source",null) is Dictionary:
+   return {"error":"계산용 높이 파일 참조가 올바르지 않습니다."}
+  var source=document.Source
+  var count=int(source.get("Nx",0))*int(source.get("Ny",0))
+  var binary_path=path.get_base_dir().path_join(name)
+  var binary=FileAccess.open(binary_path,FileAccess.READ)
+  if count<4 or count>64000000 or binary==null or binary.get_length()!=count*4:
+   return {"error":"계산용 높이 파일이 없거나 크기가 일치하지 않습니다."}
+  source.Heights=binary.get_buffer(count*4).to_float32_array()
+  binary.close()
+  result.temporary_binary=binary_path
+ return result
 
 func apply_document(document,is_project):
  var candidate=Model.new()
  var t=document.get("terrain",{}) if is_project else document
- var error=candidate.set_terrain(t)
+ var error=candidate.set_terrain(t,document.get("source",{}) if is_project else {})
  if error!="":
   show_error(error)
   return
  if is_project:
-  if document.get("version",0)!=1:
+  if document.get("version",0) not in [1,2]:
    show_error("지원하지 않는 프로젝트 버전입니다.")
    return
   var points=document.get("route",[])
@@ -506,21 +546,32 @@ func apply_document(document,is_project):
  profile.edit_index=-1
  reset_terrain()
 
-func save_project(path):
- var t=model.terrain.duplicate()
- var values=[]
- for h in t.Heights:
-  values.append(h if is_finite(h) else null)
- t.Heights=values
+func project_document():
  var points=[]
  for point in model.route:
   points.append([point.x,point.y,point.z])
- var file=FileAccess.open(path,FileAccess.WRITE)
+ return {"version":2,"terrain":model.terrain.duplicate(),"source":model.source.duplicate(),"route":points,"width":model.road_width,"offset":model.offset,"slope":model.slope}
+
+static func save_job(path,document):
+ var temporary=path+".tmp_"+str(Time.get_ticks_usec())
+ var file=FileAccess.open(temporary,FileAccess.WRITE)
  if file==null:
-  show_error("프로젝트를 저장하지 못했습니다.")
-  return
- file.store_string(JSON.stringify({"version":1,"terrain":t,"route":points,"width":model.road_width,"offset":model.offset,"slope":model.slope}))
- status_note="프로젝트 저장 완료"
+  return {"error":"프로젝트를 저장하지 못했습니다."}
+ file.store_buffer("KROAD2\n".to_ascii_buffer())
+ file.store_var(document,false)
+ file.flush()
+ var write_error=file.get_error()
+ file.close()
+ if write_error!=OK:
+  DirAccess.remove_absolute(temporary)
+  return {"error":"프로젝트 쓰기에 실패했습니다. 기존 파일은 보존됩니다."}
+ if DirAccess.rename_absolute(temporary,path)!=OK:
+  DirAccess.remove_absolute(temporary)
+  return {"error":"프로젝트 파일 교체에 실패했습니다. 기존 파일은 보존됩니다."}
+ return {"saved":true}
+
+func save_project(path):
+ start_import(save_job.bind(path,project_document()))
 
 func load_project(path):
  start_import(read_document.bind(path,true))
@@ -563,9 +614,12 @@ func run_smoke():
  assert(road_node.mesh!=null)
  var saved_route=model.route.duplicate()
  save_project("user://smoke.kroadg")
+ while import_worker!=null:
+  await get_tree().process_frame
  var loaded=read_document("user://smoke.kroadg",true)
  apply_document(loaded.document,true)
  assert(model.route==saved_route,"Project roundtrip changed route")
+ assert(loaded.document.version==2,"New projects must use binary v2")
  print("PASS GODOT EDITOR: async tiles, stale edit coalescing, camera independence, local rebuild, road mesh, project roundtrip")
  get_tree().quit(0)
 
@@ -628,6 +682,7 @@ func run_visual_test():
   await get_tree().process_frame
  edit_times.sort()
  print("BENCH PROFILE+ORBIT: 60 frames / median %.2f ms / p95 %.2f ms / %d total tiles, %d updated" % [edit_times[30],edit_times[56],tiles.size(),last_applied])
+ focus_station()
  await RenderingServer.frame_post_draw
  var args=OS.get_cmdline_user_args()
  var path=args[args.find("--visual-test")+1]
@@ -667,6 +722,19 @@ func run_dem_smoke():
  assert(last_applied<tiles.size(),"DEM local edit rebuilt whole terrain")
  assert(model.route[1].y==169.0)
  print("PASS DEM EDITOR: background GeoTIFF import, %d orbit frames, %d/%d tiles for local edit, latest height 169m; edit sequence %.1fms" % [orbit_count,last_applied,tiles.size(),(Time.get_ticks_usec()-edit_started)/1000.0])
+ # Full-resolution heights and NoData must survive project save without sidecars.
+ var source_count=model.source.Heights.size()
+ var source_height=model.ground(ext.x*0.5,ext.y*0.5)
+ save_project("user://source_roundtrip.kroadg")
+ while import_worker!=null:
+  await get_tree().process_frame
+ var saved=read_document("user://source_roundtrip.kroadg",true)
+ assert(saved.document.version==2)
+ assert(saved.document.source.Heights is PackedFloat32Array)
+ apply_document(saved.document,true)
+ assert(model.source.Heights.size()==source_count)
+ assert(abs(model.ground(ext.x*0.5,ext.y*0.5)-source_height)<0.0001)
+ print("PASS DEM PROJECT: float32 source embedded and restored without TIFF/cache")
  clear_route()
  while worker!=null or not dirty.is_empty():
   await get_tree().process_frame

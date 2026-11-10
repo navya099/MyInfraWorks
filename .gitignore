@@ -27,3 +27,5 @@ data/
 *.kroad
 *.zip
 *.kroadg
+*.f32
+*.kroadg.tmp_*

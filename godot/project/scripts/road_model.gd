@@ -2,6 +2,7 @@ extends RefCounted
 
 var core = ClassDB.instantiate("KRoadCore")
 var terrain = {}
+var source = {}
 var route = PackedVector3Array()
 var road_width = 20.0
 var offset = 0.0
@@ -16,7 +17,7 @@ func demo():
    values.append(170.0 + 75.0 * sin(x * 0.035) * cos(y * 0.0275) + y * 0.3)
  set_terrain({"Nx":161,"Ny":161,"Dx":30.0,"Dy":30.0,"Heights":values,"Name":"합성 데모 지형 · 실측 아님"})
 
-func set_terrain(t):
+func set_terrain(t, detail={}):
  if not t is Dictionary:
   return "지형 데이터는 Dictionary여야 합니다."
  if not t.get("Heights",[]) is Array and not t.get("Heights",[]) is PackedFloat64Array:
@@ -40,7 +41,31 @@ func set_terrain(t):
    high = max(high, h)
  if not is_finite(low):
   return "유효한 지형 높이가 없습니다."
+ if not detail is Dictionary:
+  return "계산용 지형 형식이 올바르지 않습니다."
+ if detail.is_empty():
+  detail=t.get("Source",{})
+ if not detail is Dictionary:
+  return "계산용 지형 형식이 올바르지 않습니다."
+ if not detail.is_empty():
+  var stats=core.grid_stats(detail)
+  if stats.is_empty():
+   return "계산용 높이 배열이 유효하지 않습니다."
+  var source_extent=Vector2((int(detail.Nx)-1)*float(detail.Dx),(int(detail.Ny)-1)*float(detail.Dy))
+  var preview_extent=Vector2((nx-1)*float(t.Dx),(ny-1)*float(t.Dy))
+  if t.has("OriginX") and detail.has("OriginX") and (abs(float(t.OriginX)-float(detail.OriginX))>0.001 or abs(float(t.get("OriginY",0))-float(detail.get("OriginY",0)))>0.001):
+   return "계산용 지형과 화면용 지형의 원점이 다릅니다."
+  if source_extent.distance_to(preview_extent)>0.01:
+   return "계산용 지형과 화면용 지형의 범위가 다릅니다."
+  detail=detail.duplicate()
+  detail.Min=stats.Min
+  detail.Max=stats.Max
+  low=stats.Min
+  high=stats.Max
  terrain = t.duplicate()
+ terrain.erase("Source")
+ terrain.erase("SourceFile")
+ terrain.erase("SourceEncoding")
  terrain.Nx = nx
  terrain.Ny = ny
  terrain.Dx = float(t.Dx)
@@ -48,6 +73,7 @@ func set_terrain(t):
  terrain.Heights = heights
  terrain.Min = low
  terrain.Max = high
+ source=detail if not detail.is_empty() else terrain.duplicate()
  route = PackedVector3Array()
  var image = Image.create(nx, ny, false, Image.FORMAT_RGBA8)
  var span = max(1.0, high - low)
@@ -63,10 +89,10 @@ func extent():
  return Vector2((terrain.Nx-1)*terrain.Dx, (terrain.Ny-1)*terrain.Dy)
 
 func ground(x, y):
- return core.sample_height(terrain, x, y)
+ return core.sample_height(source, x, y)
 
 func design(x, y):
- return core.design_height(terrain, route, x, y, road_width, offset, slope)
+ return core.design_height(source, route, x, y, road_width, offset, slope)
 
 func length():
  var total = 0.0
@@ -94,7 +120,11 @@ func world(point):
 
 func snapshot():
  # Packed arrays use copy-on-write. Main thread replaces route, never mutates worker data.
- return {"terrain":terrain.duplicate(),"route":route.duplicate(),"width":road_width,"offset":offset,"slope":slope}
+ return {"source":source.duplicate(),"terrain":terrain.duplicate(),"route":route.duplicate(),"width":road_width,"offset":offset,"slope":slope,"refinement":refinement()}
+
+func refinement():
+ var desired=max(5.0,max(min(source.Dx,source.Dy)/2.0,road_width/3.0))
+ return clampi(ceili(max(terrain.Dx,terrain.Dy)/desired),2,16)
 
 static func affected(snapshot_data, tile_size):
  var t = snapshot_data.terrain
