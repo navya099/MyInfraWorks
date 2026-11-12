@@ -169,3 +169,7 @@ static func affected(snapshot_data, tile_size):
  for point in engine.affected_tiles(snapshot_data.terrain,snapshot_data.route,snapshot_data.width,snapshot_data.offset,snapshot_data.slope,tile_size):
   result[Vector2i(point)]=true
  return result
+
+func edit_state():
+ # History stores design parameters only, never DEM arrays or derived meshes.
+ return {"pi_route":route.duplicate(),"radii":radii.duplicate(),"spirals":spirals.duplicate(),"vertical_lengths":vertical_lengths.duplicate(),"width":road_width,"offset":offset,"slope":slope}

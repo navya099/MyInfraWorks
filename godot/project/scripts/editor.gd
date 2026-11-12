@@ -50,12 +50,24 @@ var vertical_input: SpinBox
 var pvi_height_input: SpinBox
 var curve_info: Window
 var curve_table: TextEdit
+var x_input: SpinBox
+var y_input: SpinBox
+var coordinate_info: Label
+var undo_button: Button
+var redo_button: Button
+var undo_stack=[]
+var redo_stack=[]
+var gesture_state={}
+const HISTORY_LIMIT=100
 
 func _ready():
  build_ui()
+ get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--alignment-smoke" in OS.get_cmdline_user_args():
+ if "--edit-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_edit_smoke")
+ elif "--alignment-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_alignment_smoke")
  elif "--dem-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_dem_smoke")
@@ -141,6 +153,10 @@ func build_ui():
  clear_button=button(toolbar,"노선 초기화",clear_route)
  button(toolbar,"화면 맞춤",fit_camera)
  button(toolbar,"측점 보기",focus_station)
+ undo_button=button(toolbar,"실행 취소",undo_edit)
+ redo_button=button(toolbar,"다시 실행",redo_edit)
+ undo_button.tooltip_text="설계 실행 취소 (Ctrl+Z)"
+ redo_button.tooltip_text="설계 다시 실행 (Ctrl+Y / Ctrl+Shift+Z)"
  var settings=HBoxContainer.new()
  root.add_child(settings)
  width_input=number(settings,"전체 폭(m)",20,1,200,0.5)
@@ -182,6 +198,16 @@ func build_ui():
  curve_table.add_theme_font_size_override("font_size",14)
  curve_table.add_theme_color_override("font_readonly_color",Color("dce8f2"))
  curve_info.add_child(curve_table)
+ var coordinates=HBoxContainer.new()
+ root.add_child(coordinates)
+ x_input=number(coordinates,"로컬 동 X(m)",0,0,1000000,0.01)
+ y_input=number(coordinates,"로컬 남 Y(m)",0,0,1000000,0.01)
+ button(coordinates,"PI 위치 적용",apply_pi_position)
+ coordinate_info=Label.new()
+ coordinate_info.add_theme_color_override("font_color",Color("94a8ba"))
+ coordinate_info.text_overrun_behavior=TextServer.OVERRUN_TRIM_ELLIPSIS
+ coordinate_info.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+ coordinates.add_child(coordinate_info)
  var split=VSplitContainer.new()
  split.size_flags_vertical=Control.SIZE_EXPAND_FILL
  split.split_offset=460
@@ -191,6 +217,9 @@ func build_ui():
  split.add_child(upper)
  plan=make_canvas(upper,"01  평면 / PLAN · 북쪽 ↑","plan")
  plan.point_added.connect(add_point)
+ plan.point_moved.connect(move_pi)
+ plan.gesture_started.connect(begin_gesture)
+ plan.gesture_finished.connect(end_gesture)
  var view_box=card(upper,"02  3D · 왼쪽 드래그 Orbit / 오른쪽·가운데 드래그 Pan / 휠 Zoom")
  var container=SubViewportContainer.new()
  container.stretch=true
@@ -237,6 +266,8 @@ func build_ui():
  split.add_child(lower)
  profile=make_canvas(lower,"03  종단 / PROFILE · 제어점 부근에서 드래그하여 계획고 변경","profile")
  profile.elevation_changed.connect(edit_elevation)
+ profile.gesture_started.connect(begin_gesture)
+ profile.gesture_finished.connect(end_gesture)
  profile.point_selected.connect(select_pi)
  plan.point_selected.connect(select_pi)
  var section_box=card(lower,"04  횡단 / SECTION")
@@ -277,6 +308,7 @@ func show_error(text):
  message.popup_centered(Vector2i(620,220))
 
 func reset_terrain():
+ clear_history()
  revision+=1
  apply_queue.clear()
  dirty.clear()
@@ -343,14 +375,17 @@ func camera_input(event):
    distance=min(max(model.extent().x,model.extent().y)*8,distance/0.88)
    update_camera()
 
-func changed(previous):
+func changed(previous, record_history=true, quiet=false):
  var started=Time.get_ticks_usec()
  var error=model.rebuild_alignment()
  var rebuild_time=Time.get_ticks_usec()-started
  if error!="":
   model.restore(previous)
   sync_alignment_controls()
-  show_error("곡선 조건을 적용할 수 없습니다.\n"+error)
+  if quiet:
+   status_note="이동 거절: "+error
+  else:
+   show_error("곡선 조건을 적용할 수 없습니다.\n"+error)
   return false
  var horizontal_changed=previous.pi_route.size()!=model.route.size() or previous.radii!=model.radii or previous.spirals!=model.spirals or previous.vertical_lengths!=model.vertical_lengths
  if not horizontal_changed:
@@ -358,8 +393,12 @@ func changed(previous):
    if previous.pi_route[i].x!=model.route[i].x or previous.pi_route[i].z!=model.route[i].z:
     horizontal_changed=true
     break
- if horizontal_changed:
+ if horizontal_changed and gesture_state.is_empty():
   sync_alignment_controls()
+ elif horizontal_changed:
+  sync_curve_values()
+ if record_history and gesture_state.is_empty():
+  remember_edit(previous)
  revision+=1
  apply_queue.clear()
  dirty.merge(Model.affected(previous,TILE),true)
@@ -759,6 +798,33 @@ func run_visual_test():
  assert(updates==total_mesh_updates,"Orbit rebuilt terrain")
  times.sort()
  print("BENCH ORBIT: 120 frames / avg %.2f ms / p95 %.2f ms / zero terrain uploads" % [(last_frame-start_time)/120000.0,times[113]])
+ if "--pi-drag-test" in arguments:
+  var map=plan.map_rect()
+  var pi_point=model.route[1]
+  var start_position=map.position+Vector2(pi_point.x,pi_point.z)/model.extent()*map.size
+  var click=InputEventMouseButton.new()
+  click.button_index=MOUSE_BUTTON_LEFT
+  click.pressed=true
+  click.position=start_position
+  plan._gui_input(click)
+  var drag_times=[]
+  var previous_frame=Time.get_ticks_usec()
+  for i in range(60):
+   var move=InputEventMouseMotion.new()
+   move.position=start_position+Vector2(sin(i*0.1)*6,cos(i*0.1)*6)
+   plan._gui_input(move)
+   yaw+=0.001
+   update_camera()
+   await get_tree().process_frame
+   var now=Time.get_ticks_usec()
+   drag_times.append((now-previous_frame)/1000.0)
+   previous_frame=now
+  click.pressed=false
+  plan._gui_input(click)
+  while worker!=null or not dirty.is_empty():
+   await get_tree().process_frame
+  drag_times.sort()
+  print("BENCH PI DRAG+ORBIT: 60 frames / median %.2f ms / p95 %.2f ms / %d history entries" % [drag_times[30],drag_times[56],undo_stack.size()])
  var plot=profile.plot_rect()
  var bounds=profile.chart_bounds()
  var first_length=Vector2(model.route[1].x-model.route[0].x,model.route[1].z-model.route[0].z).length()
@@ -860,7 +926,25 @@ func sync_alignment_controls():
 
 func sync_curve_values():
  var index=pi_selector.selected
+ plan.selected_index=index
+ profile.selected_index=index
+ plan.queue_redraw()
+ profile.queue_redraw()
  var active=index>0 and index<model.route.size()-1
+ x_input.editable=index>=0
+ y_input.editable=index>=0
+ x_input.max_value=model.extent().x
+ y_input.max_value=model.extent().y
+ if index>=0 and index<model.route.size():
+  x_input.value=model.route[index].x
+  y_input.value=model.route[index].z
+  var point=model.route[index]
+  if model.source.has("OriginX") and model.source.has("OriginY"):
+   coordinate_info.text="EPSG:5179  E %.2f / N %.2f  |  이동 시 PVI고 유지" % [model.source.OriginX+point.x,model.source.OriginY-point.z]
+  else:
+   coordinate_info.text="현장 로컬 좌표 / 이동 시 PVI고 유지"
+ else:
+  coordinate_info.text="PI를 선택하세요."
  pvi_height_input.editable=index>=0
  if index>=0 and index<model.route.size():
   pvi_height_input.value=model.route[index].y
@@ -953,4 +1037,245 @@ func run_alignment_smoke():
  assert("spiral_in" in curve_table.text)
  curve_info.hide()
  print("PASS ALIGNMENT EDITOR: R/Ls/Lv controls, exact chainage, PVI parabola, async terrain, v3 curve roundtrip")
+ get_tree().quit(0)
+
+static func compact_state(state):
+ var result={}
+ for key in ["pi_route","radii","spirals","vertical_lengths","width","offset","slope"]:
+  result[key]=state[key]
+ return result.duplicate(true)
+
+func remember_edit(previous):
+ var state=compact_state(previous)
+ if state==model.edit_state():
+  return
+ undo_stack.append(state)
+ if undo_stack.size()>HISTORY_LIMIT:
+  undo_stack.pop_front()
+ redo_stack.clear()
+ refresh_history_buttons()
+
+func refresh_history_buttons():
+ undo_button.disabled=undo_stack.is_empty() or not gesture_state.is_empty()
+ redo_button.disabled=redo_stack.is_empty() or not gesture_state.is_empty()
+
+func clear_history():
+ undo_stack.clear()
+ redo_stack.clear()
+ gesture_state.clear()
+ if plan!=null:
+  plan.drag_index=-1
+ if profile!=null:
+  profile.edit_index=-1
+ if undo_button!=null:
+  refresh_history_buttons()
+
+func begin_gesture():
+ if gesture_state.is_empty():
+  gesture_state=model.edit_state()
+ refresh_history_buttons()
+
+func end_gesture():
+ if gesture_state.is_empty():
+  return
+ var previous=gesture_state
+ gesture_state={}
+ remember_edit(previous)
+ sync_alignment_controls()
+ refresh_history_buttons()
+
+func cancel_gesture():
+ if gesture_state.is_empty():
+  return
+ var state=gesture_state
+ gesture_state={}
+ plan.drag_index=-1
+ plan.drag_rejected=false
+ profile.edit_index=-1
+ apply_history_state(state)
+ status_note="드래그 취소"
+ refresh_history_buttons()
+
+func apply_history_state(state):
+ var previous=model.snapshot()
+ model.restore(state)
+ changed(previous,false,true)
+ width_input.value=model.road_width
+ offset_input.value=model.offset
+ slope_input.value=model.slope
+ sync_alignment_controls()
+
+func undo_edit():
+ if undo_stack.is_empty() or not gesture_state.is_empty():
+  return
+ redo_stack.append(model.edit_state())
+ apply_history_state(undo_stack.pop_back())
+ status_note="실행 취소 완료"
+ refresh_history_buttons()
+
+func redo_edit():
+ if redo_stack.is_empty() or not gesture_state.is_empty():
+  return
+ undo_stack.append(model.edit_state())
+ apply_history_state(redo_stack.pop_back())
+ status_note="다시 실행 완료"
+ refresh_history_buttons()
+
+func move_pi(index,point):
+ if index<0 or index>=model.route.size():
+  return false
+ var extent=model.extent()
+ if not point.is_finite() or point.x<0 or point.y<0 or point.x>extent.x or point.y>extent.y or not is_finite(model.ground(point.x,point.y)):
+  status_note="이동 거절: 지형 범위 또는 NoData 영역"
+  plan.drag_rejected=true
+  plan.queue_redraw()
+  return false
+ var previous=model.snapshot()
+ var old=model.route[index]
+ model.route[index]=Vector3(point.x,old.y,point.y)
+ var accepted=changed(previous,true,not gesture_state.is_empty())
+ plan.drag_rejected=not accepted
+ plan.queue_redraw()
+ return accepted
+
+func apply_pi_position():
+ move_pi(pi_selector.selected,Vector2(x_input.value,y_input.value))
+
+func _input(event):
+ if event is InputEventKey and event.pressed and event.keycode==KEY_ESCAPE and not gesture_state.is_empty():
+  cancel_gesture()
+  get_viewport().set_input_as_handled()
+
+func _unhandled_key_input(event):
+ if not event is InputEventKey or not event.pressed or event.echo or not event.ctrl_pressed:
+  return
+ var focused=get_viewport().gui_get_focus_owner()
+ if focused is LineEdit or focused is TextEdit:
+  return
+ if event.keycode==KEY_Z and not event.shift_pressed:
+  undo_edit()
+ elif event.keycode==KEY_Y or (event.keycode==KEY_Z and event.shift_pressed):
+  redo_edit()
+ else:
+  return
+ get_viewport().set_input_as_handled()
+
+func run_edit_smoke():
+ while worker!=null or not dirty.is_empty():
+  await get_tree().process_frame
+ add_point(Vector2(300,3000))
+ add_point(Vector2(3000,3000))
+ add_point(Vector2(3000,400))
+ select_pi(1)
+ radius_input.value=500
+ spiral_input.value=100
+ vertical_input.value=400
+ apply_curves()
+ clear_history()
+ var original=model.edit_state()
+ var height=model.route[1].y
+ # Use actual canvas input to move a PI, with one history record per gesture.
+ var rect=plan.map_rect()
+ var start=rect.position+Vector2(model.route[1].x,model.route[1].z)/model.extent()*rect.size
+ var press=InputEventMouseButton.new()
+ press.button_index=MOUSE_BUTTON_LEFT
+ press.pressed=true
+ press.position=start
+ plan._gui_input(press)
+ for i in range(1,6):
+  var motion=InputEventMouseMotion.new()
+  motion.position=start+Vector2(i*5,0)
+  plan._gui_input(motion)
+ press.pressed=false
+ plan._gui_input(press)
+ assert(model.route[1].x>3000 and model.route[1].y==height)
+ assert(undo_stack.size()==1 and redo_stack.is_empty())
+ var moved=model.edit_state()
+ undo_edit()
+ assert(model.edit_state()==original and redo_stack.size()==1)
+ redo_edit()
+ assert(model.edit_state()==moved)
+ # Invalid geometry and out-of-bounds positions preserve the last valid design.
+ begin_gesture()
+ assert(not move_pi(1,Vector2(301,3000)))
+ assert(model.edit_state()==moved)
+ assert(not move_pi(1,Vector2(-100,3000)))
+ assert(model.edit_state()==moved)
+ end_gesture()
+ assert(undo_stack.size()==1)
+ # Escape restores gesture start, without destroying redo or recording a step.
+ undo_edit()
+ var redo_count=redo_stack.size()
+ begin_gesture()
+ assert(move_pi(1,Vector2(3100,3100)))
+ var escape=InputEventKey.new()
+ escape.keycode=KEY_ESCAPE
+ escape.pressed=true
+ _input(escape)
+ assert(model.edit_state()==original and redo_stack.size()==redo_count)
+ assert(undo_stack.is_empty())
+ # A fresh edit after undo creates a new branch in the edit history.
+ x_input.value=3100
+ y_input.value=3100
+ apply_pi_position()
+ assert(model.route[1].x==3100 and model.route[1].z==3100)
+ assert(redo_stack.is_empty() and undo_stack.size()==1)
+ # Profile drag is also grouped into a single history entry.
+ var before_profile=undo_stack.size()
+ var bounds=profile.chart_bounds()
+ var plot=profile.plot_rect()
+ var x=plot.position.x+model.pi_station(1)/model.length()*plot.size.x
+ press.pressed=true
+ press.position=Vector2(x,plot.get_center().y)
+ profile._gui_input(press)
+ for i in range(5):
+  var motion=InputEventMouseMotion.new()
+  motion.position=Vector2(x,plot.get_center().y+i*2)
+  profile._gui_input(motion)
+ press.pressed=false
+ profile._gui_input(press)
+ assert(undo_stack.size()==before_profile+1)
+ undo_edit()
+ assert(model.route[1].y==height)
+ # Endpoints are movable too; a click without a drag must not add a step.
+ var count=undo_stack.size()
+ var p=model.route[0]
+ press.position=plan.map_rect().position+Vector2(p.x,p.z)/model.extent()*plan.map_rect().size
+ press.pressed=true
+ plan._gui_input(press)
+ press.pressed=false
+ plan._gui_input(press)
+ assert(undo_stack.size()==count)
+ select_pi(0)
+ assert(move_pi(0,Vector2(400,3100)))
+ undo_edit()
+ assert(model.route[0]==p)
+ # Keyboard shortcuts act on design only while a canvas owns focus.
+ plan.grab_focus()
+ var key=InputEventKey.new()
+ key.ctrl_pressed=true
+ key.pressed=true
+ key.keycode=KEY_Y
+ _unhandled_key_input(key)
+ assert(model.route[0].x==400)
+ key.keycode=KEY_Z
+ _unhandled_key_input(key)
+ assert(model.route[0]==p)
+ x_input.get_line_edit().grab_focus()
+ var state_before_text=model.edit_state()
+ _unhandled_key_input(key)
+ assert(model.edit_state()==state_before_text)
+ for state in undo_stack:
+  assert(not state.has("terrain") and not state.has("source") and not state.has("route"))
+ while worker!=null or not dirty.is_empty():
+  await get_tree().process_frame
+ var saved=model.edit_state()
+ save_project("user://edited_curve.kroadg")
+ while import_worker!=null:
+  await get_tree().process_frame
+ var data=read_document("user://edited_curve.kroadg",true)
+ apply_document(data.document,true)
+ assert(model.edit_state()==saved)
+ assert(undo_stack.is_empty() and redo_stack.is_empty())
+ print("PASS EDITOR HISTORY: PI canvas/numeric move, preserved PVI height, invalid move rollback, gesture undo/redo, Escape, redo branching, profile grouping, endpoint move, persistence/history reset")
  get_tree().quit(0)

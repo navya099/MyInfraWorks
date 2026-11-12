@@ -2,9 +2,17 @@ extends Control
 signal point_added(point)
 signal elevation_changed(index, elevation)
 signal point_selected(index)
+signal point_moved(index, point)
+signal gesture_started
+signal gesture_finished
+var drag_index=-1
+var drag_start=Vector2.ZERO
+var drag_target=Vector2.ZERO
+var drag_rejected=false
 var model
 var mode = "plan"
 var edit_index = -1
+var selected_index=-1
 var frozen_bounds = Vector2.ZERO
 const GREEN = Color("78c7a6")
 const ORANGE = Color("ffbd69")
@@ -12,6 +20,7 @@ const MUTED = Color("8097a9")
 
 func _ready():
  mouse_filter = Control.MOUSE_FILTER_STOP
+ focus_mode=Control.FOCUS_ALL
  clip_contents = true
  resized.connect(queue_redraw)
 
@@ -56,6 +65,8 @@ func _draw():
    var v = model.route[i]
    var q = r.position+Vector2(v.x,v.z)/ext*r.size
    draw_circle(q,4,ORANGE)
+   if i==selected_index:
+    draw_circle(q,8,Color("a8d4ef"),false,1.5)
    label(str(i+1),q+Vector2(6,-6),ORANGE)
   for point in model.centerline:
    points.append(r.position+Vector2(point.x,point.z)/ext*r.size)
@@ -81,7 +92,9 @@ func _draw():
     draw_circle(q,3,Color("a8d4ef"))
     label("ST" if element.type=="spiral_out" else "EC",q+Vector2(8,20),Color("a8d4ef"))
   label("N ↑  |  %.1f × %.1f km" % [ext.x/1000,ext.y/1000],Vector2(14,18))
-  label("클릭: PI 추가 / 우클릭: PI 선택",Vector2(14,size.y-10))
+  if drag_index>=0 and drag_rejected:
+   draw_circle(drag_target,9,Color("ff7777"),false,2)
+  label("클릭: 추가 / 점 드래그: 이동 / Shift+클릭: 강제 추가 / Esc: 취소",Vector2(14,size.y-10))
   return
  if model.route.size()<2:
   label("평면에 노선 점을 두 개 이상 추가하세요.",Vector2(24,38))
@@ -118,6 +131,8 @@ func _draw():
     station=model.pi_station(i)
    var q = Vector2(r.position.x+station/length*r.size.x,r.end.y-(model.route[i].y+model.offset-bounds.x)/span*r.size.y)
    draw_circle(q,5,ORANGE)
+   if i==selected_index:
+    draw_circle(q,8,Color("a8d4ef"),false,1.5)
   for i in range(1,model.route.size()-1):
    var length_v=model.vertical_lengths[i]
    if length_v<=0:
@@ -174,13 +189,42 @@ func _gui_input(event):
     selected=i
   if selected>=0:
    point_selected.emit(selected)
- elif mode == "plan" and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and event.pressed:
-  var r=map_rect()
-  if r.has_point(event.position):
-   point_added.emit((event.position-r.position)/r.size*model.extent())
+ elif mode=="plan" and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
+  if event.pressed:
+   grab_focus()
+   var r=map_rect()
+   var best=12.0
+   drag_index=-1
+   for i in range(0 if event.shift_pressed else model.route.size()):
+    var p=model.route[i]
+    var q=r.position+Vector2(p.x,p.z)/model.extent()*r.size
+    var distance=q.distance_to(event.position)
+    if distance<best:
+     best=distance
+     drag_index=i
+   if drag_index>=0:
+    drag_start=event.position
+    drag_target=event.position
+    drag_rejected=false
+    point_selected.emit(drag_index)
+    gesture_started.emit()
+   elif r.has_point(event.position):
+    point_added.emit((event.position-r.position)/r.size*model.extent())
+  elif drag_index>=0:
+   drag_index=-1
+   drag_rejected=false
+   gesture_finished.emit()
+   queue_redraw()
+ elif mode=="plan" and event is InputEventMouseMotion and drag_index>=0:
+  if event.position.distance_to(drag_start)>=3:
+   var r=map_rect()
+   drag_target=event.position
+   point_moved.emit(drag_index,(event.position-r.position)/r.size*model.extent())
  elif mode == "profile" and model.route.size()>1:
   if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
    if event.pressed:
+    grab_focus()
+    gesture_started.emit()
     frozen_bounds=chart_bounds()
     var r=plot_rect()
     var target=clamp((event.position.x-r.position.x)/r.size.x,0.0,1.0)*model.length()
@@ -196,6 +240,7 @@ func _gui_input(event):
     change_height(event.position.y)
    else:
     edit_index=-1
+    gesture_finished.emit()
     queue_redraw()
   elif event is InputEventMouseMotion and edit_index>=0:
    change_height(event.position.y)
