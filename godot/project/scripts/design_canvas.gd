@@ -3,6 +3,9 @@ signal point_added(point)
 signal elevation_changed(index, elevation)
 signal point_selected(index)
 signal point_moved(index, point)
+signal pvi_moved(index, station, height)
+signal pvi_added(station, height)
+signal station_selected(fraction)
 signal gesture_started
 signal gesture_finished
 var drag_index=-1
@@ -39,9 +42,9 @@ func chart_bounds():
   return frozen_bounds
  var low = model.terrain.Min
  var high = model.terrain.Max
- for v in model.route:
-  low = min(low,v.y+model.offset)
-  high = max(high,v.y+model.offset)
+ for height in model.pvi_heights:
+  low = min(low,height+model.offset)
+  high = max(high,height+model.offset)
  var pad = max(10.0,(high-low)*0.15)
  return Vector2(low-pad,high+pad)
 
@@ -126,26 +129,27 @@ func _draw():
    planned.append(Vector2(x,r.end.y-(sample.y+model.offset-bounds.x)/span*r.size.y))
   draw_polyline(planned,ORANGE,2,true)
   var station = 0.0
-  for i in range(model.route.size()):
-   if i>0:
-    station=model.pi_station(i)
-   var q = Vector2(r.position.x+station/length*r.size.x,r.end.y-(model.route[i].y+model.offset-bounds.x)/span*r.size.y)
+  for i in range(model.pvi_stations.size()):
+   station=model.pvi_stations[i]
+   var q = Vector2(r.position.x+station/length*r.size.x,r.end.y-(model.pvi_heights[i]+model.offset-bounds.x)/span*r.size.y)
    draw_circle(q,5,ORANGE)
    if i==selected_index:
     draw_circle(q,8,Color("a8d4ef"),false,1.5)
-  for i in range(1,model.route.size()-1):
-   var length_v=model.vertical_lengths[i]
+  for i in range(1,model.pvi_stations.size()-1):
+   var length_v=model.pvi_lengths[i]
    if length_v<=0:
     continue
-   for station_v in [model.pi_station(i)-length_v/2,model.pi_station(i)+length_v/2]:
+   for station_v in [model.pvi_stations[i]-length_v/2,model.pvi_stations[i]+length_v/2]:
     var p=model.sample(station_v).point
     var marker=Vector2(r.position.x+station_v/length*r.size.x,r.end.y-(p.y+model.offset-bounds.x)/span*r.size.y)
     draw_circle(marker,3,Color("a8d4ef"))
+  if edit_index>=0 and drag_rejected:
+   draw_circle(drag_target,9,Color("ff7777"),false,2)
   var sx = r.position.x+r.size.x*model.station
   draw_line(Vector2(sx,r.position.y),Vector2(sx,r.end.y),Color("d1e6ef"),1)
   label("%.0fm" % bounds.y,Vector2(2,r.position.y+5))
   label("%.0fm" % bounds.x,Vector2(2,r.end.y))
-  label("0 → %.0fm | 녹색: 원지반 / 주황: 계획 · 드래그: 계획고" % length,Vector2(r.position.x,size.y-10))
+  label("0 → %.0fm | 녹색: 원지반 / 주황: 계획 · PVI 드래그: 측점·표고 / Shift+클릭: 추가" % length,Vector2(r.position.x,size.y-10))
  else:
   var at = model.sample(length*model.station)
   var reach = max(100.0,model.road_width*4)
@@ -220,32 +224,50 @@ func _gui_input(event):
    var r=map_rect()
    drag_target=event.position
    point_moved.emit(drag_index,(event.position-r.position)/r.size*model.extent())
- elif mode == "profile" and model.route.size()>1:
-  if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
-   if event.pressed:
+ elif mode=="profile" and model.route.size()>1:
+  if event is InputEventMouseButton:
+   if event.button_index==MOUSE_BUTTON_LEFT and event.pressed:
     grab_focus()
-    gesture_started.emit()
-    frozen_bounds=chart_bounds()
-    var r=plot_rect()
-    var target=clamp((event.position.x-r.position.x)/r.size.x,0.0,1.0)*model.length()
-    var best=INF
-    var station=0.0
-    for i in range(model.route.size()):
-     if i>0:
-      station=model.pi_station(i)
-     if abs(station-target)<best:
-      best=abs(station-target)
-      edit_index=i
+    var rect=plot_rect()
+    var bounds=chart_bounds()
+    if event.shift_pressed and rect.has_point(event.position):
+     var station=clamp((event.position.x-rect.position.x)/rect.size.x,0.0,1.0)*model.length()
+     var height=bounds.y-(event.position.y-rect.position.y)/rect.size.y*(bounds.y-bounds.x)-model.offset
+     pvi_added.emit(station,height)
+     return
+    var nearest=nearest_pvi(event.position)
+    if nearest<0:
+     station_selected.emit(clamp((event.position.x-rect.position.x)/rect.size.x,0.0,1.0))
+     return
+    frozen_bounds=bounds
+    edit_index=nearest
+    drag_rejected=false
     point_selected.emit(edit_index)
-    change_height(event.position.y)
-   else:
+    gesture_started.emit()
+   elif event.button_index==MOUSE_BUTTON_LEFT and not event.pressed and edit_index>=0:
     edit_index=-1
+    drag_rejected=false
     gesture_finished.emit()
     queue_redraw()
+   elif event.button_index==MOUSE_BUTTON_RIGHT and event.pressed:
+    var nearest=nearest_pvi(event.position)
+    if nearest>=0:
+     point_selected.emit(nearest)
   elif event is InputEventMouseMotion and edit_index>=0:
-   change_height(event.position.y)
+   drag_target=event.position
+   var rect=plot_rect()
+   var station=(event.position.x-rect.position.x)/rect.size.x*model.length()
+   var height=frozen_bounds.y-(event.position.y-rect.position.y)/rect.size.y*(frozen_bounds.y-frozen_bounds.x)-model.offset
+   pvi_moved.emit(edit_index,station,height)
 
-func change_height(y):
- var r=plot_rect()
- var z=frozen_bounds.y-(y-r.position.y)/r.size.y*(frozen_bounds.y-frozen_bounds.x)-model.offset
- elevation_changed.emit(edit_index,z)
+func nearest_pvi(position):
+ var rect=plot_rect()
+ var bounds=chart_bounds()
+ var nearest=-1
+ var distance=14.0
+ for i in range(model.pvi_stations.size()):
+  var q=Vector2(rect.position.x+model.pvi_stations[i]/model.length()*rect.size.x,rect.end.y-(model.pvi_heights[i]+model.offset-bounds.x)/(bounds.y-bounds.x)*rect.size.y)
+  if q.distance_to(position)<distance:
+   distance=q.distance_to(position)
+   nearest=i
+ return nearest

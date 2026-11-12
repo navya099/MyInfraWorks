@@ -48,6 +48,8 @@ var radius_input: SpinBox
 var spiral_input: SpinBox
 var vertical_input: SpinBox
 var pvi_height_input: SpinBox
+var pvi_selector: OptionButton
+var pvi_station_input: SpinBox
 var curve_info: Window
 var curve_table: TextEdit
 var x_input: SpinBox
@@ -65,7 +67,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--edit-smoke" in OS.get_cmdline_user_args():
+ if "--pvi-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_pvi_smoke")
+ elif "--edit-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_edit_smoke")
  elif "--alignment-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_alignment_smoke")
@@ -181,10 +185,7 @@ func build_ui():
  curves.add_child(pi_selector)
  radius_input=number(curves,"R(m)",0,0,100000,0.01)
  spiral_input=number(curves,"완화 Ls(m)",0,0,10000,0.01)
- vertical_input=number(curves,"종단 Lv(m)",0,0,100000,0.01)
  button(curves,"곡선 적용",apply_curves)
- pvi_height_input=number(curves,"PVI고(m)",0,-10000,10000,0.01)
- button(curves,"표고 적용",apply_pvi_height)
  button(curves,"곡선표",show_curve_table)
  curve_info=Window.new()
  curve_info.visible=false
@@ -198,6 +199,21 @@ func build_ui():
  curve_table.add_theme_font_size_override("font_size",14)
  curve_table.add_theme_color_override("font_readonly_color",Color("dce8f2"))
  curve_info.add_child(curve_table)
+ var pvi_row=HBoxContainer.new()
+ root.add_child(pvi_row)
+ var pvi_label=Label.new()
+ pvi_label.text="독립 종단 PVI"
+ pvi_row.add_child(pvi_label)
+ pvi_selector=OptionButton.new()
+ pvi_selector.custom_minimum_size.x=110
+ pvi_selector.item_selected.connect(func(_index):sync_pvi_values())
+ pvi_row.add_child(pvi_selector)
+ pvi_station_input=number(pvi_row,"측점(m)",0,0,10000000,0.01)
+ pvi_height_input=number(pvi_row,"제어고(m)",0,-10000,10000,0.01)
+ vertical_input=number(pvi_row,"Lv(m)",0,0,100000,0.01)
+ button(pvi_row,"PVI 적용",apply_pvi_values)
+ button(pvi_row,"현재 측점에 추가",add_pvi_at_station)
+ button(pvi_row,"PVI 삭제",delete_selected_pvi)
  var coordinates=HBoxContainer.new()
  root.add_child(coordinates)
  x_input=number(coordinates,"로컬 동 X(m)",0,0,1000000,0.01)
@@ -264,11 +280,14 @@ func build_ui():
  var lower=HSplitContainer.new()
  lower.split_offset=0
  split.add_child(lower)
- profile=make_canvas(lower,"03  종단 / PROFILE · 제어점 부근에서 드래그하여 계획고 변경","profile")
+ profile=make_canvas(lower,"03  종단 / PROFILE · PVI 드래그: 측점·표고 / Shift+클릭: 추가","profile")
  profile.elevation_changed.connect(edit_elevation)
+ profile.pvi_moved.connect(move_pvi)
+ profile.pvi_added.connect(add_pvi)
+ profile.station_selected.connect(func(value):station_slider.value=value)
  profile.gesture_started.connect(begin_gesture)
  profile.gesture_finished.connect(end_gesture)
- profile.point_selected.connect(select_pi)
+ profile.point_selected.connect(select_pvi)
  plan.point_selected.connect(select_pi)
  var section_box=card(lower,"04  횡단 / SECTION")
  station_slider=HSlider.new()
@@ -382,6 +401,7 @@ func changed(previous, record_history=true, quiet=false):
  if error!="":
   model.restore(previous)
   sync_alignment_controls()
+  sync_pvi_controls()
   if quiet:
    status_note="이동 거절: "+error
   else:
@@ -397,6 +417,10 @@ func changed(previous, record_history=true, quiet=false):
   sync_alignment_controls()
  elif horizontal_changed:
   sync_curve_values()
+ if gesture_state.is_empty():
+  sync_pvi_controls()
+ else:
+  sync_pvi_values()
  if record_history and gesture_state.is_empty():
   remember_edit(previous)
  revision+=1
@@ -422,14 +446,9 @@ func add_point(point):
   select_pi(max(0,model.route.size()-2))
 
 func edit_elevation(index,height):
- if index<0 or index>=model.route.size() or not is_finite(height):
-  return
- var previous=model.snapshot()
- var point=model.route[index]
- point.y=height
- model.route[index]=point
- if changed(previous) and pi_selector.selected==index:
-  pvi_height_input.value=model.route[index].y
+ if index>=0 and index<model.pvi_stations.size():
+  return move_pvi(index,model.pvi_stations[index],height)
+ return false
 
 func apply_parameters():
  var previous=model.snapshot()
@@ -609,7 +628,7 @@ func apply_document(document,is_project):
   show_error(error)
   return
  if is_project:
-  if document.get("version",0) not in [1,2,3]:
+  if document.get("version",0) not in [1,2,3,4]:
    show_error("지원하지 않는 프로젝트 버전입니다.")
    return
   var points=document.get("route",[])
@@ -637,7 +656,7 @@ func apply_document(document,is_project):
   show_error("선형 매개변수 형식이 올바르지 않습니다.")
   return
  if not curve_options.is_empty():
-  for key in ["radii","spirals","vertical_lengths"]:
+  for key in (["radii","spirals","vertical_lengths"] if int(document.get("version",0))<4 else ["radii","spirals"]):
    var values=curve_options.get(key,null)
    if not values is PackedFloat64Array and not values is Array:
     show_error("곡선 매개변수 배열이 올바르지 않습니다.")
@@ -651,8 +670,40 @@ func apply_document(document,is_project):
     return
   candidate.radii=PackedFloat64Array(curve_options.radii)
   candidate.spirals=PackedFloat64Array(curve_options.spirals)
-  candidate.vertical_lengths=PackedFloat64Array(curve_options.vertical_lengths)
- var alignment_error=candidate.rebuild_alignment()
+  candidate.vertical_lengths=PackedFloat64Array(curve_options.get("vertical_lengths",[]))
+ var alignment_error=""
+ if is_project and int(document.get("version",0))<4:
+  # Normalize old parameter arrays, then reproduce the original linked profile once.
+  var legacy_lengths=candidate.vertical_lengths.duplicate()
+  candidate.rebuild_alignment()
+  candidate.vertical_lengths=legacy_lengths
+  if candidate.vertical_lengths.size()!=candidate.route.size():
+   candidate.vertical_lengths.resize(candidate.route.size())
+   candidate.vertical_lengths.fill(0)
+  alignment_error=candidate.migrate_linked_profile()
+ elif is_project:
+  var saved_profile=document.get("profile",{})
+  if not saved_profile is Dictionary:
+   show_error("독립 종단 형식이 올바르지 않습니다.")
+   return
+  for key in ["stations","heights","lengths"]:
+   var values=saved_profile.get(key,null)
+   if not values is Array and not values is PackedFloat64Array:
+    show_error("PVI 배열 형식이 올바르지 않습니다.")
+    return
+   for value in values:
+    if typeof(value) not in [TYPE_INT,TYPE_FLOAT] or not is_finite(float(value)):
+     show_error("PVI 배열에는 유한한 숫자만 사용할 수 있습니다.")
+     return
+  var pvi_count=saved_profile.stations.size()
+  if saved_profile.heights.size()!=pvi_count or saved_profile.lengths.size()!=pvi_count or (candidate.route.size()>=2 and pvi_count<2) or (candidate.route.size()<2 and pvi_count>0):
+   show_error("PVI 배열 수 또는 시·종점 구성이 올바르지 않습니다.")
+   return
+  candidate.pvi_stations=PackedFloat64Array(saved_profile.stations)
+  candidate.pvi_heights=PackedFloat64Array(saved_profile.heights)
+  candidate.pvi_lengths=PackedFloat64Array(saved_profile.lengths)
+ if alignment_error=="":
+  alignment_error=candidate.rebuild_alignment()
  if alignment_error!="":
   show_error("저장된 선형이 올바르지 않습니다.\n"+alignment_error)
   return
@@ -667,7 +718,7 @@ func project_document():
  var points=[]
  for point in model.route:
   points.append([point.x,point.y,point.z])
- return {"version":3,"alignment":{"radii":model.radii.duplicate(),"spirals":model.spirals.duplicate(),"vertical_lengths":model.vertical_lengths.duplicate()},"terrain":model.terrain.duplicate(),"source":model.source.duplicate(),"route":points,"width":model.road_width,"offset":model.offset,"slope":model.slope}
+ return {"version":4,"profile":{"stations":model.pvi_stations.duplicate(),"heights":model.pvi_heights.duplicate(),"lengths":model.pvi_lengths.duplicate()},"alignment":{"radii":model.radii.duplicate(),"spirals":model.spirals.duplicate(),"vertical_lengths":model.vertical_lengths.duplicate()},"terrain":model.terrain.duplicate(),"source":model.source.duplicate(),"route":points,"width":model.road_width,"offset":model.offset,"slope":model.slope}
 
 static func save_job(path,document):
  var temporary=path+".tmp_"+str(Time.get_ticks_usec())
@@ -726,7 +777,7 @@ func run_smoke():
    return
   await get_tree().process_frame
  assert(model.route.size()==3)
- assert(model.route[1].y==200)
+ assert(model.pvi_heights[1]==200)
  assert(last_applied<tiles.size(),"Local route edit rebuilt every tile")
  assert(road_node.mesh!=null)
  var saved_route=model.route.duplicate()
@@ -736,7 +787,7 @@ func run_smoke():
  var loaded=read_document("user://smoke.kroadg",true)
  apply_document(loaded.document,true)
  assert(model.route==saved_route,"Project roundtrip changed route")
- assert(loaded.document.version==3,"New projects must store alignment parameters")
+ assert(loaded.document.version==4,"New projects must store alignment parameters")
  print("PASS GODOT EDITOR: async tiles, stale edit coalescing, camera independence, local rebuild, road mesh, project roundtrip")
  get_tree().quit(0)
 
@@ -752,7 +803,7 @@ func run_visual_test():
  add_point(extent*0.45)
  add_point(extent*0.50)
  add_point(extent*0.55)
- edit_elevation(1,model.ground(extent.x*0.5,extent.y*0.5)+20)
+ add_pvi(model.length()*0.5,model.ground(extent.x*0.5,extent.y*0.5)+20)
  if "--curve-demo" in arguments:
   clear_route()
   add_point(Vector2(extent.x*0.15,extent.y*0.60))
@@ -761,8 +812,12 @@ func run_visual_test():
   select_pi(1)
   radius_input.value=min(extent.x,extent.y)*0.13
   spiral_input.value=min(extent.x,extent.y)*0.03
-  vertical_input.value=min(extent.x,extent.y)*0.12
   apply_curves()
+  var mid=model.sample(model.length()*0.5).point
+  add_pvi(model.length()*0.5,model.ground(mid.x,mid.z)+20)
+  select_pvi(1)
+  vertical_input.value=min(extent.x,extent.y)*0.12
+  apply_pvi_values()
  if "--long-curve" in arguments:
   clear_route()
   var probe=ClassDB.instantiate("KRoadAlignment")
@@ -776,8 +831,12 @@ func run_visual_test():
   select_pi(1)
   radius_input.value=12000
   spiral_input.value=1000
-  vertical_input.value=4000
   apply_curves()
+  var mid=model.sample(model.length()*0.5).point
+  add_pvi(model.length()*0.5,model.ground(mid.x,mid.z)+20)
+  select_pvi(1)
+  vertical_input.value=4000
+  apply_pvi_values()
   print("LONG ALIGNMENT: %.3fm / %d corridor points" % [model.length(),model.centerline.size()])
  while worker!=null or not dirty.is_empty():
   await get_tree().process_frame
@@ -827,18 +886,18 @@ func run_visual_test():
   print("BENCH PI DRAG+ORBIT: 60 frames / median %.2f ms / p95 %.2f ms / %d history entries" % [drag_times[30],drag_times[56],undo_stack.size()])
  var plot=profile.plot_rect()
  var bounds=profile.chart_bounds()
- var first_length=Vector2(model.route[1].x-model.route[0].x,model.route[1].z-model.route[0].z).length()
- var x=plot.position.x+first_length/model.length()*plot.size.x
+ var x=plot.position.x+model.pvi_stations[1]/model.length()*plot.size.x
+ var pvi_screen_y=plot.end.y-(model.pvi_heights[1]+model.offset-bounds.x)/(bounds.y-bounds.x)*plot.size.y
  var press=InputEventMouseButton.new()
  press.button_index=MOUSE_BUTTON_LEFT
  press.pressed=true
- press.position=Vector2(x,plot.get_center().y)
+ press.position=Vector2(x,pvi_screen_y)
  profile._gui_input(press)
  var edit_times=[]
  var edited_frame=Time.get_ticks_usec()
  for i in range(60):
   var motion=InputEventMouseMotion.new()
-  motion.position=Vector2(x,plot.get_center().y+sin(i*0.1)*12)
+  motion.position=Vector2(x+sin(i*0.1)*2,pvi_screen_y+sin(i*0.1)*12)
   profile._gui_input(motion)
   yaw+=0.001
   update_camera()
@@ -893,7 +952,7 @@ func run_dem_smoke():
  while worker!=null or not dirty.is_empty():
   await get_tree().process_frame
  assert(last_applied<tiles.size(),"DEM local edit rebuilt whole terrain")
- assert(model.route[1].y==169.0)
+ assert(model.pvi_heights[1]==169.0)
  print("PASS DEM EDITOR: background GeoTIFF import, %d orbit frames, %d/%d tiles for local edit, latest height 169m; edit sequence %.1fms" % [orbit_count,last_applied,tiles.size(),(Time.get_ticks_usec()-edit_started)/1000.0])
  # Full-resolution heights and NoData must survive project save without sidecars.
  var source_count=model.source.Heights.size()
@@ -902,7 +961,7 @@ func run_dem_smoke():
  while import_worker!=null:
   await get_tree().process_frame
  var saved=read_document("user://source_roundtrip.kroadg",true)
- assert(saved.document.version==3)
+ assert(saved.document.version==4)
  assert(saved.document.source.Heights is PackedFloat32Array)
  apply_document(saved.document,true)
  assert(model.source.Heights.size()==source_count)
@@ -923,11 +982,11 @@ func sync_alignment_controls():
  if model.route.size()>0:
   pi_selector.select(clampi(selected if selected>=0 else 1,0,model.route.size()-1))
  sync_curve_values()
+ sync_pvi_controls()
 
 func sync_curve_values():
  var index=pi_selector.selected
  plan.selected_index=index
- profile.selected_index=index
  plan.queue_redraw()
  profile.queue_redraw()
  var active=index>0 and index<model.route.size()-1
@@ -945,20 +1004,14 @@ func sync_curve_values():
    coordinate_info.text="현장 로컬 좌표 / 이동 시 PVI고 유지"
  else:
   coordinate_info.text="PI를 선택하세요."
- pvi_height_input.editable=index>=0
- if index>=0 and index<model.route.size():
-  pvi_height_input.value=model.route[index].y
  radius_input.editable=active
  spiral_input.editable=active
- vertical_input.editable=active
  if index>=0 and index<model.radii.size():
   radius_input.value=model.radii[index]
   spiral_input.value=model.spirals[index]
-  vertical_input.value=model.vertical_lengths[index]
  else:
   radius_input.value=0
   spiral_input.value=0
-  vertical_input.value=0
 
 func select_pi(index):
  if index>=0 and index<pi_selector.item_count:
@@ -966,9 +1019,7 @@ func select_pi(index):
   sync_curve_values()
 
 func apply_pvi_height():
- var index=pi_selector.selected
- if index>=0 and index<model.route.size():
-  edit_elevation(index,pvi_height_input.value)
+ apply_pvi_values()
 
 func apply_curves():
  var index=pi_selector.selected
@@ -978,70 +1029,29 @@ func apply_curves():
  var previous=model.snapshot()
  model.radii[index]=radius_input.value
  model.spirals[index]=spiral_input.value
- model.vertical_lengths[index]=vertical_input.value
  changed(previous)
 
 func show_curve_table():
  var text="곡선 길이 기준 측점 / R=0: 직선 연결 / Ls: 각 진입·진출 완화곡선 길이\n"
- text+="종단 제어점은 평면 PI의 곡선 중앙 대응 측점에 배치됩니다.\n\n"
+ text+="독립 종단 PVI / 내부 측점은 평면 PI와 독립 · 종점은 노선 끝에 고정\n\n"
  for element in model.alignment_data.elements:
   text+="STA %.3f → %.3f  |  %s  |  L=%.3fm  |  κ %.7f → %.7f\n" % [element.station,element.station+element.length,element.type,element.length,element.k0,element.k1]
  text+="\n총 길이: %.3fm\n" % model.length()
- for i in range(1,model.route.size()-1):
-  var station=model.pi_station(i)
-  var g1=100*(model.route[i].y-model.route[i-1].y)/(station-model.pi_station(i-1))
-  var g2=100*(model.route[i+1].y-model.route[i].y)/(model.pi_station(i+1)-station)
-  var k="∞" if abs(g2-g1)<0.000000001 else "%.3f m/%%" % (model.vertical_lengths[i]/abs(g2-g1))
-  text+="PVI %d: STA %.3f / 제어고 %.3f / Lv %.3f / 시작 %.3f / 끝 %.3f / g %.4f%% → %.4f%% / K %s\n" % [i+1,station,model.route[i].y,model.vertical_lengths[i],station-model.vertical_lengths[i]/2,station+model.vertical_lengths[i]/2,g1,g2,k]
+ for i in range(1,model.pvi_stations.size()-1):
+  var station=model.pvi_stations[i]
+  var g1=100*(model.pvi_heights[i]-model.pvi_heights[i-1])/(station-model.pvi_stations[i-1])
+  var g2=100*(model.pvi_heights[i+1]-model.pvi_heights[i])/(model.pvi_stations[i+1]-station)
+  var k="∞" if abs(g2-g1)<0.000000001 else "%.3f m/%%" % (model.pvi_lengths[i]/abs(g2-g1))
+  text+="PVI %d: STA %.3f / 제어고 %.3f / Lv %.3f / 시작 %.3f / 끝 %.3f / g %.4f%% → %.4f%% / K %s\n" % [i+1,station,model.pvi_heights[i],model.pvi_lengths[i],station-model.pvi_lengths[i]/2,station+model.pvi_lengths[i]/2,g1,g2,k]
  curve_table.text=text
  curve_info.popup_centered(Vector2i(1000,600))
 
 func run_alignment_smoke():
- var started=Time.get_ticks_msec()
- while worker!=null or not dirty.is_empty():
-  await get_tree().process_frame
- add_point(Vector2(300,3000))
- add_point(Vector2(3000,3000))
- add_point(Vector2(3000,400))
- select_pi(1)
- radius_input.value=500
- spiral_input.value=100
- vertical_input.value=400
- apply_curves()
- var before=model.length()
- assert(model.alignment_data.elements.size()==5)
- assert(model.centerline.size()>100)
- var pvi=model.pi_station(1)
- var old_elevation=model.route[1].y
- pvi_height_input.value=old_elevation+15
- apply_pvi_height()
- assert(model.sample(pvi).point.y!=model.route[1].y,"Vertical curve should not pass through its PVI")
- assert(abs(model.length()-before)<0.0001,"Vertical edit changed horizontal length")
- while worker!=null or not dirty.is_empty():
-  if Time.get_ticks_msec()-started>30000:
-   push_error("Curve editor timed out")
-   get_tree().quit(1)
-   return
-  await get_tree().process_frame
- var saved_points=model.route.duplicate()
- var saved_polyline=model.centerline.duplicate()
- save_project("user://alignment_roundtrip.kroadg")
- while import_worker!=null:
-  await get_tree().process_frame
- var stored=read_document("user://alignment_roundtrip.kroadg",true)
- assert(stored.document.version==3)
- apply_document(stored.document,true)
- assert(model.route==saved_points and model.centerline==saved_polyline)
- assert(model.radii[1]==500 and model.spirals[1]==100 and model.vertical_lengths[1]==400)
- show_curve_table()
- assert("spiral_in" in curve_table.text)
- curve_info.hide()
- print("PASS ALIGNMENT EDITOR: R/Ls/Lv controls, exact chainage, PVI parabola, async terrain, v3 curve roundtrip")
- get_tree().quit(0)
+ await run_pvi_smoke()
 
 static func compact_state(state):
  var result={}
- for key in ["pi_route","radii","spirals","vertical_lengths","width","offset","slope"]:
+ for key in ["pi_route","radii","spirals","vertical_lengths","pvi_stations","pvi_heights","pvi_lengths","width","offset","slope"]:
   result[key]=state[key]
  return result.duplicate(true)
 
@@ -1161,6 +1171,101 @@ func _unhandled_key_input(event):
  get_viewport().set_input_as_handled()
 
 func run_edit_smoke():
+ await run_pvi_smoke()
+
+func sync_pvi_controls():
+ var selected=pvi_selector.selected
+ pvi_selector.clear()
+ for i in range(model.pvi_stations.size()):
+  pvi_selector.add_item("PVI %d" % (i+1))
+ if pvi_selector.item_count>0:
+  pvi_selector.select(clampi(selected if selected>=0 else 0,0,pvi_selector.item_count-1))
+ sync_pvi_values()
+
+func sync_pvi_values():
+ var index=pvi_selector.selected
+ var valid=index>=0 and index<model.pvi_stations.size()
+ var internal=valid and index>0 and index<model.pvi_stations.size()-1
+ pvi_station_input.editable=internal
+ pvi_height_input.editable=valid
+ vertical_input.editable=internal
+ if not valid:
+  pvi_station_input.value=0
+  pvi_height_input.value=0
+  vertical_input.value=0
+ if valid:
+  pvi_station_input.max_value=max(1.0,model.length())
+  pvi_station_input.value=model.pvi_stations[index]
+  pvi_height_input.value=model.pvi_heights[index]
+  vertical_input.value=model.pvi_lengths[index]
+ profile.selected_index=index
+ profile.queue_redraw()
+
+func select_pvi(index):
+ if index>=0 and index<pvi_selector.item_count:
+  pvi_selector.select(index)
+  sync_pvi_values()
+
+func move_pvi(index,station,height):
+ if index<0 or index>=model.pvi_stations.size() or not is_finite(station) or not is_finite(height):
+  return false
+ var previous=model.snapshot()
+ if index==0:
+  station=0.0
+ elif index==model.pvi_stations.size()-1:
+  station=model.length()
+ model.pvi_stations[index]=station
+ model.pvi_heights[index]=height
+ var accepted=changed(previous,true,not gesture_state.is_empty())
+ profile.drag_rejected=not accepted
+ profile.queue_redraw()
+ return accepted
+
+func apply_pvi_values():
+ var index=pvi_selector.selected
+ if index<0 or index>=model.pvi_stations.size():
+  return
+ var previous=model.snapshot()
+ if index>0 and index<model.pvi_stations.size()-1:
+  model.pvi_stations[index]=pvi_station_input.value
+  model.pvi_lengths[index]=vertical_input.value
+ model.pvi_heights[index]=pvi_height_input.value
+ changed(previous)
+
+func add_pvi(station,height):
+ if model.route.size()<2 or not is_finite(station) or not is_finite(height):
+  return false
+ if station<1 or station>model.length()-1:
+  status_note="PVI는 시·종점에서 1m 이상 떨어져야 합니다."
+  return false
+ var previous=model.snapshot()
+ var index=1
+ while index<model.pvi_stations.size() and model.pvi_stations[index]<station:
+  index+=1
+ model.pvi_stations.insert(index,station)
+ model.pvi_heights.insert(index,height)
+ model.pvi_lengths.insert(index,0.0)
+ if changed(previous):
+  select_pvi(index)
+  return true
+ return false
+
+func add_pvi_at_station():
+ var station=model.length()*model.station
+ add_pvi(station,model.sample(station).elevation)
+
+func delete_selected_pvi():
+ var index=pvi_selector.selected
+ if index<=0 or index>=model.pvi_stations.size()-1:
+  status_note="시·종점 PVI는 삭제할 수 없습니다."
+  return
+ var previous=model.snapshot()
+ model.pvi_stations.remove_at(index)
+ model.pvi_heights.remove_at(index)
+ model.pvi_lengths.remove_at(index)
+ changed(previous)
+
+func run_pvi_smoke():
  while worker!=null or not dirty.is_empty():
   await get_tree().process_frame
  add_point(Vector2(300,3000))
@@ -1169,113 +1274,83 @@ func run_edit_smoke():
  select_pi(1)
  radius_input.value=500
  spiral_input.value=100
- vertical_input.value=400
  apply_curves()
- clear_history()
- var original=model.edit_state()
- var height=model.route[1].y
- # Use actual canvas input to move a PI, with one history record per gesture.
- var rect=plan.map_rect()
- var start=rect.position+Vector2(model.route[1].x,model.route[1].z)/model.extent()*rect.size
- var press=InputEventMouseButton.new()
- press.button_index=MOUSE_BUTTON_LEFT
- press.pressed=true
- press.position=start
- plan._gui_input(press)
- for i in range(1,6):
-  var motion=InputEventMouseMotion.new()
-  motion.position=start+Vector2(i*5,0)
-  plan._gui_input(motion)
- press.pressed=false
- plan._gui_input(press)
- assert(model.route[1].x>3000 and model.route[1].y==height)
- assert(undo_stack.size()==1 and redo_stack.is_empty())
- var moved=model.edit_state()
- undo_edit()
- assert(model.edit_state()==original and redo_stack.size()==1)
- redo_edit()
- assert(model.edit_state()==moved)
- # Invalid geometry and out-of-bounds positions preserve the last valid design.
- begin_gesture()
- assert(not move_pi(1,Vector2(301,3000)))
- assert(model.edit_state()==moved)
- assert(not move_pi(1,Vector2(-100,3000)))
- assert(model.edit_state()==moved)
- end_gesture()
- assert(undo_stack.size()==1)
- # Escape restores gesture start, without destroying redo or recording a step.
- undo_edit()
- var redo_count=redo_stack.size()
- begin_gesture()
+ assert(model.pvi_stations.size()==2)
+ var length=model.length()
+ assert(add_pvi(length*0.35,190))
+ select_pvi(1)
+ vertical_input.value=300
+ apply_pvi_values()
+ var station=model.pvi_stations[1]
+ var heights=model.pvi_heights.duplicate()
+ var old_length=model.length()
  assert(move_pi(1,Vector2(3100,3100)))
- var escape=InputEventKey.new()
- escape.keycode=KEY_ESCAPE
- escape.pressed=true
- _input(escape)
- assert(model.edit_state()==original and redo_stack.size()==redo_count)
- assert(undo_stack.is_empty())
- # A fresh edit after undo creates a new branch in the edit history.
- x_input.value=3100
- y_input.value=3100
- apply_pi_position()
- assert(model.route[1].x==3100 and model.route[1].z==3100)
- assert(redo_stack.is_empty() and undo_stack.size()==1)
- # Profile drag is also grouped into a single history entry.
- var before_profile=undo_stack.size()
+ assert(model.pvi_stations[1]==station and model.pvi_heights==heights)
+ assert(model.length()!=old_length)
+ assert(abs(model.pvi_stations[-1]-model.length())<0.00001)
+ clear_history()
+ # Actual profile drag moves independent station and height in one history step.
+ var before=model.edit_state()
+ var rect=profile.plot_rect()
  var bounds=profile.chart_bounds()
- var plot=profile.plot_rect()
- var x=plot.position.x+model.pi_station(1)/model.length()*plot.size.x
- press.pressed=true
- press.position=Vector2(x,plot.get_center().y)
- profile._gui_input(press)
- for i in range(5):
+ var screen=Vector2(rect.position.x+station/model.length()*rect.size.x,rect.end.y-(model.pvi_heights[1]+model.offset-bounds.x)/(bounds.y-bounds.x)*rect.size.y)
+ var click=InputEventMouseButton.new()
+ click.button_index=MOUSE_BUTTON_LEFT
+ click.pressed=true
+ click.position=screen
+ profile._gui_input(click)
+ for i in range(1,5):
   var motion=InputEventMouseMotion.new()
-  motion.position=Vector2(x,plot.get_center().y+i*2)
+  motion.position=screen+Vector2(i*3,-i*2)
   profile._gui_input(motion)
- press.pressed=false
- profile._gui_input(press)
- assert(undo_stack.size()==before_profile+1)
+ click.pressed=false
+ profile._gui_input(click)
+ assert(model.pvi_stations[1]!=station and undo_stack.size()==1)
+ var after=model.edit_state()
  undo_edit()
- assert(model.route[1].y==height)
- # Endpoints are movable too; a click without a drag must not add a step.
- var count=undo_stack.size()
- var p=model.route[0]
- press.position=plan.map_rect().position+Vector2(p.x,p.z)/model.extent()*plan.map_rect().size
- press.pressed=true
- plan._gui_input(press)
- press.pressed=false
- plan._gui_input(press)
- assert(undo_stack.size()==count)
- select_pi(0)
- assert(move_pi(0,Vector2(400,3100)))
+ assert(model.edit_state()==before)
+ redo_edit()
+ assert(model.edit_state()==after)
+ # Endpoint station is locked, interior ordering and overlapping curves are checked.
+ var endpoint=model.pvi_stations[-1]
+ begin_gesture()
+ assert(move_pvi(0,200,model.pvi_heights[0]+1))
+ assert(model.pvi_stations[0]==0)
+ cancel_gesture()
+ begin_gesture()
+ var valid=model.edit_state()
+ assert(not move_pvi(1,-10,190))
+ assert(model.edit_state()==valid)
+ cancel_gesture()
+ select_pvi(1)
+ var count=model.pvi_stations.size()
+ delete_selected_pvi()
+ assert(model.pvi_stations.size()==count-1)
  undo_edit()
- assert(model.route[0]==p)
- # Keyboard shortcuts act on design only while a canvas owns focus.
- plan.grab_focus()
- var key=InputEventKey.new()
- key.ctrl_pressed=true
- key.pressed=true
- key.keycode=KEY_Y
- _unhandled_key_input(key)
- assert(model.route[0].x==400)
- key.keycode=KEY_Z
- _unhandled_key_input(key)
- assert(model.route[0]==p)
- x_input.get_line_edit().grab_focus()
- var state_before_text=model.edit_state()
- _unhandled_key_input(key)
- assert(model.edit_state()==state_before_text)
- for state in undo_stack:
-  assert(not state.has("terrain") and not state.has("source") and not state.has("route"))
+ assert(model.pvi_stations.size()==count)
  while worker!=null or not dirty.is_empty():
   await get_tree().process_frame
  var saved=model.edit_state()
- save_project("user://edited_curve.kroadg")
+ save_project("user://independent_pvi.kroadg")
  while import_worker!=null:
   await get_tree().process_frame
- var data=read_document("user://edited_curve.kroadg",true)
- apply_document(data.document,true)
- assert(model.edit_state()==saved)
- assert(undo_stack.is_empty() and redo_stack.is_empty())
- print("PASS EDITOR HISTORY: PI canvas/numeric move, preserved PVI height, invalid move rollback, gesture undo/redo, Escape, redo branching, profile grouping, endpoint move, persistence/history reset")
+ var stored=read_document("user://independent_pvi.kroadg",true)
+ assert(stored.document.version==4)
+ apply_document(stored.document,true)
+ assert(model.edit_state()==saved and undo_stack.is_empty())
+ # Actual v3 document migration must preserve the legacy shape, not just array sizes.
+ var legacy=project_document()
+ legacy.version=3
+ legacy.erase("profile")
+ legacy.alignment.vertical_lengths=PackedFloat64Array([0,300,0])
+ var reference=ClassDB.instantiate("KRoadAlignment")
+ var expected=reference.configure(model.route,model.radii,model.spirals,legacy.alignment.vertical_lengths)
+ assert(expected.ok)
+ apply_document(legacy,true)
+ for i in range(101):
+  var station_v=expected.length*i/100
+  assert(abs(model.sample(station_v).elevation-reference.sample(station_v).elevation)<0.0000001)
+  assert(abs(model.sample(station_v).grade-reference.sample(station_v).grade)<0.0000001)
+ print("PASS V3 MIGRATION: preserved 101 elevation/grade samples")
+ print("PASS INDEPENDENT PVI EDITOR: add/apply, absolute stations across PI move, endpoint anchor, profile drag/history, invalid rollback, delete/undo, v4 roundtrip")
  get_tree().quit(0)

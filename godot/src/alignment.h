@@ -13,6 +13,7 @@ protected:
  static void _bind_methods();
 public:
  godot::Dictionary configure(const godot::PackedVector3Array&,const godot::PackedFloat64Array&,const godot::PackedFloat64Array&,const godot::PackedFloat64Array&);
+ godot::Dictionary configure_independent(const godot::PackedVector3Array&,const godot::PackedFloat64Array&,const godot::PackedFloat64Array&,const godot::PackedFloat64Array&,const godot::PackedFloat64Array&,const godot::PackedFloat64Array&);
  godot::Dictionary sample(double s) const;
  godot::Dictionary geometry() const;
  godot::PackedVector3Array polyline() const;

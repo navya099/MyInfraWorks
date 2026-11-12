@@ -3,6 +3,7 @@
 using namespace godot;
 void KRoadAlignment::_bind_methods(){
  ClassDB::bind_method(D_METHOD("configure","points","radii","spirals","vertical_lengths"),&KRoadAlignment::configure);
+ ClassDB::bind_method(D_METHOD("configure_independent","points","radii","spirals","stations","heights","lengths"),&KRoadAlignment::configure_independent);
  ClassDB::bind_method(D_METHOD("sample","station"),&KRoadAlignment::sample);
  ClassDB::bind_method(D_METHOD("geometry"),&KRoadAlignment::geometry);
  ClassDB::bind_method(D_METHOD("ribbon","width","offset","base","center_x","center_y"),&KRoadAlignment::ribbon);
@@ -17,6 +18,20 @@ Dictionary KRoadAlignment::configure(const PackedVector3Array &p,const PackedFlo
   out=geometry();out["ok"]=true;
  }catch(const std::exception &e){out["ok"]=false;out["error"]=String(e.what());}return out;
 }
+Dictionary KRoadAlignment::configure_independent(const PackedVector3Array &p,const PackedFloat64Array &r,const PackedFloat64Array &ls,const PackedFloat64Array &stations,const PackedFloat64Array &heights,const PackedFloat64Array &lengths){
+ Dictionary out;try{
+  std::vector<kroad::Point> points;std::vector<double> radii,spirals,zero(p.size(),0);
+  for(int i=0;i<p.size();i++)points.push_back({p[i].x,p[i].z,p[i].y});
+  for(int i=0;i<r.size();i++)radii.push_back(r[i]);for(int i=0;i<ls.size();i++)spirals.push_back(ls[i]);
+  if(stations.size()!=heights.size()||stations.size()!=lengths.size())throw std::runtime_error("Independent profile array size mismatch");
+  kroad::Alignment candidate;candidate.build(points,radii,spirals,zero);
+  std::vector<kroad::Pvi> values;for(int i=0;i<stations.size();i++){if(!std::isfinite(stations[i]))throw std::runtime_error("Non-finite PVI station");values.push_back({stations[i],heights[i],lengths[i]});}
+  // The terminal PVI is anchored to the horizontal endpoint; interior stations stay absolute.
+  if(!values.empty())values.back().station=candidate.total;
+  candidate.set_profile(values);candidate.tessellation();alignment=std::move(candidate);out=geometry();out["ok"]=true;
+ }catch(const std::exception &e){out["ok"]=false;out["error"]=String(e.what());}return out;
+}
+
 Dictionary KRoadAlignment::sample(double s) const {
  auto q=alignment.sample(s);Dictionary out;
  out["point"]=Vector3(q.pose.x,q.elevation,q.pose.y);out["normal"]=Vector2(-std::sin(q.pose.heading),std::cos(q.pose.heading));
@@ -26,6 +41,8 @@ Dictionary KRoadAlignment::geometry() const {
  Dictionary out;PackedFloat64Array stations;Array elements;
  for(double s:alignment.stations)stations.push_back(s);
  for(const auto &e:alignment.elements){Dictionary value;value["type"]=String(e.type.c_str());value["station"]=e.s;value["length"]=e.length;value["k0"]=e.k0;value["k1"]=e.k1;value["pi"]=e.pi;elements.push_back(value);}
+ PackedFloat64Array pvi_stations,pvi_heights,pvi_lengths;for(const auto &v:alignment.profile){pvi_stations.push_back(v.station);pvi_heights.push_back(v.elevation);pvi_lengths.push_back(v.length);}
+ out["pvi_stations"]=pvi_stations;out["pvi_heights"]=pvi_heights;out["pvi_lengths"]=pvi_lengths;
  out["length"]=alignment.total;out["pi_stations"]=stations;out["elements"]=elements;return out;
 }
 PackedVector3Array KRoadAlignment::polyline() const {

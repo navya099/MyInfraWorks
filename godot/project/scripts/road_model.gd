@@ -6,7 +6,10 @@ var source = {}
 var route = PackedVector3Array()
 var radii = PackedFloat64Array()
 var spirals = PackedFloat64Array()
-var vertical_lengths = PackedFloat64Array()
+var vertical_lengths = PackedFloat64Array() # legacy migration only
+var pvi_stations=PackedFloat64Array()
+var pvi_heights=PackedFloat64Array()
+var pvi_lengths=PackedFloat64Array()
 var alignment = ClassDB.instantiate("KRoadAlignment")
 var alignment_data = {"length":0.0,"pi_stations":PackedFloat64Array(),"elements":[]}
 var centerline = PackedVector3Array()
@@ -84,6 +87,9 @@ func set_terrain(t, detail={}):
  radii=PackedFloat64Array()
  spirals=PackedFloat64Array()
  vertical_lengths=PackedFloat64Array()
+ pvi_stations=PackedFloat64Array()
+ pvi_heights=PackedFloat64Array()
+ pvi_lengths=PackedFloat64Array()
  rebuild_alignment()
  var image = Image.create(nx, ny, false, Image.FORMAT_RGBA8)
  var span = max(1.0, high - low)
@@ -124,10 +130,21 @@ func rebuild_alignment():
  for radius in radii:
   if radius>0 and radius<=road_width/2:
    return "R must exceed half the road width to avoid an inverted inner edge"
- var result=alignment.configure(route,radii,spirals,vertical_lengths)
+ if count<2:
+  pvi_stations=PackedFloat64Array()
+  pvi_heights=PackedFloat64Array()
+  pvi_lengths=PackedFloat64Array()
+ elif pvi_stations.is_empty():
+  pvi_stations=PackedFloat64Array([0,-1])
+  pvi_heights=PackedFloat64Array([route[0].y,route[-1].y])
+  pvi_lengths=PackedFloat64Array([0,0])
+ var result=alignment.configure_independent(route,radii,spirals,pvi_stations,pvi_heights,pvi_lengths)
  if not result.ok:
   return result.error
  alignment_data=result
+ pvi_stations=result.pvi_stations
+ pvi_heights=result.pvi_heights
+ pvi_lengths=result.pvi_lengths
  centerline=alignment.polyline()
  core.prepare_corridor(centerline,road_width,offset,slope,terrain.get("Min",0),terrain.get("Max",0),max(terrain.get("Dx",1),terrain.get("Dy",1))*2)
  return ""
@@ -137,6 +154,9 @@ func restore(snapshot_data):
  radii=snapshot_data.radii.duplicate()
  spirals=snapshot_data.spirals.duplicate()
  vertical_lengths=snapshot_data.vertical_lengths.duplicate()
+ pvi_stations=snapshot_data.pvi_stations.duplicate()
+ pvi_heights=snapshot_data.pvi_heights.duplicate()
+ pvi_lengths=snapshot_data.pvi_lengths.duplicate()
  road_width=snapshot_data.width
  offset=snapshot_data.offset
  slope=snapshot_data.slope
@@ -157,7 +177,7 @@ func world(point):
 
 func snapshot():
  # Packed arrays use copy-on-write. Main thread replaces route, never mutates worker data.
- return {"source":source.duplicate(),"terrain":terrain.duplicate(),"pi_route":route.duplicate(),"radii":radii.duplicate(),"spirals":spirals.duplicate(),"vertical_lengths":vertical_lengths.duplicate(),"route":centerline.duplicate(),"width":road_width,"offset":offset,"slope":slope,"refinement":refinement()}
+ return {"source":source.duplicate(),"terrain":terrain.duplicate(),"pi_route":route.duplicate(),"radii":radii.duplicate(),"spirals":spirals.duplicate(),"vertical_lengths":vertical_lengths.duplicate(),"pvi_stations":pvi_stations.duplicate(),"pvi_heights":pvi_heights.duplicate(),"pvi_lengths":pvi_lengths.duplicate(),"route":centerline.duplicate(),"width":road_width,"offset":offset,"slope":slope,"refinement":refinement()}
 
 func refinement():
  var desired=max(5.0,max(min(source.Dx,source.Dy)/2.0,road_width/3.0))
@@ -172,4 +192,13 @@ static func affected(snapshot_data, tile_size):
 
 func edit_state():
  # History stores design parameters only, never DEM arrays or derived meshes.
- return {"pi_route":route.duplicate(),"radii":radii.duplicate(),"spirals":spirals.duplicate(),"vertical_lengths":vertical_lengths.duplicate(),"width":road_width,"offset":offset,"slope":slope}
+ return {"pi_route":route.duplicate(),"radii":radii.duplicate(),"spirals":spirals.duplicate(),"vertical_lengths":vertical_lengths.duplicate(),"pvi_stations":pvi_stations.duplicate(),"pvi_heights":pvi_heights.duplicate(),"pvi_lengths":pvi_lengths.duplicate(),"width":road_width,"offset":offset,"slope":slope}
+
+func migrate_linked_profile():
+ var result=alignment.configure(route,radii,spirals,vertical_lengths)
+ if not result.ok:
+  return result.error
+ pvi_stations=result.pvi_stations
+ pvi_heights=result.pvi_heights
+ pvi_lengths=result.pvi_lengths
+ return ""

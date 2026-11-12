@@ -1,5 +1,7 @@
 # MyInfraWorks
 
+개발 브랜치: `feature/independent-pvi` (0.7). `main`은 검증된 0.6을 유지합니다.
+
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
 대한민국 SRTM 30m DEM을 활용한 Windows용 개략 노선설계 도구를 개발합니다. 목표 범위는 기본계획·예비타당성 검토 수준의 평면·종단선형, 종단·횡단 뷰, 지형 메시, 실시간 절성토 지형 미리보기입니다.
@@ -7,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.6. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.7. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -19,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/independent-pvi --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -53,7 +55,7 @@ dotnet run --project legacy/wpf/KRoadPrototype.csproj -c Release
 python -m SCons -C godot platform=windows target=template_debug arch=x86_64 build_profile=build_profile.json -j4
 ```
 
-생성 파일은 `godot/project/bin/kroad_core_v05.windows.template_debug.x86_64.dll`입니다. 아래 `godot` 명령은 설치한 Godot 실행 파일 경로로 바꿔 실행해도 됩니다.
+생성 파일은 `godot/project/bin/kroad_core_v07.windows.template_debug.x86_64.dll`입니다. 아래 `godot` 명령은 설치한 Godot 실행 파일 경로로 바꿔 실행해도 됩니다.
 
 ```powershell
 godot --headless --path godot/project --editor --import --quit
@@ -73,14 +75,14 @@ python tests/verify_dem.py
 
 ## 다음 개발 범위
 
-독립 종단 제어점과 설계 기준 검사를 확장합니다. 이후 카메라 거리 기반 LOD, 다중 DEM 타일, 토공량을 추가합니다.
+설계 기준 검사와 편경사·확폭·토공량을 확장합니다. 이후 카메라 거리 기반 LOD, 다중 DEM 타일, 토공량을 추가합니다.
 
 ## 저장소 관리
 
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.6 실행
+## Godot 편집기 0.7 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -94,7 +96,7 @@ godot --path godot/project
 - 종단에서 드래그: 수평 측점상 가까운 제어점의 계획고 변경. 드래그 동안 세로 축 범위는 고정됩니다.
 - 3D 왼쪽 드래그: Orbit. 오른쪽 또는 가운데 드래그: Pan. 휠: Zoom.
 - 폭·높이 보정·사면비 변경 후 적용. 횡단 슬라이더로 측점 선택.
-- `.kroadg`로 저장·불러오기. 새 프로젝트는 곡선 매개변수와 계산용 높이를 함께 저장하는 바이너리 v3 형식입니다. 기존 Godot v1 JSON 및 v2 프로젝트도 열 수 있습니다. WPF의 `.kroad`와는 다릅니다.
+- `.kroadg`로 저장·불러오기. 새 프로젝트는 독립 PVI와 계산용 높이를 저장하는 바이너리 v4 형식입니다. 기존 v1 JSON 및 v2/v3 프로젝트는 기존 종단 형상을 보존해 독립 PVI로 변환합니다. 구버전 앱은 v4를 열 수 없습니다. WPF의 `.kroad`와는 다릅니다.
 - `측점 보기`: 선택한 횡단 측점의 도로·사면을 3D에서 가까이 봅니다.
 - 새 DEM 또는 프로젝트를 열면 현재 설계를 교체합니다. 작업을 먼저 저장하세요.
 
@@ -142,7 +144,7 @@ GTX 1060 6GB / OpenGL Compatibility에서 합성 3601×3601, 30m 투영 DEM(계�
 합성 데이터의 관측값이며 실제 사용자 DEM과 긴 노선에서 같은 성능을 보장하지 않습니다. 위 0.4 측정은 직선 연결 노선 기준입니다. 0.5 곡선 노선 측정은 아래를 참조하세요.
 
 
-## 0.5 선형 설계 사용법
+## 0.5 사용법 기록 (0.7은 아래 독립 PVI 사용법 참조)
 
 기존 실행 창을 저장하고 닫은 뒤 `run-godot.cmd`를 다시 실행합니다. 실행 중인 0.4의 DLL을 덮어쓰지 않도록 새 DLL 이름 `kroad_core_v05...dll`을 사용합니다.
 
@@ -207,3 +209,29 @@ godot --path godot/project -- --visual-test "C:/absolute/path/edit-preview.png" 
 GTX 1060 6GB / OpenGL Compatibility, 합성 3601×3601 지형과 약 98.235km S-C-S 노선에서 PI 드래그 + Orbit 60프레임의 중앙값은 13.88ms, p95는 15.80ms였습니다. 같은 실행의 종단 드래그 + Orbit p95는 13.47ms였습니다. 합성 데이터 관측값이며 실제 사용자 노선에서 일정한 성능을 보장하지 않습니다.
 
 독립 PVI의 추가·측점 이동, PI 중간 삽입·임의 삭제, 설계 기준 검사는 아직 지원하지 않습니다.
+
+
+## 0.7 독립 종단 PVI (개발 브랜치)
+
+이 브랜치는 `main`에 아직 병합하지 않았습니다. 기존 창을 저장하고 닫은 뒤 같은 `run-godot.cmd`를 실행하세요. 실행 중인 0.6 DLL은 보존하고 `kroad_core_v07...dll`을 별도로 빌드합니다.
+
+- 평면 PI는 R·Ls만 편집합니다. 종단 PVI의 개수·측점·제어고·Lv는 평면 PI와 별도입니다. 평면 제어점 이동·반경 변경이 내부 PVI를 자동으로 옮기지 않습니다.
+- 새 노선에는 시·종점 PVI 두 개를 만듭니다. 처음 두 평면점의 지반고로 초기 제어고를 설정한 후에는 종단을 독립 설계합니다. 평면 PI 추가가 종단 PVI를 자동 추가하거나 제어고를 지반고로 재설정하지 않습니다.
+- 종단 빈 곳을 클릭하면 횡단 측점을 선택합니다. `현재 측점에 추가`는 그 측점의 현재 계획고를 PVI 초기값으로 사용합니다. 종단에서 Shift+클릭하면 커서의 측점·표고에 직접 추가합니다.
+- 종단 PVI를 클릭 또는 우클릭해 선택합니다. 점을 드래그하면 측점·제어고를 함께 바꿉니다. `독립 종단 PVI` 행에서 측점·제어고·Lv를 입력하고 `PVI 적용`으로 정확히 조정할 수 있습니다.
+- 시점은 STA 0, 종점은 노선 끝에 고정되며 위치 이동·삭제와 Lv 입력은 막습니다. 제어고는 편집할 수 있습니다. 노선 길이가 바뀌면 종점 PVI의 측점만 새 노선 끝을 따릅니다.
+- 내부 PVI는 절대 측점과 제어고를 유지합니다. 노선을 줄여 내부 PVI 또는 종단곡선이 새 노선 범위를 벗어나면 그 평면 편집을 거절합니다. 먼저 PVI를 이동·삭제하거나 Lv를 줄여야 합니다.
+- PVI 간격은 1m 이상이며 측점 순서가 뒤집히거나 곡선이 겹치는 입력은 거절합니다. 드래그 중 거절 시 마지막 유효 설계를 유지합니다. 자동 정렬·자동 곡선 축소는 하지 않습니다.
+- `PVI 삭제`는 내부 PVI만 삭제합니다. 추가·이동·표고·Lv·삭제는 실행 취소·다시 실행을 지원하고, 드래그 한 번은 한 단계로 기록합니다. Esc로 취소할 수 있습니다.
+- v4는 독립 측점·제어고·Lv 배열을 저장합니다. v1/v2/v3는 기존 PI 대응 측점과 제어고·Lv를 한 번 변환합니다. 기존 종단의 표고·구배를 유지하며, 변환 후에는 독립적으로 편집합니다.
+
+```powershell
+godot --headless --path godot/project --script verify_profile.gd
+godot --headless --path godot/project -- --pvi-smoke
+```
+
+독립 PVI 수·측점, 포물선 해석해, 평면 변경 시 내부 측점 보존, 종점 앵커, 구간 축소·중첩 거절, canvas 드래그와 undo/redo, v4 저장·복원, 실제 v3 문서 변환의 표고·구배 101표본 비교 검사를 통과했습니다. 평면 곡선 및 지형 검사는 유지합니다.
+
+합성 3601×3601 지형의 약 98.235km S-C-S 노선, GTX 1060 6GB / OpenGL Compatibility에서 독립 PVI 드래그 + Orbit 60프레임 p95 13.44ms, 같은 실행의 PI 드래그 + Orbit p95 15.40ms를 관측했습니다. 사용자 DEM의 정확도나 일정한 성능을 보장하는 값은 아닙니다.
+
+비대칭 종단곡선, 시작 측점 오프셋·측점 방정식, 설계속도·시거 기준 검사는 아직 지원하지 않습니다.

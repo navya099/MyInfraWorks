@@ -42,6 +42,7 @@ inline Pose at(const Element &e,double ds) {
  return advance(e.start,ds,e.k0,k);
 }
 struct Sample { Pose pose;double elevation=0,grade=0,curvature=0,s=0;int element=0; };
+struct Pvi {double station=0,elevation=0,length=0;};
 class Alignment {
  std::vector<Point> pi_;
  std::vector<double> vertical_;
@@ -50,6 +51,7 @@ class Alignment {
   elements.push_back({p,total,length,k0,k1,type,pi});total+=length;
  }
 public:
+ std::vector<Pvi> profile;
  std::vector<Element> elements;
  std::vector<double> stations;
  double total=0;
@@ -104,7 +106,21 @@ public:
    if(next.stations[i]-half<0||next.stations[i]+half>next.total)throw std::runtime_error("Vertical curve exceeds alignment endpoints");
    if(i>1&&next.stations[i-1]+vertical[i-1]/2>next.stations[i]-half+1e-8)throw std::runtime_error("Vertical curves overlap");
   }
+  for(size_t i=0;i<n;i++)next.profile.push_back({next.stations[i],points[i].z,vertical[i]});
   *this=std::move(next);
+ }
+ void set_profile(std::vector<Pvi> values) {
+  if(total<=0){if(!values.empty())throw std::runtime_error("Profile requires a nonzero horizontal alignment");profile.clear();return;}
+  if(values.size()<2)throw std::runtime_error("Profile requires two endpoints");
+  for(size_t i=0;i<values.size();i++){
+   auto &v=values[i];
+   if(!std::isfinite(v.station)||!std::isfinite(v.elevation)||!std::isfinite(v.length)||std::abs(v.elevation)>1e6||v.length<0||v.length>1e8||(v.length>0&&v.length<.01))throw std::runtime_error("Invalid PVI station, elevation or length");
+   if(i&&v.station-values[i-1].station<1)throw std::runtime_error("PVI stations must increase with at least 1 m spacing");
+   if(v.station<0||v.station>total||v.station-v.length/2<0||v.station+v.length/2>total)throw std::runtime_error("PVI or vertical curve is outside alignment; move/delete the PVI before shortening the route");
+   if(i&&values[i-1].station+values[i-1].length/2>v.station-v.length/2+1e-8)throw std::runtime_error("Vertical curves overlap");
+  }
+  if(std::abs(values.front().station)>1e-6||std::abs(values.back().station-total)>1e-6||values.front().length!=0||values.back().length!=0)throw std::runtime_error("Profile endpoints must be 0 / route length and have Lv=0");
+  values.front().station=0;values.back().station=total;profile=std::move(values);
  }
  Sample sample(double s) const {
   Sample out;if(pi_.empty())return out;
@@ -113,20 +129,21 @@ public:
   auto found=std::upper_bound(elements.begin(),elements.end(),s,[](double value,const Element &e){return value<e.s;});
   size_t index=found==elements.begin()?0:size_t(found-elements.begin()-1);const auto &e=elements[index];double ds=std::clamp(s-e.s,0.0,e.length);
   out.pose=at(e,ds);out.curvature=e.k0+(e.k1-e.k0)*ds/e.length;out.element=int(index);
-  for(size_t i=1;i+1<pi_.size();i++) {
-   double l=vertical_[i];if(l<=0||s<stations[i]-l/2||s>stations[i]+l/2)continue;
-   double g1=(pi_[i].z-pi_[i-1].z)/(stations[i]-stations[i-1]),g2=(pi_[i+1].z-pi_[i].z)/(stations[i+1]-stations[i]);
-   double x=s-stations[i]+l/2;
-   out.elevation=pi_[i].z-g1*l/2+g1*x+(g2-g1)*x*x/(2*l);out.grade=g1+(g2-g1)*x/l;return out;
+  for(size_t i=1;i+1<profile.size();i++) {
+   const auto &v=profile[i];double l=v.length;if(l<=0||s<v.station-l/2||s>v.station+l/2)continue;
+   double g1=(v.elevation-profile[i-1].elevation)/(v.station-profile[i-1].station),g2=(profile[i+1].elevation-v.elevation)/(profile[i+1].station-v.station);
+   double x=s-v.station+l/2;
+   out.elevation=v.elevation-g1*l/2+g1*x+(g2-g1)*x*x/(2*l);out.grade=g1+(g2-g1)*x/l;return out;
   }
-  auto pos=std::upper_bound(stations.begin(),stations.end(),s);size_t j=pos==stations.begin()?0:std::min(pi_.size()-2,size_t(pos-stations.begin()-1));
-  out.grade=(pi_[j+1].z-pi_[j].z)/(stations[j+1]-stations[j]);out.elevation=pi_[j].z+out.grade*(s-stations[j]);return out;
+  if(profile.size()<2)return out;
+  auto pos=std::upper_bound(profile.begin(),profile.end(),s,[](double s,const Pvi &p){return s<p.station;});size_t j=pos==profile.begin()?0:std::min(profile.size()-2,size_t(pos-profile.begin()-1));
+  out.grade=(profile[j+1].elevation-profile[j].elevation)/(profile[j+1].station-profile[j].station);out.elevation=profile[j].elevation+out.grade*(s-profile[j].station);return out;
  }
  std::vector<double> tessellation(double max_step=25,double horizontal_error=.05,double vertical_error=.01) const {
   std::vector<double> out;if(elements.empty()){if(!pi_.empty())out.push_back(0);return out;}
   std::vector<double> breaks{0,total};
   for(const auto &e:elements){breaks.push_back(e.s);breaks.push_back(e.s+e.length);}
-  for(size_t i=1;i+1<stations.size();i++){breaks.push_back(stations[i]);if(vertical_[i]>0){breaks.push_back(stations[i]-vertical_[i]/2);breaks.push_back(stations[i]+vertical_[i]/2);}}
+  for(const auto &v:profile){breaks.push_back(v.station);if(v.length>0){breaks.push_back(v.station-v.length/2);breaks.push_back(v.station+v.length/2);}}
   std::sort(breaks.begin(),breaks.end());breaks.erase(std::unique(breaks.begin(),breaks.end(),[](double a,double b){return std::abs(a-b)<1e-8;}),breaks.end());
   out.push_back(0);
   for(size_t i=1;i<breaks.size();i++) {
