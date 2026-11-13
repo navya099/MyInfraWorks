@@ -1,5 +1,8 @@
 extends Control
 signal point_added(point)
+signal point_inserted(after_index,point)
+signal insertion_cancelled
+var insert_after=-1
 signal elevation_changed(index, elevation)
 signal point_selected(index)
 signal point_moved(index, point)
@@ -71,6 +74,10 @@ func _draw():
    if i==selected_index:
     draw_circle(q,8,Color("a8d4ef"),false,1.5)
    label(str(i+1),q+Vector2(6,-6),ORANGE)
+  if insert_after>=0 and insert_after+1<model.route.size():
+   var a=model.route[insert_after]
+   var b=model.route[insert_after+1]
+   draw_line(r.position+Vector2(a.x,a.z)/ext*r.size,r.position+Vector2(b.x,b.z)/ext*r.size,Color("a8d4ef"),3,true)
   for point in model.centerline:
    points.append(r.position+Vector2(point.x,point.z)/ext*r.size)
   if points.size()>1:
@@ -97,7 +104,7 @@ func _draw():
   label("N ↑  |  %.1f × %.1f km" % [ext.x/1000,ext.y/1000],Vector2(14,18))
   if drag_index>=0 and drag_rejected:
    draw_circle(drag_target,9,Color("ff7777"),false,2)
-  label("클릭: 추가 / 점 드래그: 이동 / Shift+클릭: 강제 추가 / Esc: 취소",Vector2(14,size.y-10))
+  label("PI %d 뒤 삽입: 클릭 지정 / Esc·우클릭 취소" % (insert_after+1) if insert_after>=0 else "클릭: 끝에 추가 / 점 드래그: 이동 / 우클릭: 선택 / Shift+클릭: 끝에 추가",Vector2(14,size.y-10))
   return
  if model.route.size()<2:
   label("평면에 노선 점을 두 개 이상 추가하세요.",Vector2(24,38))
@@ -179,6 +186,15 @@ func _draw():
 
 func _gui_input(event):
  if model == null or model.terrain.is_empty():
+  return
+ if mode=="plan" and insert_after>=0:
+  if event is InputEventMouseButton and event.pressed:
+   if event.button_index==MOUSE_BUTTON_RIGHT:
+    insertion_cancelled.emit()
+   elif event.button_index==MOUSE_BUTTON_LEFT:
+    var r=map_rect()
+    if r.has_point(event.position):
+     point_inserted.emit(insert_after,(event.position-r.position)/r.size*model.extent())
   return
  if mode == "plan" and event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_RIGHT and event.pressed:
   var r=map_rect()

@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/earthwork-quantities` (0.8). 사용자 확인을 마친 0.7은 `main`에 반영했습니다.
+개발 브랜치: `feature/pi-topology-editing` (0.9). 사용자 확인을 마친 0.8은 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.8. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.9. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/earthwork-quantities --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/pi-topology-editing --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.8 실행
+## Godot 편집기 0.9 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -208,7 +208,7 @@ godot --path godot/project -- --visual-test "C:/absolute/path/edit-preview.png" 
 
 GTX 1060 6GB / OpenGL Compatibility, 합성 3601×3601 지형과 약 98.235km S-C-S 노선에서 PI 드래그 + Orbit 60프레임의 중앙값은 13.88ms, p95는 15.80ms였습니다. 같은 실행의 종단 드래그 + Orbit p95는 13.47ms였습니다. 합성 데이터 관측값이며 실제 사용자 노선에서 일정한 성능을 보장하지 않습니다.
 
-독립 PVI의 추가·측점 이동, PI 중간 삽입·임의 삭제, 설계 기준 검사는 아직 지원하지 않습니다.
+이후 0.7에서 독립 PVI 추가·측점 이동, 0.9에서 내부 PI 삽입·삭제를 구현했습니다. 설계 기준 검사는 아직 지원하지 않습니다.
 
 
 ## 0.7 독립 종단 PVI (main 반영 완료)
@@ -237,7 +237,7 @@ godot --headless --path godot/project -- --pvi-smoke
 비대칭 종단곡선, 시작 측점 오프셋·측점 방정식, 설계속도·시거 기준 검사는 아직 지원하지 않습니다.
 
 
-## 0.8 절토·성토량 (개발 브랜치)
+## 0.8 절토·성토량 (main 반영 완료)
 
 `토공량` → `계산`으로 단면별 절토·성토 면적과 평균단면법 체적을 산출합니다. 측점 간격, 조사 반폭, 횡단 간격을 조절할 수 있습니다. 행을 클릭하면 해당 횡단 측점으로 이동하며 `CSV 저장`으로 결과를 내보냅니다.
 
@@ -256,3 +256,28 @@ godot --headless --path godot/project -- --earthwork-smoke
 평탄 지반 해석해, 사면 영점 교차, 절토·성토 혼합, 결측 구간 제외, 미완결 사면, 입력 거절, CSV 및 비동기 결과 무효화 검사를 통과했습니다.
 
 합성 3601×3601 DEM / 약 98.235km 노선 / GTX 1060 6GB에서 4,920개 단면 계산 816.8ms, 계산 중 63프레임 갱신을 관측했습니다. Orbit p95는 13.44ms였습니다. 실제 사용자 DEM이나 일정한 성능을 보장하는 수치는 아닙니다.
+
+
+## 0.9 평면 PI 중간 삽입·삭제 (개발 브랜치)
+
+기존 창을 저장하고 닫은 뒤 같은 `run-godot.cmd`를 실행하세요. 이번 변경은 GDScript 편집 기능이며 C++ DLL은 검증한 `kroad_core_v08`을 그대로 사용합니다. 프로젝트 형식도 v4입니다.
+
+1. 평면에서 우클릭하거나 `선형 제어점` 목록으로 삽입 앞쪽 PI를 선택합니다.
+2. `PI 뒤에 삽입…`에서 로컬 동 X·남 Y를 입력하고 `입력 좌표 삽입`을 누릅니다. 기본 좌표는 선택 PI와 다음 PI의 중간입니다.
+3. 또는 `평면에서 지정` 후 원하는 위치를 클릭합니다. 하늘색 연결선이 삽입 대상 구간입니다. Esc·우클릭은 삽입 모드를 취소합니다.
+4. 내부 PI를 선택하고 `PI 삭제`로 제거합니다. 시·종점은 이 버튼으로 삭제하지 않습니다. 기존 `마지막 점 취소`와 `노선 초기화`는 그대로 제공합니다.
+
+삽입은 선택 PI와 다음 PI 사이의 **제어점 순서**를 지정합니다. 새 좌표를 기존 선분 위로 제한하거나 곡선 위에 자동 투영하지 않습니다. 일반 클릭과 Shift+클릭은 기존처럼 노선 끝에 추가합니다.
+
+새 PI는 R/Ls=0으로 시작하고, 기존 점의 R/Ls는 그 점과 함께 이동합니다. 삭제하면 해당 점의 R/Ls만 제거합니다. 내부 PVI의 절대 측점·제어고·Lv는 유지하고 종점 측점만 새 노선 길이에 맞춥니다. 따라서 노선 길이가 바뀌면 종단 구배와 표고 형상도 달라질 수 있습니다.
+
+인접 PI와 1m 미만, 범위 밖·NoData, 기존 곡선의 접선 길이 부족·중첩, 내부 PVI 또는 종단곡선이 노선 범위를 벗어나는 변경은 거절하고 전체 설계를 복원합니다. 반경·완화곡선을 자동으로 줄이지 않습니다. 거절된 편집은 이력이나 유효 토공량을 바꾸지 않습니다. 성공한 삽입·삭제는 각각 undo/redo 한 단계이며 토공량은 다시 계산해야 합니다.
+
+```powershell
+godot --headless --path godot/project -- --topology-smoke
+godot --path godot/project -- --visual-test "C:/absolute/path/topology-preview.png" --curve-demo --topology-demo --insert-dialog
+```
+
+실제 canvas 클릭과 좌표 대화상자, 두 기존 곡선의 R/Ls 대응, 삭제·undo/redo, 독립 PVI 보존과 노선 단축 거절, NoData·범위·인접점·끝점 검사, Esc·우클릭 취소, 토공량 무효화, v4 저장·복원을 검사했습니다.
+
+합성 3601×3601 DEM / 편집 전 약 98.235km 노선 / GTX 1060 6GB에서 PI 삽입 3.42ms, 삭제 2.89ms, Orbit p95 13.42ms를 관측했습니다. 지형 메시 갱신은 이후 비동기로 처리하며 이 수치는 편집 호출 시간입니다. 사용자 노선의 일정한 성능을 보장하지 않습니다.

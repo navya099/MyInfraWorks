@@ -57,6 +57,12 @@ var curve_table: TextEdit
 var x_input: SpinBox
 var y_input: SpinBox
 var coordinate_info: Label
+var insert_dialog: ConfirmationDialog
+var insert_x: SpinBox
+var insert_y: SpinBox
+var insert_after=-1
+var insert_button: Button
+var delete_pi_button: Button
 var undo_button: Button
 var redo_button: Button
 var undo_stack=[]
@@ -69,7 +75,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--earthwork-smoke" in OS.get_cmdline_user_args():
+ if "--topology-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_topology_smoke")
+ elif "--earthwork-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_earthwork_smoke")
  elif "--pvi-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_pvi_smoke")
@@ -186,12 +194,41 @@ func build_ui():
  curves.add_child(pi_label)
  pi_selector=OptionButton.new()
  pi_selector.custom_minimum_size.x=180
- pi_selector.item_selected.connect(func(_index):sync_curve_values())
+ pi_selector.item_selected.connect(func(_index):cancel_pi_insertion();sync_curve_values())
  curves.add_child(pi_selector)
  radius_input=number(curves,"R(m)",0,0,100000,0.01)
  spiral_input=number(curves,"완화 Ls(m)",0,0,10000,0.01)
  button(curves,"곡선 적용",apply_curves)
  button(curves,"곡선표",show_curve_table)
+ insert_button=button(curves,"PI 뒤에 삽입…",show_pi_insert)
+ delete_pi_button=button(curves,"PI 삭제",delete_selected_pi)
+ insert_button.tooltip_text="선택 PI와 다음 PI 사이에 새 PI 삽입 · 새 점 R/Ls=0"
+ delete_pi_button.tooltip_text="선택한 내부 PI와 그 점의 R/Ls 삭제 · Ctrl+Z로 복원"
+ insert_dialog=ConfirmationDialog.new()
+ insert_dialog.title="선택 PI 뒤에 중간점 삽입"
+ insert_dialog.ok_button_text="입력 좌표 삽입"
+ insert_dialog.cancel_button_text="취소"
+ insert_dialog.dialog_hide_on_ok=false
+ var insert_body=VBoxContainer.new()
+ insert_dialog.add_child(insert_body)
+ var insert_hint=Label.new()
+ insert_hint.text="로컬 좌표(m) · 새 PI의 R/Ls=0 · 기존 PI의 R/Ls와 내부 PVI 유지"
+ insert_body.add_child(insert_hint)
+ var insert_row=HBoxContainer.new()
+ insert_body.add_child(insert_row)
+ insert_x=number(insert_row,"동 X",0,0,1000000,0.01)
+ insert_y=number(insert_row,"남 Y",0,0,1000000,0.01)
+ insert_dialog.confirmed.connect(func():
+  if insert_pi(insert_after,Vector2(insert_x.value,insert_y.value)):insert_dialog.hide())
+ insert_dialog.add_button("평면에서 지정",false,"pick")
+ insert_dialog.custom_action.connect(func(action):
+  if action=="pick":
+   insert_dialog.hide()
+   plan.insert_after=insert_after
+   plan.queue_redraw()
+   status_note="PI %d 뒤 삽입: 평면 클릭 / Esc 또는 우클릭 취소" % (insert_after+1))
+ insert_dialog.canceled.connect(cancel_pi_insertion)
+ add_child(insert_dialog)
  curve_info=Window.new()
  curve_info.visible=false
  curve_info.title="선형 요소 / 측점 / 곡률"
@@ -238,6 +275,8 @@ func build_ui():
  split.add_child(upper)
  plan=make_canvas(upper,"01  평면 / PLAN · 북쪽 ↑","plan")
  plan.point_added.connect(add_point)
+ plan.point_inserted.connect(func(index,point):insert_pi(index,point))
+ plan.insertion_cancelled.connect(cancel_pi_insertion)
  plan.point_moved.connect(move_pi)
  plan.gesture_started.connect(begin_gesture)
  plan.gesture_finished.connect(end_gesture)
@@ -339,6 +378,8 @@ func show_error(text):
  message.popup_centered(Vector2i(620,220))
 
 func reset_terrain():
+ cancel_pi_insertion()
+ insert_dialog.hide()
  if earthwork_report!=null:earthwork_report.invalidate()
  clear_history()
  revision+=1
@@ -436,6 +477,7 @@ func changed(previous, record_history=true, quiet=false):
   sync_pvi_values()
  if record_history and gesture_state.is_empty():
   remember_edit(previous)
+ cancel_pi_insertion()
  revision+=1
  if earthwork_report!=null:earthwork_report.invalidate()
  apply_queue.clear()
@@ -926,6 +968,24 @@ func run_visual_test():
  edit_times.sort()
  print("BENCH PROFILE+ORBIT: 60 frames / median %.2f ms / p95 %.2f ms / %d total tiles, %d updated" % [edit_times[30],edit_times[56],tiles.size(),last_applied])
  focus_station()
+ if "--topology-demo" in arguments:
+  var a=model.route[0]
+  var b=model.route[1]
+  var point=Vector2((a.x+b.x)*0.5,(a.z+b.z)*0.5)-Vector2(0,extent.y*0.01)
+  var started=Time.get_ticks_usec()
+  assert(insert_pi(0,point,true))
+  var insert_ms=(Time.get_ticks_usec()-started)/1000.0
+  var inserted=model.edit_state()
+  started=Time.get_ticks_usec()
+  assert(delete_selected_pi(true))
+  var delete_ms=(Time.get_ticks_usec()-started)/1000.0
+  undo_edit()
+  assert(model.edit_state()==inserted)
+  print("BENCH TOPOLOGY: insert %.2f ms / delete %.2f ms / %d PI / %.3fm / undo restored" % [insert_ms,delete_ms,model.route.size(),model.length()])
+  while worker!=null or not dirty.is_empty():await get_tree().process_frame
+  if "--insert-dialog" in arguments:
+   select_pi(0)
+   show_pi_insert()
  if "--earthwork-demo" in arguments:
   earthwork_report.popup_centered(Vector2i(1200,720))
   earthwork_report.start_calculation()
@@ -1016,6 +1076,8 @@ func sync_curve_values():
  plan.queue_redraw()
  profile.queue_redraw()
  var active=index>0 and index<model.route.size()-1
+ insert_button.disabled=index<0 or index>=model.route.size()-1
+ delete_pi_button.disabled=not active
  x_input.editable=index>=0
  y_input.editable=index>=0
  x_input.max_value=model.extent().x
@@ -1178,6 +1240,10 @@ func apply_pi_position():
  move_pi(pi_selector.selected,Vector2(x_input.value,y_input.value))
 
 func _input(event):
+ if event is InputEventKey and event.pressed and event.keycode==KEY_ESCAPE and plan.insert_after>=0:
+  cancel_pi_insertion()
+  get_viewport().set_input_as_handled()
+  return
  if event is InputEventKey and event.pressed and event.keycode==KEY_ESCAPE and not gesture_state.is_empty():
   cancel_gesture()
   get_viewport().set_input_as_handled()
@@ -1413,4 +1479,182 @@ func run_earthwork_smoke():
  while earthwork_report.worker!=null:await get_tree().process_frame
  assert(earthwork_report.result.is_empty())
  print("PASS EARTHWORK UI: background calculation, camera response, 17-column CSV, invalidated export and stale result discard")
+ get_tree().quit(0)
+
+
+func cancel_pi_insertion():
+ insert_after=-1
+ if plan!=null:
+  if plan.insert_after>=0:status_note="PI 삽입 모드 종료"
+  plan.insert_after=-1
+  plan.queue_redraw()
+
+func show_pi_insert():
+ if not gesture_state.is_empty():return
+ var index=pi_selector.selected
+ if index<0 or index+1>=model.route.size():return
+ cancel_pi_insertion()
+ insert_after=index
+ var midpoint=(model.route[index]+model.route[index+1])*0.5
+ insert_x.max_value=model.extent().x
+ insert_y.max_value=model.extent().y
+ insert_x.value=midpoint.x
+ insert_y.value=midpoint.z
+ insert_dialog.title="PI %d → PI %d 사이 삽입" % [index+1,index+2]
+ insert_dialog.popup_centered(Vector2i(650,160))
+
+func insert_pi(after_index,point,quiet=false):
+ if not gesture_state.is_empty() or after_index<0 or after_index+1>=model.route.size():return false
+ var extent=model.extent()
+ if not point.is_finite() or point.x<0 or point.y<0 or point.x>extent.x or point.y>extent.y or not is_finite(model.ground(point.x,point.y)):
+  status_note="삽입 거절: 지형 범위 또는 NoData 영역"
+  if not quiet:show_error(status_note)
+  return false
+ for index in [after_index,after_index+1]:
+  var p=model.route[index]
+  if point.distance_to(Vector2(p.x,p.z))<1.0:
+   status_note="삽입 거절: 인접 PI와 1m 이상 떨어져야 합니다."
+   if not quiet:show_error(status_note)
+   return false
+ var previous=model.snapshot()
+ var index=after_index+1
+ model.route.insert(index,Vector3(point.x,model.ground(point.x,point.y),point.y))
+ model.radii.insert(index,0.0)
+ model.spirals.insert(index,0.0)
+ model.vertical_lengths.insert(index,0.0)
+ if not changed(previous,true,quiet):return false
+ select_pi(index)
+ status_note="PI %d 삽입 완료 · R/Ls=0 · 내부 PVI 측점·제어고 유지" % (index+1)
+ return true
+
+func delete_selected_pi(quiet=false):
+ var index=pi_selector.selected
+ if not gesture_state.is_empty() or index<=0 or index>=model.route.size()-1:return false
+ var previous=model.snapshot()
+ model.route.remove_at(index)
+ model.radii.remove_at(index)
+ model.spirals.remove_at(index)
+ model.vertical_lengths.remove_at(index)
+ if not changed(previous,true,quiet):return false
+ select_pi(min(index,model.route.size()-1))
+ status_note="PI %d 삭제 완료 · 실행 취소로 복원 가능" % (index+1)
+ return true
+
+func run_topology_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(300,3300))
+ add_point(Vector2(2700,3300))
+ add_point(Vector2(2700,600))
+ add_point(Vector2(4200,600))
+ select_pi(1)
+ radius_input.value=300
+ spiral_input.value=60
+ apply_curves()
+ select_pi(2)
+ radius_input.value=200
+ spiral_input.value=40
+ apply_curves()
+ assert(add_pvi(1000,195))
+ clear_history()
+ var original=model.edit_state()
+ # A click on the armed plan inserts in the selected leg, not at the route end.
+ select_pi(0)
+ show_pi_insert()
+ insert_dialog.custom_action.emit("pick")
+ assert(plan.insert_after==0)
+ earthwork_report.result={"test_marker":true}
+ var rect=plan.map_rect()
+ var click=InputEventMouseButton.new()
+ click.button_index=MOUSE_BUTTON_LEFT
+ click.pressed=true
+ click.position=rect.position+Vector2(1400,3200)/model.extent()*rect.size
+ plan._gui_input(click)
+ assert(model.route.size()==5 and pi_selector.selected==1 and plan.insert_after==-1)
+ assert(earthwork_report.result.is_empty())
+ assert(model.radii==PackedFloat64Array([0,0,300,200,0]))
+ assert(model.spirals==PackedFloat64Array([0,0,60,40,0]))
+ assert(model.pvi_stations[1]==1000 and model.pvi_heights==original.pvi_heights)
+ assert(abs(model.pvi_stations[-1]-model.length())<0.00001)
+ assert(undo_stack.size()==1)
+ var inserted=model.edit_state()
+ undo_edit()
+ assert(model.edit_state()==original)
+ redo_edit()
+ assert(model.edit_state()==inserted)
+ # Deleting a curved PI removes its own parameters, leaving the next curve intact.
+ select_pi(2)
+ assert(delete_selected_pi(true))
+ assert(model.radii==PackedFloat64Array([0,0,200,0]))
+ assert(model.spirals==PackedFloat64Array([0,0,40,0]))
+ undo_edit()
+ assert(model.edit_state()==inserted)
+ select_pi(1)
+ assert(delete_selected_pi(true))
+ assert(model.edit_state()==original)
+ undo_edit()
+ assert(model.edit_state()==inserted)
+ # Invalid insertion near an existing curve must restore all arrays and history.
+ var history_count=undo_stack.size()
+ var current_revision=revision
+ earthwork_report.result={"test_marker":true}
+ assert(not insert_pi(1,Vector2(2680,3300),true))
+ assert(model.edit_state()==inserted and undo_stack.size()==history_count and revision==current_revision)
+ assert(earthwork_report.result.has("test_marker"))
+ assert(not insert_pi(0,Vector2(-1,100),true))
+ assert(not insert_pi(0,Vector2(model.route[0].x,model.route[0].z),true))
+ var old_source=model.source
+ model.source=model.source.duplicate(true)
+ var nx=model.source.Nx
+ var h=model.source.Heights.duplicate()
+ for dy in [0,1]:
+  for dx in [0,1]:h[(50+dy)*nx+50+dx]=NAN
+ model.source.Heights=h
+ assert(not insert_pi(0,Vector2(1505,1505),true))
+ model.source=old_source
+ assert(model.edit_state()==inserted and undo_stack.size()==history_count)
+ select_pi(0)
+ assert(not delete_selected_pi(true))
+ select_pi(model.route.size()-1)
+ assert(not delete_selected_pi(true))
+ # Esc/right-click cancel only the insertion mode; never mutate the route.
+ select_pi(0)
+ show_pi_insert()
+ insert_dialog.custom_action.emit("pick")
+ var escape=InputEventKey.new()
+ escape.pressed=true
+ escape.keycode=KEY_ESCAPE
+ _input(escape)
+ assert(plan.insert_after==-1 and model.edit_state()==inserted)
+ show_pi_insert()
+ insert_dialog.custom_action.emit("pick")
+ click.button_index=MOUSE_BUTTON_RIGHT
+ plan._gui_input(click)
+ assert(plan.insert_after==-1 and model.edit_state()==inserted)
+ # Numeric dialog uses the same validation and selects the new PI.
+ show_pi_insert()
+ insert_x.value=850
+ insert_y.value=3250
+ insert_dialog.confirmed.emit()
+ assert(model.route.size()==6 and pi_selector.selected==1 and not insert_dialog.visible)
+ assert(model.radii[3]==300 and model.radii[4]==200)
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ var saved=model.edit_state()
+ save_project("user://topology.kroadg")
+ while import_worker!=null:await get_tree().process_frame
+ var stored=read_document("user://topology.kroadg",true)
+ apply_document(stored.document,true)
+ assert(model.edit_state()==saved)
+ # A shortcut that would strand an independent PVI is rejected atomically.
+ clear_route()
+ add_point(Vector2(500,500))
+ add_point(Vector2(4000,500))
+ add_point(Vector2(4000,4000))
+ assert(add_pvi(6000,190))
+ select_pi(1)
+ var detour=model.edit_state()
+ history_count=undo_stack.size()
+ current_revision=revision
+ assert(not delete_selected_pi(true))
+ assert(model.edit_state()==detour and undo_stack.size()==history_count and revision==current_revision)
+ print("PASS PI TOPOLOGY: canvas/numeric insert, R/Ls association, independent PVI, delete/undo/redo, overlap/NoData/bounds/endpoint rejection, Esc/right-click, v4 roundtrip, shortening rollback")
  get_tree().quit(0)
