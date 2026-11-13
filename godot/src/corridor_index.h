@@ -31,6 +31,15 @@ public:
    for(int y=y0;y<=y1;y++)for(int x=x0;x<=x1;x++)buckets[key(x,y)].push_back(index);
   }
  }
+ struct Projection {bool found=false;double elevation=0,distance=0;};
+ Projection project(double x,double y) const {
+  Projection result;auto list=candidates(x,y);if(!list)return result;
+  double best=std::numeric_limits<double>::infinity();
+  for(int index:*list){const auto &s=segments[index];double f=std::clamp(((x-s.x)*s.dx+(y-s.y)*s.dy)/s.ll,0.0,1.0);
+   double dx=x-s.x-s.dx*f,dy=y-s.y-s.dy*f,d2=dx*dx+dy*dy;if(d2>=best)continue;best=d2;
+   result={true,s.z+s.dz*f+offset,std::sqrt(d2)};
+  }return result;
+ }
  double evaluate(double ground,double x,double y) const {
   if(!std::isfinite(ground))return ground;
   auto list=candidates(x,y);if(!list)return ground;

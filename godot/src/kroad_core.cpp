@@ -57,6 +57,7 @@ class KRoadCore : public RefCounted {
  }
 protected:
  static void _bind_methods() {
+  ClassDB::bind_method(D_METHOD("earthwork_sections","terrain","stations","poses","width","offset","slope","reach","step"),&KRoadCore::earthwork_sections);
   ClassDB::bind_method(D_METHOD("prepare_corridor","route","width","offset","slope","ground_min","ground_max","padding"),&KRoadCore::prepare_corridor);
   ClassDB::bind_method(D_METHOD("affected_tiles","terrain","route","width","offset","slope","tile_size"),&KRoadCore::affected_tiles);
   ClassDB::bind_method(D_METHOD("interpolate_elevation","a","b","fraction"),&KRoadCore::interpolate_elevation);
@@ -68,6 +69,55 @@ protected:
   ClassDB::bind_method(D_METHOD("build_tile","terrain","route","x0","y0","cells","width","offset","slope"),&KRoadCore::build_tile);
  }
 public:
+ static double positive_area(double a,double b,double dx) {
+  if(a<=0&&b<=0)return 0;
+  if(a>=0&&b>=0)return (a+b)*dx/2;
+  double fraction=std::abs(a)/(std::abs(a)+std::abs(b));
+  return a>0?a*dx*fraction/2:b*dx*(1-fraction)/2;
+ }
+ Dictionary earthwork_sections(const Dictionary &terrain,const PackedFloat64Array &stations,const PackedFloat64Array &poses,double width,double offset,double slope,double reach,double step) const {
+  Dictionary result;auto fail=[&](const char *message){Dictionary error;error["ok"]=false;error["error"]=String(message);return error;};
+  Grid grid(terrain);
+  if(!grid.valid()||stations.size()<2||stations.size()>20000||poses.size()!=stations.size()*5)return fail("Invalid terrain/station/pose arrays (2..20000 sections)");
+  if(!std::isfinite(width)||!std::isfinite(offset)||!std::isfinite(slope)||!std::isfinite(reach)||!std::isfinite(step)||width<=0||width>1000||slope<=0||slope>100||reach<width/2||reach>10000||step<.1||step>50)return fail("Invalid width, slope, investigation half-width or lateral step");
+  std::vector<double> offsets{-reach,-width/2,0,width/2,reach};
+  int lateral=int(std::ceil(2*reach/step));
+  if(int64_t(lateral+5)*stations.size()>20000000)return fail("Sampling budget exceeds 20 million points; increase station/lateral step or reduce width");
+  for(int i=1;i<lateral;i++)offsets.push_back(-reach+2*reach*i/lateral);
+  std::sort(offsets.begin(),offsets.end());offsets.erase(std::unique(offsets.begin(),offsets.end(),[](double a,double b){return std::abs(a-b)<1e-8;}),offsets.end());
+  for(int i=0;i<stations.size();i++){
+   if(!std::isfinite(stations[i])||stations[i]<0||(i&&stations[i]<=stations[i-1]))return fail("Stations must be finite, nonnegative and strictly increasing");
+   for(int j=0;j<5;j++)if(!std::isfinite(poses[i*5+j]))return fail("Non-finite section pose");
+   if(std::hypot(poses[i*5+3],poses[i*5+4])<1e-8)return fail("Invalid section normal");
+  }
+  Array rows;double cut_volume=0,fill_volume=0,covered=0;int invalid=0,excluded=0,accepted=0;bool previous_valid=false;double previous_cut=0,previous_fill=0;
+  for(int i=0;i<stations.size();i++){
+   double x=poses[i*5],y=poses[i*5+1],road=poses[i*5+2]+offset,nx=poses[i*5+3],ny=poses[i*5+4],normal=std::hypot(nx,ny);nx/=normal;ny/=normal;
+   double cut=0,fill=0,last_cut=0,last_fill=0,last_d=0;bool valid=true,closed=true;
+   for(size_t j=0;j<offsets.size();j++){
+    double d=offsets[j],px=x+nx*d,py=y+ny*d,g=grid.sample(px,py),raw_cut=0,raw_fill=0;
+    if(!std::isfinite(g)){valid=false;continue;}
+    double elevation=road,distance=std::abs(d);bool found=true;
+    if(corridor.ready){auto projection=corridor.project(px,py);found=projection.found;elevation=projection.elevation;distance=projection.distance;}
+    if(found){double edge=std::max(0.0,distance-width/2)/slope;raw_fill=elevation-g-edge;raw_cut=g-elevation-edge;}
+    else {raw_cut=-1;raw_fill=-1;}
+    if((j==0||j+1==offsets.size())&&(raw_cut>1e-7||raw_fill>1e-7))closed=false;
+    if(j>0){cut+=positive_area(last_cut,raw_cut,d-last_d);fill+=positive_area(last_fill,raw_fill,d-last_d);}
+    last_cut=raw_cut;last_fill=raw_fill;last_d=d;
+   }
+   String status=!valid?"nodata":!closed?"unclosed":"ok";valid=valid&&closed;
+   Dictionary row;row["station"]=stations[i];row["elevation"]=road;row["status"]=status;
+   row["cut_area"]=valid?Variant(cut):Variant();row["fill_area"]=valid?Variant(fill):Variant();
+   double ds=i?stations[i]-stations[i-1]:0;
+   row["interval_length"]=ds;
+   if(i&&valid&&previous_valid){double cv=(cut+previous_cut)*ds/2,fv=(fill+previous_fill)*ds/2;cut_volume+=cv;fill_volume+=fv;covered+=ds;accepted++;row["cut_volume"]=cv;row["fill_volume"]=fv;row["interval_status"]="included";}
+   else if(i){excluded++;row["cut_volume"]=Variant();row["fill_volume"]=Variant();row["interval_status"]="excluded";}
+   else {row["cut_volume"]=0.0;row["fill_volume"]=0.0;row["interval_status"]="start";}
+   row["cumulative_cut"]=cut_volume;row["cumulative_fill"]=fill_volume;
+   rows.push_back(row);if(!valid)invalid++;previous_valid=valid;previous_cut=cut;previous_fill=fill;
+  }
+  double total=stations[stations.size()-1]-stations[0];result["ok"]=true;result["sections"]=rows;result["cut_volume"]=cut_volume;result["fill_volume"]=fill_volume;result["net_cut_minus_fill"]=cut_volume-fill_volume;result["covered_length"]=covered;result["total_length"]=total;result["coverage"]=total>0?covered/total:0;result["complete"]=excluded==0;result["invalid_sections"]=invalid;result["excluded_intervals"]=excluded;result["included_intervals"]=accepted;result["samples_per_section"]=int(offsets.size());return result;
+ }
  void prepare_corridor(const PackedVector3Array &r,double width,double offset,double slope,double low,double high,double padding) {
   if(width<=0||slope<=0||!std::isfinite(width)||!std::isfinite(slope)||!std::isfinite(offset)||!std::isfinite(low)||!std::isfinite(high)||!std::isfinite(padding)){corridor=CorridorIndex();return;}
   for(int i=0;i<r.size();i++)if(!r[i].is_finite()){corridor=CorridorIndex();return;}

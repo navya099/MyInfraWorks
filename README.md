@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/independent-pvi` (0.7). `main`은 검증된 0.6을 유지합니다.
+개발 브랜치: `feature/earthwork-quantities` (0.8). 사용자 확인을 마친 0.7은 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.7. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.8. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/independent-pvi --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/earthwork-quantities --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -55,7 +55,7 @@ dotnet run --project legacy/wpf/KRoadPrototype.csproj -c Release
 python -m SCons -C godot platform=windows target=template_debug arch=x86_64 build_profile=build_profile.json -j4
 ```
 
-생성 파일은 `godot/project/bin/kroad_core_v07.windows.template_debug.x86_64.dll`입니다. 아래 `godot` 명령은 설치한 Godot 실행 파일 경로로 바꿔 실행해도 됩니다.
+생성 파일은 `godot/project/bin/kroad_core_v08.windows.template_debug.x86_64.dll`입니다. 아래 `godot` 명령은 설치한 Godot 실행 파일 경로로 바꿔 실행해도 됩니다.
 
 ```powershell
 godot --headless --path godot/project --editor --import --quit
@@ -75,14 +75,14 @@ python tests/verify_dem.py
 
 ## 다음 개발 범위
 
-설계 기준 검사와 편경사·확폭·토공량을 확장합니다. 이후 카메라 거리 기반 LOD, 다중 DEM 타일, 토공량을 추가합니다.
+설계 기준 검사, 편경사·확폭, 토공량 보정을 확장합니다. 이후 카메라 거리 기반 LOD와 다중 DEM 타일을 추가합니다.
 
 ## 저장소 관리
 
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.7 실행
+## Godot 편집기 0.8 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -211,9 +211,9 @@ GTX 1060 6GB / OpenGL Compatibility, 합성 3601×3601 지형과 약 98.235km S-
 독립 PVI의 추가·측점 이동, PI 중간 삽입·임의 삭제, 설계 기준 검사는 아직 지원하지 않습니다.
 
 
-## 0.7 독립 종단 PVI (개발 브랜치)
+## 0.7 독립 종단 PVI (main 반영 완료)
 
-이 브랜치는 `main`에 아직 병합하지 않았습니다. 기존 창을 저장하고 닫은 뒤 같은 `run-godot.cmd`를 실행하세요. 실행 중인 0.6 DLL은 보존하고 `kroad_core_v07...dll`을 별도로 빌드합니다.
+0.7은 사용자 확인 후 `main`에 병합했습니다. 기존 창을 저장하고 닫은 뒤 같은 `run-godot.cmd`를 실행하세요. 실행 중인 0.6 DLL은 보존하고 `kroad_core_v07...dll`을 별도로 빌드합니다.
 
 - 평면 PI는 R·Ls만 편집합니다. 종단 PVI의 개수·측점·제어고·Lv는 평면 PI와 별도입니다. 평면 제어점 이동·반경 변경이 내부 PVI를 자동으로 옮기지 않습니다.
 - 새 노선에는 시·종점 PVI 두 개를 만듭니다. 처음 두 평면점의 지반고로 초기 제어고를 설정한 후에는 종단을 독립 설계합니다. 평면 PI 추가가 종단 PVI를 자동 추가하거나 제어고를 지반고로 재설정하지 않습니다.
@@ -235,3 +235,24 @@ godot --headless --path godot/project -- --pvi-smoke
 합성 3601×3601 지형의 약 98.235km S-C-S 노선, GTX 1060 6GB / OpenGL Compatibility에서 독립 PVI 드래그 + Orbit 60프레임 p95 13.44ms, 같은 실행의 PI 드래그 + Orbit p95 15.40ms를 관측했습니다. 사용자 DEM의 정확도나 일정한 성능을 보장하는 값은 아닙니다.
 
 비대칭 종단곡선, 시작 측점 오프셋·측점 방정식, 설계속도·시거 기준 검사는 아직 지원하지 않습니다.
+
+
+## 0.8 절토·성토량 (개발 브랜치)
+
+`토공량` → `계산`으로 단면별 절토·성토 면적과 평균단면법 체적을 산출합니다. 측점 간격, 조사 반폭, 횡단 간격을 조절할 수 있습니다. 행을 클릭하면 해당 횡단 측점으로 이동하며 `CSV 저장`으로 결과를 내보냅니다.
+
+- 원본 해상도 계산용 DEM을 사용하고 별도 작업 스레드에서 계산합니다. 설계·DEM·계산 조건 변경 시 이전 결과를 폐기합니다.
+- 조사 폭 안의 결측 DEM 또는 조사 끝에 남은 절성토는 무효 단면입니다. 양 끝 단면이 모두 유효한 구간만 합산합니다. 전체 산출 길이 대비 유효 길이와 제외 구간 수를 표시하며, 일부만 계산되면 **유효 구간 부분합**으로 표시합니다.
+- CSV의 무효 면적·체적은 빈 칸입니다. 0으로 처리하지 않습니다. 결과와 계산 설정은 프로젝트에 저장하지 않으며 다시 계산해야 합니다. 프로젝트 형식은 v4를 유지합니다.
+- 개략 추정치입니다. 곡선 면적중심, 노선 중첩의 체적 합집합, 토량변화율, 표토·포장·지질 보정은 포함하지 않습니다. DEM 해상도와 표본 간격에 영향을 받습니다.
+
+자세한 산식·제약은 [토공량 계산](docs/earthwork.md)을 참조하세요. 실행 중인 이전 DLL은 보존하고 `kroad_core_v08...dll`을 사용합니다.
+
+```powershell
+godot --headless --path godot/project --script verify_earthwork.gd
+godot --headless --path godot/project -- --earthwork-smoke
+```
+
+평탄 지반 해석해, 사면 영점 교차, 절토·성토 혼합, 결측 구간 제외, 미완결 사면, 입력 거절, CSV 및 비동기 결과 무효화 검사를 통과했습니다.
+
+합성 3601×3601 DEM / 약 98.235km 노선 / GTX 1060 6GB에서 4,920개 단면 계산 816.8ms, 계산 중 63프레임 갱신을 관측했습니다. Orbit p95는 13.44ms였습니다. 실제 사용자 DEM이나 일정한 성능을 보장하는 수치는 아닙니다.

@@ -5,5 +5,5 @@ if env['platform'] == 'windows' and not env.get('use_mingw', False):
     env.Append(CXXFLAGS=['/EHsc'])
 else:
     env.Append(CXXFLAGS=['-fexceptions'])
-library = env.SharedLibrary('project/bin/kroad_core_v07' + env['suffix'] + env['SHLIBSUFFIX'], source=Glob('src/*.cpp'))
+library = env.SharedLibrary('project/bin/kroad_core_v08' + env['suffix'] + env['SHLIBSUFFIX'], source=Glob('src/*.cpp'))
 Default(library)

@@ -1,4 +1,6 @@
 extends Control
+const EarthworkReport=preload("res://scripts/earthwork_report.gd")
+var earthwork_report
 const Model = preload("res://scripts/road_model.gd")
 const DesignCanvas = preload("res://scripts/design_canvas.gd")
 const TILE = 32
@@ -67,7 +69,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--pvi-smoke" in OS.get_cmdline_user_args():
+ if "--earthwork-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_earthwork_smoke")
+ elif "--pvi-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_pvi_smoke")
  elif "--edit-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_edit_smoke")
@@ -157,6 +161,7 @@ func build_ui():
  clear_button=button(toolbar,"노선 초기화",clear_route)
  button(toolbar,"화면 맞춤",fit_camera)
  button(toolbar,"측점 보기",focus_station)
+ button(toolbar,"토공량",func():earthwork_report.popup_centered(Vector2i(1200,720)))
  undo_button=button(toolbar,"실행 취소",undo_edit)
  redo_button=button(toolbar,"다시 실행",redo_edit)
  undo_button.tooltip_text="설계 실행 취소 (Ctrl+Z)"
@@ -310,6 +315,13 @@ func build_ui():
  dem_dialog=file_dialog(FileDialog.FILE_MODE_OPEN_FILE,"*.tif,*.tiff ; GeoTIFF",open_dem)
  save_dialog=file_dialog(FileDialog.FILE_MODE_SAVE_FILE,"*.kroadg ; MyInfraWorks Godot",save_project)
  load_dialog=file_dialog(FileDialog.FILE_MODE_OPEN_FILE,"*.kroadg ; MyInfraWorks Godot",load_project)
+ earthwork_report=EarthworkReport.new()
+ earthwork_report.visible=false
+ earthwork_report.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision,"length":model.length()}
+ earthwork_report.revision_provider=func():return revision
+ earthwork_report.station_selected.connect(func(station):
+  if model.length()>0:station_slider.value=station/model.length())
+ add_child(earthwork_report)
  message=AcceptDialog.new()
  add_child(message)
 
@@ -327,6 +339,7 @@ func show_error(text):
  message.popup_centered(Vector2i(620,220))
 
 func reset_terrain():
+ if earthwork_report!=null:earthwork_report.invalidate()
  clear_history()
  revision+=1
  apply_queue.clear()
@@ -424,6 +437,7 @@ func changed(previous, record_history=true, quiet=false):
  if record_history and gesture_state.is_empty():
   remember_edit(previous)
  revision+=1
+ if earthwork_report!=null:earthwork_report.invalidate()
  apply_queue.clear()
  dirty.merge(Model.affected(previous,TILE),true)
  dirty.merge(Model.affected(model.snapshot(),TILE),true)
@@ -912,6 +926,18 @@ func run_visual_test():
  edit_times.sort()
  print("BENCH PROFILE+ORBIT: 60 frames / median %.2f ms / p95 %.2f ms / %d total tiles, %d updated" % [edit_times[30],edit_times[56],tiles.size(),last_applied])
  focus_station()
+ if "--earthwork-demo" in arguments:
+  earthwork_report.popup_centered(Vector2i(1200,720))
+  earthwork_report.start_calculation()
+  var work_start=Time.get_ticks_usec()
+  var work_frames=0
+  while earthwork_report.worker!=null:
+   yaw+=0.0003
+   update_camera()
+   work_frames+=1
+   await get_tree().process_frame
+  if not earthwork_report.result.is_empty():
+   print("BENCH EARTHWORK: %.1f ms / %d sections / %.2f%% covered / %d rendered frames" % [earthwork_report.result.ms,earthwork_report.result.sections.size(),earthwork_report.result.coverage*100,work_frames])
  if "--table-demo" in arguments:
   show_curve_table()
   await get_tree().process_frame
@@ -1353,4 +1379,38 @@ func run_pvi_smoke():
   assert(abs(model.sample(station_v).grade-reference.sample(station_v).grade)<0.0000001)
  print("PASS V3 MIGRATION: preserved 101 elevation/grade samples")
  print("PASS INDEPENDENT PVI EDITOR: add/apply, absolute stations across PI move, endpoint anchor, profile drag/history, invalid rollback, delete/undo, v4 roundtrip")
+ get_tree().quit(0)
+
+func run_earthwork_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ # Keep all slopes inside the demo grid, while exercising async sampling/export.
+ earthwork_report.interval.value=20
+ earthwork_report.reach.value=300
+ earthwork_report.start_calculation()
+ var count=0
+ while earthwork_report.worker!=null:
+  yaw+=0.001
+  update_camera()
+  count+=1
+  await get_tree().process_frame
+ assert(not earthwork_report.result.is_empty())
+ assert(earthwork_report.result.sections.size()>20)
+ assert(earthwork_report.export_csv("user://earthwork-smoke.csv"))
+ var csv=FileAccess.open("user://earthwork-smoke.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ var header=csv.get_csv_line()
+ var row=csv.get_csv_line()
+ assert(header.size()==17 and row.size()==17)
+ assert(row[0]=="average_end_area")
+ var old=earthwork_report.result
+ edit_elevation(1,model.pvi_heights[1]+1)
+ assert(earthwork_report.result.is_empty() and earthwork_report.csv_button.disabled)
+ assert(not earthwork_report.export_csv("user://stale-earthwork.csv"))
+ earthwork_report.start_calculation()
+ edit_elevation(1,model.pvi_heights[1]+1)
+ while earthwork_report.worker!=null:await get_tree().process_frame
+ assert(earthwork_report.result.is_empty())
+ print("PASS EARTHWORK UI: background calculation, camera response, 17-column CSV, invalidated export and stale result discard")
  get_tree().quit(0)
