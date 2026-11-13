@@ -136,6 +136,7 @@ static func calculate_job(snapshot,station_step,half_width,lateral_step):
   var at=alignment.sample(station)
   poses.append_array(PackedFloat64Array([at.x,at.y,at.elevation,-sin(at.heading),cos(at.heading)]))
  var core=ClassDB.instantiate("KRoadCore")
+ core.set_crossfall(snapshot.get("left_fall",0.0),snapshot.get("right_fall",0.0))
  core.prepare_corridor(snapshot.route,snapshot.width,snapshot.offset,snapshot.slope,snapshot.terrain.Min,snapshot.terrain.Max,max(max(snapshot.terrain.Dx,snapshot.terrain.Dy)*2,lateral_step*2))
  var report=core.earthwork_sections(snapshot.source,unique,poses,snapshot.width,snapshot.offset,snapshot.slope,half_width,lateral_step)
  report.station_step=station_step
@@ -183,9 +184,9 @@ func export_csv(path):
   status.text="CSV 파일을 열지 못했습니다."
   return false
  file.store_buffer(PackedByteArray([239,187,191]))
- file.store_csv_line(PackedStringArray(["method","station_step_m","half_width_m","lateral_step_m","complete","coverage_ratio","station_m","elevation_m","cut_area_m2","fill_area_m2","section_status","interval_length_m","cut_volume_m3","fill_volume_m3","interval_status","cumulative_cut_m3","cumulative_fill_m3"]))
+ file.store_csv_line(PackedStringArray(["method","station_step_m","half_width_m","lateral_step_m","complete","coverage_ratio","station_m","elevation_m","cut_area_m2","fill_area_m2","section_status","interval_length_m","cut_volume_m3","fill_volume_m3","interval_status","cumulative_cut_m3","cumulative_fill_m3","left_down_pct","right_down_pct"]))
  for row in result.sections:
-  file.store_csv_line(PackedStringArray(["average_end_area",str(result.station_step),str(result.half_width),str(result.lateral_step),str(result.complete),str(result.coverage),str(row.station),str(row.elevation),"" if row.cut_area==null else str(row.cut_area),"" if row.fill_area==null else str(row.fill_area),row.status,str(row.interval_length),"" if row.cut_volume==null else str(row.cut_volume),"" if row.fill_volume==null else str(row.fill_volume),row.interval_status,str(row.cumulative_cut),str(row.cumulative_fill)]))
+  file.store_csv_line(PackedStringArray(["average_end_area",str(result.station_step),str(result.half_width),str(result.lateral_step),str(result.complete),str(result.coverage),str(row.station),str(row.elevation),"" if row.cut_area==null else str(row.cut_area),"" if row.fill_area==null else str(row.fill_area),row.status,str(row.interval_length),"" if row.cut_volume==null else str(row.cut_volume),"" if row.fill_volume==null else str(row.fill_volume),row.interval_status,str(row.cumulative_cut),str(row.cumulative_fill),str(result.left_fall),str(result.right_fall)]))
  file.flush()
  var error=file.get_error()
  file.close()

@@ -17,5 +17,6 @@ public:
  godot::Dictionary sample(double s) const;
  godot::Dictionary geometry() const;
  godot::PackedVector3Array polyline() const;
+ godot::Dictionary ribbon_crossfall(double width,double offset,double base,double center_x,double center_y,double left,double right) const;
  godot::Dictionary ribbon(double width,double offset,double base,double center_x,double center_y) const;
 };

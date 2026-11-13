@@ -19,6 +19,7 @@ using namespace godot;
 class KRoadCore : public RefCounted {
  GDCLASS(KRoadCore, RefCounted)
  CorridorIndex corridor;
+ double left_fall=0,right_fall=0;
  double evaluate(double g,const PackedVector3Array &r,double x,double y,double width,double offset,double slope) const {return corridor.ready?corridor.evaluate(g,x,y):design(g,r,x,y,width,offset,slope);}
  static double missing() { return std::numeric_limits<double>::quiet_NaN(); }
  struct Grid {
@@ -45,18 +46,20 @@ class KRoadCore : public RefCounted {
   }
  };
  static bool valid(const Dictionary &t) {return Grid(t).valid();}
- static double design(double g,const PackedVector3Array &r,double x,double y,double width,double offset,double slope) {
+ double design(double g,const PackedVector3Array &r,double x,double y,double width,double offset,double slope) const {
   if(!std::isfinite(g)||width<=0||slope<=0)return g;
   double best=std::numeric_limits<double>::infinity(),z=g;
   for(int i=1;i<r.size();++i){Vector3 a=r[i-1],b=r[i];double vx=b.x-a.x,vy=b.z-a.z,ll=vx*vx+vy*vy;if(ll<1e-12)continue;
    double f=((x-a.x)*vx+(y-a.z)*vy)/ll;if(f<0||f>1)continue;
    double ex=x-a.x-f*vx,ey=y-a.z-f*vy,dist2=ex*ex+ey*ey;if(dist2>=best)continue;best=dist2;
-   double road=a.y+(b.y-a.y)*f+offset,edge=std::max(0.0,std::sqrt(dist2)-width/2)/slope;
+   double distance=std::sqrt(dist2),side=(vx*ey-vy*ex)<0?-distance:distance;
+   double road=a.y+(b.y-a.y)*f+offset-crossfall_drop(distance,side,width,left_fall,right_fall),edge=std::max(0.0,std::sqrt(dist2)-width/2)/slope;
    z=g<road?std::max(g,road-edge):std::min(g,road+edge);
   }return z;
  }
 protected:
  static void _bind_methods() {
+  ClassDB::bind_method(D_METHOD("set_crossfall","left_percent","right_percent"),&KRoadCore::set_crossfall);
   ClassDB::bind_method(D_METHOD("earthwork_sections","terrain","stations","poses","width","offset","slope","reach","step"),&KRoadCore::earthwork_sections);
   ClassDB::bind_method(D_METHOD("prepare_corridor","route","width","offset","slope","ground_min","ground_max","padding"),&KRoadCore::prepare_corridor);
   ClassDB::bind_method(D_METHOD("affected_tiles","terrain","route","width","offset","slope","tile_size"),&KRoadCore::affected_tiles);
@@ -69,6 +72,10 @@ protected:
   ClassDB::bind_method(D_METHOD("build_tile","terrain","route","x0","y0","cells","width","offset","slope"),&KRoadCore::build_tile);
  }
 public:
+ bool set_crossfall(double left,double right) {
+  if(!std::isfinite(left)||!std::isfinite(right)||std::abs(left)>12||std::abs(right)>12)return false;
+  left_fall=left;right_fall=right;corridor=CorridorIndex();return true;
+ }
  static double positive_area(double a,double b,double dx) {
   if(a<=0&&b<=0)return 0;
   if(a>=0&&b>=0)return (a+b)*dx/2;
@@ -97,9 +104,9 @@ public:
    for(size_t j=0;j<offsets.size();j++){
     double d=offsets[j],px=x+nx*d,py=y+ny*d,g=grid.sample(px,py),raw_cut=0,raw_fill=0;
     if(!std::isfinite(g)){valid=false;continue;}
-    double elevation=road,distance=std::abs(d);bool found=true;
-    if(corridor.ready){auto projection=corridor.project(px,py);found=projection.found;elevation=projection.elevation;distance=projection.distance;}
-    if(found){double edge=std::max(0.0,distance-width/2)/slope;raw_fill=elevation-g-edge;raw_cut=g-elevation-edge;}
+    double elevation=road,distance=std::abs(d),side=d;bool found=true;
+    if(corridor.ready){auto projection=corridor.project(px,py);found=projection.found;elevation=projection.elevation;distance=projection.distance;side=projection.signed_distance;}
+    if(found){elevation-=crossfall_drop(distance,side,width,left_fall,right_fall);double edge=std::max(0.0,distance-width/2)/slope;raw_fill=elevation-g-edge;raw_cut=g-elevation-edge;}
     else {raw_cut=-1;raw_fill=-1;}
     if((j==0||j+1==offsets.size())&&(raw_cut>1e-7||raw_fill>1e-7))closed=false;
     if(j>0){cut+=positive_area(last_cut,raw_cut,d-last_d);fill+=positive_area(last_fill,raw_fill,d-last_d);}
@@ -116,18 +123,19 @@ public:
    row["cumulative_cut"]=cut_volume;row["cumulative_fill"]=fill_volume;
    rows.push_back(row);if(!valid)invalid++;previous_valid=valid;previous_cut=cut;previous_fill=fill;
   }
-  double total=stations[stations.size()-1]-stations[0];result["ok"]=true;result["sections"]=rows;result["cut_volume"]=cut_volume;result["fill_volume"]=fill_volume;result["net_cut_minus_fill"]=cut_volume-fill_volume;result["covered_length"]=covered;result["total_length"]=total;result["coverage"]=total>0?covered/total:0;result["complete"]=excluded==0;result["invalid_sections"]=invalid;result["excluded_intervals"]=excluded;result["included_intervals"]=accepted;result["samples_per_section"]=int(offsets.size());return result;
+  double total=stations[stations.size()-1]-stations[0];result["ok"]=true;result["left_fall"]=left_fall;result["right_fall"]=right_fall;result["sections"]=rows;result["cut_volume"]=cut_volume;result["fill_volume"]=fill_volume;result["net_cut_minus_fill"]=cut_volume-fill_volume;result["covered_length"]=covered;result["total_length"]=total;result["coverage"]=total>0?covered/total:0;result["complete"]=excluded==0;result["invalid_sections"]=invalid;result["excluded_intervals"]=excluded;result["included_intervals"]=accepted;result["samples_per_section"]=int(offsets.size());return result;
  }
  void prepare_corridor(const PackedVector3Array &r,double width,double offset,double slope,double low,double high,double padding) {
   if(width<=0||slope<=0||!std::isfinite(width)||!std::isfinite(slope)||!std::isfinite(offset)||!std::isfinite(low)||!std::isfinite(high)||!std::isfinite(padding)){corridor=CorridorIndex();return;}
   for(int i=0;i<r.size();i++)if(!r[i].is_finite()){corridor=CorridorIndex();return;}
-  corridor.prepare(r,width,offset,slope,low,high,std::max(0.0,padding));
+  corridor.prepare(r,width,offset,slope,low,high,std::max(0.0,padding),left_fall,right_fall);
  }
  PackedVector2Array affected_tiles(const Dictionary &t,const PackedVector3Array &r,double width,double offset,double slope,int tile_size) const {
   PackedVector2Array out;Grid grid(t);if(!grid.valid()||tile_size<1)return out;
   std::unordered_map<uint64_t,bool> keys;int nx=(grid.nx-2)/tile_size+1,ny=(grid.ny-2)/tile_size+1;double low=t.get("Min",0.0),high=t.get("Max",0.0);
   double route_low=low,route_high=high;
   if(!r.is_empty()){route_low=r[0].y+offset;route_high=route_low;for(int i=0;i<r.size();i++){route_low=std::min(route_low,double(r[i].y)+offset);route_high=std::max(route_high,double(r[i].y)+offset);}}
+  double crown=width/2*std::max(std::abs(left_fall),std::abs(right_fall))/100;route_low-=crown;route_high+=crown;
   double radius=width/2+std::max(std::abs(route_low-high),std::abs(route_high-low))*slope+std::max(grid.dx,grid.dy)*2;
   for(int i=1;i<r.size();i++){
    auto a=r[i-1],b=r[i];
@@ -195,7 +203,8 @@ public:
     double u=std::clamp(((px-a.x)*vx+(py-a.z)*vy)/ll,0.0,1.0);
     double ex=px-a.x-u*vx,ey=py-a.z-u*vy;
     double low=std::min(a.y,b.y)+offset,high=std::max(a.y,b.y)+offset;
-    double margin=width/2+std::max(std::abs(low-double(t.get("Max",1))),std::abs(high-base))*slope+std::hypot(view.dx,view.dy);
+    double crown=width/2*std::max(std::abs(left_fall),std::abs(right_fall))/100;
+    double margin=width/2+(std::max(std::abs(low-double(t.get("Max",1))),std::abs(high-base))+crown)*slope+std::hypot(view.dx,view.dy);
     if(ex*ex+ey*ey<=margin*margin)return true;
    }return false;
   };

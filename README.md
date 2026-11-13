@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/design-review` (0.10). 사용자 확인을 마친 0.9는 `main`에 반영했습니다.
+개발 브랜치: `feature/road-crossfall` (0.11). 사용자 확인을 마친 0.10은 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.10. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.11. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/design-review --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/road-crossfall --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -55,7 +55,7 @@ dotnet run --project legacy/wpf/KRoadPrototype.csproj -c Release
 python -m SCons -C godot platform=windows target=template_debug arch=x86_64 build_profile=build_profile.json -j4
 ```
 
-생성 파일은 `godot/project/bin/kroad_core_v08.windows.template_debug.x86_64.dll`입니다. 아래 `godot` 명령은 설치한 Godot 실행 파일 경로로 바꿔 실행해도 됩니다.
+생성 파일은 `godot/project/bin/kroad_core_v011.windows.template_debug.x86_64.dll`입니다. 아래 `godot` 명령은 설치한 Godot 실행 파일 경로로 바꿔 실행해도 됩니다.
 
 ```powershell
 godot --headless --path godot/project --editor --import --quit
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.10 실행
+## Godot 편집기 0.11 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -96,7 +96,7 @@ godot --path godot/project
 - 종단에서 드래그: 수평 측점상 가까운 제어점의 계획고 변경. 드래그 동안 세로 축 범위는 고정됩니다.
 - 3D 왼쪽 드래그: Orbit. 오른쪽 또는 가운데 드래그: Pan. 휠: Zoom.
 - 폭·높이 보정·사면비 변경 후 적용. 횡단 슬라이더로 측점 선택.
-- `.kroadg`로 저장·불러오기. 새 프로젝트는 독립 PVI와 계산용 높이를 저장하는 바이너리 v4 형식입니다. 기존 v1 JSON 및 v2/v3 프로젝트는 기존 종단 형상을 보존해 독립 PVI로 변환합니다. 구버전 앱은 v4를 열 수 없습니다. WPF의 `.kroad`와는 다릅니다.
+- `.kroadg`로 저장·불러오기. 새 프로젝트는 독립 PVI·횡단구배와 계산용 높이를 저장하는 바이너리 v5 형식입니다. 기존 v1 JSON 및 v2/v3 프로젝트는 기존 종단 형상을 보존해 독립 PVI로 변환합니다. v1~v4의 횡단구배는 0%로 보존합니다. 0.10 이하 앱은 v5를 열 수 없습니다. WPF의 `.kroad`와는 다릅니다.
 - `측점 보기`: 선택한 횡단 측점의 도로·사면을 3D에서 가까이 봅니다.
 - 새 DEM 또는 프로젝트를 열면 현재 설계를 교체합니다. 작업을 먼저 저장하세요.
 
@@ -283,7 +283,7 @@ godot --path godot/project -- --visual-test "C:/absolute/path/topology-preview.p
 합성 3601×3601 DEM / 편집 전 약 98.235km 노선 / GTX 1060 6GB에서 PI 삽입 3.42ms, 삭제 2.89ms, Orbit p95 13.42ms를 관측했습니다. 지형 메시 갱신은 이후 비동기로 처리하며 이 수치는 편집 호출 시간입니다. 사용자 노선의 일정한 성능을 보장하지 않습니다.
 
 
-## 0.10 사용자 기준 설계 검토 (개발 브랜치)
+## 0.10 사용자 기준 설계 검토 (main 반영 완료)
 
 기존 창을 저장하고 닫은 뒤 같은 `run-godot.cmd`를 실행하세요. `설계 검토`에서 기준을 입력하고 `검토`를 누릅니다. 초기값은 동작 확인용 예시이며 국내 설계기준을 내장한 값이 아닙니다. C++ DLL은 `kroad_core_v08`, 프로젝트 형식은 v4를 유지합니다.
 
@@ -304,3 +304,26 @@ godot --path godot/project -- --visual-test "C:/absolute/path/review-preview.png
 ```
 
 반경·완화길이 경계값, 볼록·오목 K 분리, ±10% → ∓10% 포물선의 구배 한계 교차, 무곡선 교점, 0/잘못된 기준값, 행 선택·정확한 측점 이동, CSV, 변경 무효화 및 기존 PI/PVI/토공량 회귀 검사를 통과했습니다. 합성 3601×3601 DEM / 약 98.235km 노선에서 검토 계산 0.12ms를 관측했습니다. DEM을 읽지 않는 선형 매개변수 계산 시간이며 임의 노선의 일정한 성능을 보장하는 값은 아닙니다.
+
+
+## 0.11 도로 횡단구배 (개발 브랜치)
+
+기존 창을 저장하고 닫은 뒤 같은 `run-godot.cmd`를 실행하세요. 실행 중인 DLL을 보존하고 `kroad_core_v011...dll`을 별도로 빌드했습니다.
+
+- `좌측 하향(%)`·`우측 하향(%)`를 입력하고 `적용`합니다. 좌·우는 **노선 진행 방향** 기준이며, 양수는 중심에서 바깥으로 낮아지고 음수는 높아집니다. 기본값은 모두 0%입니다. 기능 확인 예: 2/2는 중앙이 높은 단면, -2/2는 한 방향으로 기울어진 단면입니다. 설계기준 권장값이 아닙니다.
+- 중심 계획고·PVI는 유지하며 도로 가장자리 높이가 바뀝니다. 횡단, 3D 도로 리본, 사면 지형 및 토공량에 같은 좌·우 구배를 적용합니다. 3D 리본에는 중앙 정점열을 추가했습니다.
+- 사면은 새 도로 가장자리 높이에서 시작합니다. 토공량 CSV는 구배 두 열을 추가해 19열입니다. 적용·undo/redo 시 수량과 검토 결과는 다시 계산해야 합니다.
+- 적용 한 번은 실행 취소 한 단계입니다. 프로젝트 v5에 좌·우 구배를 저장합니다. v1~v4는 양쪽 0%로 읽어 기존 형상을 유지합니다. 0.10 이하 앱에서는 v5를 열 수 없습니다.
+- 노선 전체에 일정한 좌·우 구배만 지원합니다. 측점별 편경사 전이, 곡률 기반 자동 편경사, 길어깨·중앙분리대·포장층·확폭은 아직 지원하지 않습니다. 입력 범위 ±12%는 프로그램의 입력 제한이며 법정·권장 구배 범위가 아닙니다.
+
+[횡단구배 산식과 제한](docs/crossfall.md)을 참조하세요.
+
+```powershell
+godot --headless --path godot/project --script verify_crossfall.gd
+godot --headless --path godot/project -- --crossfall-smoke
+godot --path godot/project -- --visual-test "C:/absolute/path/crossfall-preview.png" --curve-demo --crossfall-demo
+```
+
+비대칭·음수 구배, 방향 반전, 사면 접속, 해석해 절토·성토량, 배경 지형 작업의 높이 일치·타일 경계, 3D 리본, undo/redo, v5 저장·복원과 v4 평탄 단면 복원을 검사했습니다. 기존 선형·지형·PVI/PI 편집·수량·설계 검토 검사도 통과했습니다.
+
+합성 3601×3601 DEM / 약 98.235km 노선 / 폭40m·좌8%·우4%의 기능 시험에서 Orbit p95 13.42ms, PVI 드래그+Orbit p95 18.99ms, 4,920개 단면 토공량 948.2ms를 관측했습니다. 실제 사용자 DEM이나 일정한 성능을 보장하는 값은 아닙니다.

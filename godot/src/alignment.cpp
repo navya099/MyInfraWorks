@@ -1,7 +1,9 @@
 #include "alignment.h"
+#include "crossfall.h"
 #include <godot_cpp/variant/packed_int32_array.hpp>
 using namespace godot;
 void KRoadAlignment::_bind_methods(){
+ ClassDB::bind_method(D_METHOD("ribbon_crossfall","width","offset","base","center_x","center_y","left_percent","right_percent"),&KRoadAlignment::ribbon_crossfall);
  ClassDB::bind_method(D_METHOD("configure","points","radii","spirals","vertical_lengths"),&KRoadAlignment::configure);
  ClassDB::bind_method(D_METHOD("configure_independent","points","radii","spirals","stations","heights","lengths"),&KRoadAlignment::configure_independent);
  ClassDB::bind_method(D_METHOD("sample","station"),&KRoadAlignment::sample);
@@ -56,6 +58,23 @@ Dictionary KRoadAlignment::ribbon(double width,double offset,double base,double 
   auto q=alignment.sample(stations[i]);double nx=-std::sin(q.pose.heading),ny=std::cos(q.pose.heading);
   for(int side:{-1,1})vertices.push_back(Vector3(q.pose.x+side*nx*width/2-center_x,q.elevation+offset+.5-base,q.pose.y+side*ny*width/2-center_y));
   if(i>0){int a=int(i-1)*2;for(int k:{a,a+1,a+2,a+1,a+3,a+2})indices.push_back(k);}
+ }
+ out["vertices"]=vertices;out["indices"]=indices;return out;
+}
+
+Dictionary KRoadAlignment::ribbon_crossfall(double width,double offset,double base,double center_x,double center_y,double left,double right) const {
+ Dictionary out;
+ if(!std::isfinite(width)||width<=0||!std::isfinite(left)||!std::isfinite(right)||std::abs(left)>12||std::abs(right)>12)return out;
+ PackedVector3Array vertices;PackedInt32Array indices;auto stations=alignment.tessellation();
+ if(stations.size()<2)return out;
+ for(size_t i=0;i<stations.size();i++){
+  auto q=alignment.sample(stations[i]);double nx=-std::sin(q.pose.heading),ny=std::cos(q.pose.heading);
+  for(int side:{-1,0,1}){
+   double d=side*width/2;
+   double drop=crossfall_drop(std::abs(d),d,width,left,right);
+   vertices.push_back(Vector3(q.pose.x+nx*d-center_x,q.elevation+offset-drop+.5-base,q.pose.y+ny*d-center_y));
+  }
+  if(i>0){int a=int(i-1)*3;for(int side:{0,1})for(int k:{a+side,a+side+1,a+side+3,a+side+1,a+side+4,a+side+3})indices.push_back(k);}
  }
  out["vertices"]=vertices;out["indices"]=indices;return out;
 }

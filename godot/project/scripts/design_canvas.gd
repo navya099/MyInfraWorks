@@ -182,7 +182,7 @@ func _draw():
     previous_valid=true
    else:
     previous_valid=false
-  label("STA %.0fm | 계획고 %.1fm | ±%.0fm" % [length*model.station,at.point.y+model.offset,reach],Vector2(r.position.x,size.y-10))
+  label("STA %.3fm | 중심고 %.2fm | 좌 %.1f%% / 우 %.1f%% | 좌측 ← ±%.0fm → 우측" % [length*model.station,at.point.y+model.offset,model.left_fall,model.right_fall,reach],Vector2(r.position.x,size.y-10))
 
 func _gui_input(event):
  if model == null or model.terrain.is_empty():
