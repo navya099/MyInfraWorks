@@ -11,6 +11,9 @@ signal pvi_added(station, height)
 signal station_selected(fraction)
 signal gesture_started
 signal gesture_finished
+var section_mode="full"
+var section_view=Rect2(-100,-60,200,120) # offset and elevation relative to road centre
+var section_panning=false
 var drag_index=-1
 var drag_start=Vector2.ZERO
 var drag_target=Vector2.ZERO
@@ -158,34 +161,130 @@ func _draw():
   label("%.0fm" % bounds.x,Vector2(2,r.end.y))
   label("0 → %.0fm | 녹색: 원지반 / 주황: 계획 · PVI 드래그: 측점·표고 / Shift+클릭: 추가" % length,Vector2(r.position.x,size.y-10))
  else:
-  var at = model.sample(length*model.station)
-  var reach = max(100.0,model.road_width*4)
-  var low = at.point.y+model.offset-60
-  var previous_valid = false
-  var previous_g = Vector2.ZERO
-  var previous_d = Vector2.ZERO
-  for i in range(201):
-   var d = -reach+2*reach*i/200.0
-   var x = at.point.x+at.normal.x*d
-   var y = at.point.z+at.normal.y*d
-   var g = model.ground(x,y)
-   var z = model.design(x,y)
-   var px = r.position.x+r.size.x*i/200.0
-   if is_finite(g) and is_finite(z):
-    var pg = Vector2(px,r.end.y-(g-low)/120*r.size.y)
-    var pd = Vector2(px,r.end.y-(z-low)/120*r.size.y)
-    if previous_valid:
-     draw_line(previous_g,pg,GREEN,1.5,true)
-     draw_line(previous_d,pd,ORANGE,2,true)
-    previous_g=pg
-    previous_d=pd
-    previous_valid=true
-   else:
-    previous_valid=false
-  label("STA %.3fm | 중심고 %.2fm | 좌 %.1f%% / 우 %.1f%% | 좌측 ← ±%.0fm → 우측" % [length*model.station,at.point.y+model.offset,model.left_fall,model.right_fall,reach],Vector2(r.position.x,size.y-10))
+  draw_section(r,length)
+
+func fit_section(road_only=false):
+ section_mode="road" if road_only else "full"
+ section_panning=false
+ queue_redraw()
+
+func section_samples(view,at):
+ var distances=[]
+ for i in range(241):distances.append(view.position.x+view.size.x*i/240.0)
+ for d in [-model.road_width/2.0,0.0,model.road_width/2.0]:
+  if d>=view.position.x and d<=view.end.x:distances.append(d)
+ distances.sort()
+ var samples=[]
+ for d in distances:
+  var x=at.point.x+at.normal.x*d
+  var y=at.point.z+at.normal.y*d
+  samples.append(Vector3(d,model.ground(x,y),model.design(x,y)))
+ return samples
+
+func section_screen(d,height,centre,r):
+ return Vector2(r.position.x+(d-section_view.position.x)/section_view.size.x*r.size.x,r.end.y-(height-centre-section_view.position.y)/section_view.size.y*r.size.y)
+
+func draw_section(r,length):
+ var at=model.sample(length*model.station)
+ var centre=at.elevation+model.offset
+ if section_mode=="road":
+  var half=model.road_width/2.0
+  var left=-half*model.left_fall/100.0
+  var right=-half*model.right_fall/100.0
+  var span=max(1.0,(max(0.0,max(left,right))-min(0.0,min(left,right)))*1.6)
+  var middle=(max(0.0,max(left,right))+min(0.0,min(left,right)))/2.0
+  section_view=Rect2(-half*1.3,middle-span/2.0,half*2.6,span)
+ elif section_mode=="full":
+  var reach=max(100.0,model.road_width*4)
+  section_view=Rect2(-reach,-60,reach*2,120)
+ var samples=section_samples(section_view,at)
+ if section_mode=="full":
+  var low=centre
+  var high=centre
+  for p in samples:
+   for h in [p.y,p.z]:
+    if is_finite(h):
+     low=min(low,h)
+     high=max(high,h)
+  var pad=max(1.0,(high-low)*0.12)
+  section_view.position.y=low-centre-pad
+  section_view.size.y=max(2.0,high-low+pad*2)
+ var previous_valid=false
+ var previous_g=Vector2.ZERO
+ var previous_d=Vector2.ZERO
+ # Clip line segments to the chart so panning cannot draw across labels.
+ for p in samples:
+  if is_finite(p.y) and is_finite(p.z):
+   var pg=section_screen(p.x,p.y,centre,r)
+   var pd=section_screen(p.x,p.z,centre,r)
+   if previous_valid:
+    section_line(previous_g,pg,r,GREEN,1.5)
+    section_line(previous_d,pd,r,ORANGE,2)
+   previous_g=pg
+   previous_d=pd
+   previous_valid=true
+  else:previous_valid=false
+ for d in [-model.road_width/2.0,0.0,model.road_width/2.0]:
+  var h=centre-abs(d)*(model.left_fall if d<0 else model.right_fall)/100.0
+  var q=section_screen(d,h,centre,r)
+  if r.has_point(q):
+   draw_circle(q,3,Color("a8d4ef"))
+   label(("중심" if d==0 else "좌" if d<0 else "우")+" %.2f" % h,q+Vector2(4,-8),Color("a8d4ef"))
+ label("%.2f" % (centre+section_view.end.y),Vector2(1,r.position.y+5))
+ label("%.2f" % (centre+section_view.position.y),Vector2(1,r.end.y))
+ label("%.2fm" % section_view.position.x,Vector2(r.position.x,r.end.y+16))
+ label("%.2fm" % section_view.end.x,Vector2(r.end.x-65,r.end.y+16))
+ label("STA %.3fm | 좌 %.1f%% / 우 %.1f%% | 진행 방향 기준 좌/우" % [length*model.station,model.left_fall,model.right_fall],Vector2(r.position.x,size.y-4))
+
+func section_line(a,b,rect,color,width):
+ # Liang-Barsky segment clipping, including lines whose ends are both off-screen.
+ var delta=b-a
+ var lo=0.0
+ var hi=1.0
+ var ps=[-delta.x,delta.x,-delta.y,delta.y]
+ var qs=[a.x-rect.position.x,rect.end.x-a.x,a.y-rect.position.y,rect.end.y-a.y]
+ for i in range(4):
+  if abs(ps[i])<1e-12:
+   if qs[i]<0:return
+  else:
+   var t=qs[i]/ps[i]
+   if ps[i]<0:lo=max(lo,t)
+   else:hi=min(hi,t)
+   if lo>hi:return
+ draw_line(a+delta*lo,a+delta*hi,color,width,true)
+
+func section_input(event):
+ if event is InputEventMouseButton:
+  if event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN] and event.pressed:
+   var r=plot_rect()
+   if not r.has_point(event.position):return
+   var anchor=Vector2((event.position.x-r.position.x)/r.size.x,(r.end.y-event.position.y)/r.size.y)
+   var world=section_view.position+anchor*section_view.size
+   var factor=0.8 if event.button_index==MOUSE_BUTTON_WHEEL_UP else 1.25
+   var zoom=Vector2(1 if event.ctrl_pressed else factor,1 if event.shift_pressed else factor)
+   section_view.size=Vector2(clamp(section_view.size.x*zoom.x,0.2,20000),clamp(section_view.size.y*zoom.y,0.02,20000))
+   section_view.position=world-anchor*section_view.size
+   section_mode="manual"
+   queue_redraw()
+   accept_event()
+  elif event.button_index in [MOUSE_BUTTON_LEFT,MOUSE_BUTTON_MIDDLE,MOUSE_BUTTON_RIGHT]:
+   section_panning=event.pressed and plot_rect().has_point(event.position)
+   if event.pressed and event.double_click:fit_section(true)
+ elif event is InputEventMouseMotion and section_panning:
+  if not (event.button_mask & (MOUSE_BUTTON_MASK_LEFT|MOUSE_BUTTON_MASK_MIDDLE|MOUSE_BUTTON_MASK_RIGHT)):
+   section_panning=false
+   return
+  var r=plot_rect()
+  section_view.position+=Vector2(-event.relative.x/r.size.x,event.relative.y/r.size.y)*section_view.size
+  section_mode="manual"
+  queue_redraw()
+  accept_event()
 
 func _gui_input(event):
  if model == null or model.terrain.is_empty():
+  return
+ if mode=="section" and model.route.size()>1:
+  section_input(event)
   return
  if mode=="plan" and insert_after>=0:
   if event is InputEventMouseButton and event.pressed:

@@ -79,7 +79,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--crossfall-smoke" in OS.get_cmdline_user_args():
+ if "--section-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_section_smoke")
+ elif "--crossfall-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_crossfall_smoke")
  elif "--review-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_review_smoke")
@@ -360,6 +362,14 @@ func build_ui():
  section.custom_minimum_size=Vector2(300,160)
  section.size_flags_vertical=Control.SIZE_EXPAND_FILL
  section_box.add_child(section)
+ var section_tools=HBoxContainer.new()
+ section_box.add_child(section_tools)
+ button(section_tools,"도로 확대",func():section.fit_section(true))
+ button(section_tools,"전체 맞춤",func():section.fit_section(false))
+ var section_hint=Label.new()
+ section_hint.text="휠: 확대 / Shift: 가로 / Ctrl: 세로 / 드래그: 이동"
+ section_hint.add_theme_font_size_override("font_size",12)
+ section_tools.add_child(section_hint)
  var footer=Label.new()
  footer.text="원지형 보존 / 갈색: 성토 · 청회색: 절토 / 지형 계산은 비동기 · 카메라는 독립 갱신"
  footer.add_theme_color_override("font_color",Color("94a8ba"))
@@ -401,6 +411,7 @@ func show_error(text):
  message.popup_centered(Vector2i(620,220))
 
 func reset_terrain():
+ if section!=null:section.fit_section(false)
  cancel_pi_insertion()
  insert_dialog.hide()
  if earthwork_report!=null:earthwork_report.invalidate()
@@ -810,6 +821,7 @@ func apply_document(document,is_project):
  plan.model=model
  profile.model=model
  section.model=model
+ section.fit_section(false)
  profile.edit_index=-1
  reset_terrain()
 
@@ -1046,6 +1058,12 @@ func run_visual_test():
    await get_tree().process_frame
   if not earthwork_report.result.is_empty():
    print("BENCH EARTHWORK: %.1f ms / %d sections / %.2f%% covered / %d rendered frames" % [earthwork_report.result.ms,earthwork_report.result.sections.size(),earthwork_report.result.coverage*100,work_frames])
+ if "--section-zoom-demo" in arguments:
+  left_fall_input.value=2
+  right_fall_input.value=4
+  apply_parameters()
+  section.fit_section(true)
+  while worker!=null or not dirty.is_empty():await get_tree().process_frame
  if "--review-demo" in arguments:
   review_window.popup_centered(Vector2i(1250,650))
   review_window.inputs.min_r.value=1000
@@ -1849,4 +1867,63 @@ func run_crossfall_smoke():
  var legacy=model.edit_state()
  assert(legacy.radii==crowned.radii and legacy.pi_route==crowned.pi_route)
  print("PASS CROSSFALL UI: parameters/history, shared quantities, rendered mesh, v5 roundtrip, bad v5 rollback, v4 flat migration")
+ get_tree().quit(0)
+
+
+func run_section_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ left_fall_input.value=2
+ right_fall_input.value=4
+ apply_parameters()
+ var before=model.edit_state()
+ var rev=revision
+ section.fit_section(true)
+ section.queue_redraw()
+ await get_tree().process_frame
+ await get_tree().process_frame
+ assert(section.section_view.size.y<2 and section.section_view.size.x<30)
+ var at=model.sample(model.length()*model.station)
+ var rect=section.plot_rect()
+ var centre=at.elevation+model.offset
+ var a=section.section_screen(0,centre,centre,rect)
+ var b=section.section_screen(-10,centre-0.2,centre,rect)
+ assert(abs(a.y-b.y)>10)
+ var old_view=section.section_view
+ var wheel=InputEventMouseButton.new()
+ wheel.pressed=true
+ wheel.position=rect.get_center()
+ wheel.button_index=MOUSE_BUTTON_WHEEL_UP
+ section._gui_input(wheel)
+ assert(section.section_mode=="manual" and section.section_view.size.x<old_view.size.x and section.section_view.size.y<old_view.size.y)
+ var anchor=old_view.get_center()
+ assert(section.section_view.get_center().distance_to(anchor)<0.000001)
+ old_view=section.section_view
+ wheel.shift_pressed=true
+ section._gui_input(wheel)
+ assert(section.section_view.size.x<old_view.size.x and section.section_view.size.y==old_view.size.y)
+ wheel.shift_pressed=false
+ wheel.ctrl_pressed=true
+ old_view=section.section_view
+ section._gui_input(wheel)
+ assert(section.section_view.size.x==old_view.size.x and section.section_view.size.y<old_view.size.y)
+ var press=InputEventMouseButton.new()
+ press.button_index=MOUSE_BUTTON_LEFT
+ press.pressed=true
+ press.position=rect.get_center()
+ section._gui_input(press)
+ var move=InputEventMouseMotion.new()
+ move.button_mask=MOUSE_BUTTON_MASK_LEFT
+ move.relative=Vector2(20,10)
+ old_view=section.section_view
+ section._gui_input(move)
+ assert(section.section_view.position!=old_view.position)
+ press.pressed=false
+ section._gui_input(press)
+ assert(not section.section_panning)
+ section.fit_section(false)
+ assert(section.section_mode=="full")
+ assert(model.edit_state()==before and revision==rev)
+ print("PASS SECTION NAVIGATION: visible 2% crossfall, cursor zoom, axis zoom, pan/release, full fit, unchanged design/revision")
  get_tree().quit(0)
