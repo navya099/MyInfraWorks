@@ -3,6 +3,8 @@ signal point_added(point)
 signal point_inserted(after_index,point)
 signal insertion_cancelled
 var insert_after=-1
+var append_mode=false
+signal addition_cancelled
 signal elevation_changed(index, elevation)
 signal point_selected(index)
 signal point_moved(index, point)
@@ -117,7 +119,8 @@ func _draw():
   label("N ↑  |  %.1f × %.1f km" % [ext.x/1000,ext.y/1000],Vector2(14,18))
   if drag_index>=0 and drag_rejected:
    draw_circle(drag_target,9,Color("ff7777"),false,2)
-  label("PI %d 뒤 삽입: 클릭 지정 / Esc·우클릭 취소" % (insert_after+1) if insert_after>=0 else "클릭: 끝에 추가 / 점 드래그: 이동 / 우클릭: 선택 / Shift+클릭: 끝에 추가",Vector2(14,size.y-10))
+  var hint="PI %d 뒤 삽입: 클릭 지정 / Esc·우클릭 취소" % (insert_after+1) if insert_after>=0 else "PI 추가 중: 클릭으로 노선 끝에 추가 / Esc·우클릭: 종료" if append_mode else "선택 모드: PI 클릭·드래그 / 새 점은 아래 PI 추가 버튼 선택"
+  label(hint,Vector2(14,size.y-10),ORANGE if append_mode else MUTED)
   return
  if model.route.size()<2:
   label("평면에 노선 점을 두 개 이상 추가하세요.",Vector2(24,38))
@@ -262,6 +265,14 @@ func _gui_input(event):
  if mode=="section" and model.route.size()>1:
   section_input(event)
   return
+ if mode=="plan" and append_mode:
+  if event is InputEventMouseButton and event.pressed:
+   if event.button_index==MOUSE_BUTTON_RIGHT:addition_cancelled.emit()
+   elif event.button_index==MOUSE_BUTTON_LEFT:
+    var r=map_rect()
+    if r.has_point(event.position) and plan_area().has_point(event.position):
+     point_added.emit((event.position-r.position)/r.size*model.extent())
+  return
  if mode=="plan" and insert_after>=0:
   if event is InputEventMouseButton and event.pressed:
    if event.button_index==MOUSE_BUTTON_RIGHT:
@@ -292,7 +303,7 @@ func _gui_input(event):
    if not plan_area().has_point(event.position):return
    var best=12.0
    drag_index=-1
-   for i in range(0 if event.shift_pressed else model.route.size()):
+   for i in range(model.route.size()):
     var p=model.route[i]
     var q=r.position+Vector2(p.x,p.z)/model.extent()*r.size
     var distance=q.distance_to(event.position)
@@ -305,8 +316,7 @@ func _gui_input(event):
     drag_rejected=false
     point_selected.emit(drag_index)
     gesture_started.emit()
-   elif r.has_point(event.position) and plan_area().has_point(event.position):
-    point_added.emit((event.position-r.position)/r.size*model.extent())
+
   elif drag_index>=0:
    drag_index=-1
    drag_rejected=false

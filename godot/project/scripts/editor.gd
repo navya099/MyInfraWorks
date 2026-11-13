@@ -50,6 +50,7 @@ var load_button: Button
 var clear_button: Button
 var save_button: Button
 var pi_selector: OptionButton
+var pi_add_button: Button
 var radius_input: SpinBox
 var spiral_input: SpinBox
 var vertical_input: SpinBox
@@ -79,7 +80,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--navigation-smoke" in OS.get_cmdline_user_args():
+ if "--pi-add-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_pi_add_smoke")
+ elif "--navigation-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_navigation_smoke")
  elif "--section-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_section_smoke")
@@ -137,6 +140,13 @@ func make_canvas(parent,title,mode):
  if mode in ["plan","profile"]:
   var tools_row=HBoxContainer.new()
   box.add_child(tools_row)
+  if mode=="plan":
+   pi_add_button=Button.new()
+   pi_add_button.text="PI 추가"
+   pi_add_button.toggle_mode=true
+   pi_add_button.tooltip_text="추가 도구 선택: 클릭으로 PI 연속 추가 / Esc로 종료"
+   pi_add_button.toggled.connect(set_pi_add_mode)
+   tools_row.add_child(pi_add_button)
   button(tools_row,"확대",func():canvas.zoom_navigation(canvas.size/2.0,0.8))
   button(tools_row,"축소",func():canvas.zoom_navigation(canvas.size/2.0,1.25))
   button(tools_row,"전체 맞춤",func():cancel_gesture();canvas.fit_navigation())
@@ -221,7 +231,7 @@ func build_ui():
  curves.add_child(pi_label)
  pi_selector=OptionButton.new()
  pi_selector.custom_minimum_size.x=180
- pi_selector.item_selected.connect(func(_index):cancel_pi_insertion();sync_curve_values())
+ pi_selector.item_selected.connect(func(_index):set_pi_add_mode(false);cancel_pi_insertion();sync_curve_values())
  curves.add_child(pi_selector)
  radius_input=number(curves,"R(m)",0,0,100000,0.01)
  spiral_input=number(curves,"완화 Ls(m)",0,0,10000,0.01)
@@ -302,6 +312,7 @@ func build_ui():
  split.add_child(upper)
  plan=make_canvas(upper,"01  평면 / PLAN · 북쪽 ↑","plan")
  plan.point_added.connect(add_point)
+ plan.addition_cancelled.connect(func():set_pi_add_mode(false))
  plan.point_inserted.connect(func(index,point):insert_pi(index,point))
  plan.insertion_cancelled.connect(cancel_pi_insertion)
  plan.point_moved.connect(move_pi)
@@ -423,6 +434,7 @@ func show_error(text):
  message.popup_centered(Vector2i(620,220))
 
 func reset_terrain():
+ set_pi_add_mode(false)
  if plan!=null:plan.fit_navigation()
  if profile!=null:profile.fit_navigation()
  if section!=null:section.fit_section(false)
@@ -1120,6 +1132,8 @@ func run_visual_test():
   review_window.inputs.min_k_crest.value=500
   assert(review_window.run_review())
   print("BENCH REVIEW: %.2f ms / %d findings / %d checks" % [review_window.result.ms,review_window.result.issues.size(),review_window.result.checks])
+ if "--pi-add-demo" in arguments:
+  set_pi_add_mode(true)
  if "--table-demo" in arguments:
   show_curve_table()
   await get_tree().process_frame
@@ -1364,13 +1378,18 @@ func apply_pi_position():
  move_pi(pi_selector.selected,Vector2(x_input.value,y_input.value))
 
 func _input(event):
- if event is InputEventKey and event.pressed and event.keycode==KEY_ESCAPE and plan.insert_after>=0:
+ if not event is InputEventKey or not event.pressed or event.keycode!=KEY_ESCAPE:return
+ var handled=false
+ if plan.append_mode:
+  set_pi_add_mode(false)
+  handled=true
+ if plan.insert_after>=0:
   cancel_pi_insertion()
-  get_viewport().set_input_as_handled()
-  return
- if event is InputEventKey and event.pressed and event.keycode==KEY_ESCAPE and not gesture_state.is_empty():
+  handled=true
+ if not gesture_state.is_empty():
   cancel_gesture()
-  get_viewport().set_input_as_handled()
+  handled=true
+ if handled:get_viewport().set_input_as_handled()
 
 func _unhandled_key_input(event):
  if not event is InputEventKey or not event.pressed or event.echo or not event.ctrl_pressed:
@@ -1615,6 +1634,7 @@ func cancel_pi_insertion():
 
 func show_pi_insert():
  if not gesture_state.is_empty():return
+ set_pi_add_mode(false)
  var index=pi_selector.selected
  if index<0 or index+1>=model.route.size():return
  cancel_pi_insertion()
@@ -2113,4 +2133,96 @@ func run_navigation_smoke():
  var endpoint=profile.profile_screen(model.length(),model.pvi_heights[-1]+model.offset)
  assert(profile.nearest_pvi(endpoint)==model.pvi_stations.size()-1)
  print("PASS PLAN/PROFILE NAVIGATION: cursor/axis zoom, middle pan, no design/revision/mesh changes, zoomed PI/PVI edits and undo, Shift-add, full fit")
+ get_tree().quit(0)
+
+
+func set_pi_add_mode(active):
+ if plan==null:return
+ if active:
+  cancel_gesture()
+  cancel_pi_insertion()
+  insert_dialog.hide()
+ plan.append_mode=active
+ plan.mouse_default_cursor_shape=Control.CURSOR_CROSS if active else Control.CURSOR_ARROW
+ if pi_add_button!=null:
+  pi_add_button.set_pressed_no_signal(active)
+  pi_add_button.text="PI 추가 중" if active else "PI 추가"
+ plan.queue_redraw()
+ status_note="PI 추가 모드 · 평면 클릭으로 연속 추가 / Esc 종료" if active else "PI 선택·이동 모드"
+
+func run_pi_add_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ assert(not plan.append_mode and not pi_add_button.button_pressed)
+ var click=InputEventMouseButton.new()
+ click.button_index=MOUSE_BUTTON_LEFT
+ click.pressed=true
+ var map=plan.map_rect()
+ click.position=map.position+Vector2(700,3000)/model.extent()*map.size
+ var initial=model.edit_state()
+ var rev=revision
+ plan._gui_input(click)
+ click.shift_pressed=true
+ plan._gui_input(click)
+ assert(model.edit_state()==initial and revision==rev)
+ # Use the actual toggle, not a direct model call, to create a route.
+ pi_add_button.button_pressed=true
+ assert(plan.append_mode)
+ click.shift_pressed=false
+ plan._gui_input(click)
+ map=plan.map_rect()
+ click.position=map.position+Vector2(2400,3000)/model.extent()*map.size
+ plan._gui_input(click)
+ assert(model.route.size()==2 and plan.append_mode)
+ var created=model.edit_state()
+ var count=undo_stack.size()
+ var escape=InputEventKey.new()
+ escape.keycode=KEY_ESCAPE
+ escape.pressed=true
+ _input(escape)
+ assert(not plan.append_mode and not pi_add_button.button_pressed and model.edit_state()==created and undo_stack.size()==count)
+ click.position=map.position+Vector2(3500,2000)/model.extent()*map.size
+ plan._gui_input(click)
+ assert(model.edit_state()==created)
+ # Existing PI selection/drag remains available in the default mode.
+ var pi=model.route[1]
+ click.position=map.position+Vector2(pi.x,pi.z)/model.extent()*map.size
+ plan._gui_input(click)
+ assert(plan.drag_index==1)
+ var move=InputEventMouseMotion.new()
+ move.button_mask=MOUSE_BUTTON_MASK_LEFT
+ move.position=click.position+Vector2(5,-5)
+ plan._gui_input(move)
+ click.pressed=false
+ plan._gui_input(click)
+ assert(model.route[1]!=pi)
+ undo_edit()
+ assert(model.edit_state()==created)
+ # Add and insert tools are exclusive, and navigation does not append points.
+ pi_add_button.button_pressed=true
+ var wheel=InputEventMouseButton.new()
+ wheel.button_index=MOUSE_BUTTON_WHEEL_UP
+ wheel.position=plan.size/2
+ wheel.pressed=true
+ plan._gui_input(wheel)
+ assert(plan.append_mode and model.edit_state()==created)
+ select_pi(0)
+ show_pi_insert()
+ assert(not plan.append_mode and not pi_add_button.button_pressed)
+ insert_dialog.custom_action.emit("pick")
+ assert(plan.insert_after==0)
+ pi_add_button.button_pressed=true
+ assert(plan.append_mode and plan.insert_after==-1)
+ click.pressed=true
+ click.button_index=MOUSE_BUTTON_RIGHT
+ plan._gui_input(click)
+ assert(not plan.append_mode and model.edit_state()==created)
+ pi_add_button.button_pressed=true
+ pi_add_button.button_pressed=false
+ assert(not plan.append_mode)
+ # Reopening a project returns to selection mode, never re-arms adding.
+ var document=project_document()
+ pi_add_button.button_pressed=true
+ apply_document(document,true)
+ assert(not plan.append_mode and not pi_add_button.button_pressed and model.edit_state()==created)
+ print("PASS PI ADD MODE: default/Shift no append, toggled continuous add, Esc preserves design, select/drag/undo, navigation, insert exclusivity, right cancel, reload resets mode")
  get_tree().quit(0)
