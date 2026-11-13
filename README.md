@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `fix/section-navigation` (0.11.1). 사용자 확인을 마친 0.10은 `main`에 반영했습니다.
+개발 브랜치: `feature/plan-profile-navigation` (0.12). 사용자 승인된 0.11 및 횡단 확대 수정본은 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.11. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.12. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/road-crossfall --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/plan-profile-navigation --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.11 실행
+## Godot 편집기 0.12 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -306,7 +306,7 @@ godot --path godot/project -- --visual-test "C:/absolute/path/review-preview.png
 반경·완화길이 경계값, 볼록·오목 K 분리, ±10% → ∓10% 포물선의 구배 한계 교차, 무곡선 교점, 0/잘못된 기준값, 행 선택·정확한 측점 이동, CSV, 변경 무효화 및 기존 PI/PVI/토공량 회귀 검사를 통과했습니다. 합성 3601×3601 DEM / 약 98.235km 노선에서 검토 계산 0.12ms를 관측했습니다. DEM을 읽지 않는 선형 매개변수 계산 시간이며 임의 노선의 일정한 성능을 보장하는 값은 아닙니다.
 
 
-## 0.11 도로 횡단구배 (개발 브랜치)
+## 0.11 도로 횡단구배 (main 반영 완료)
 
 기존 창을 저장하고 닫은 뒤 같은 `run-godot.cmd`를 실행하세요. 실행 중인 DLL을 보존하고 `kroad_core_v011...dll`을 별도로 빌드했습니다.
 
@@ -339,3 +339,23 @@ godot --path godot/project -- --visual-test "C:/absolute/path/crossfall-preview.
 - 프로젝트와 DLL은 0.11과 동일합니다(v5 / kroad_core_v011). 뷰 상태는 저장하지 않습니다.
 
 `--section-smoke`로 작은 구배의 화면 분리, 커서 기준·축별 확대, 드래그, 전체 맞춤과 설계/revision 불변을 검사했습니다. 횡단구배 저장·복원 검사도 통과했습니다.
+
+
+## 0.12 평면·종단 확대와 이동 (개발 브랜치)
+
+평면·종단 뷰에서도 휠로 커서 위치를 기준으로 확대·축소합니다. 가운데 버튼 드래그는 화면 이동입니다. 각 뷰 아래 `확대`·`축소`·`전체 맞춤` 버튼을 추가했습니다. 종단은 Shift+휠로 측점축만, Ctrl+휠로 표고축만 조절할 수 있습니다. 평면은 가로·세로 비율을 유지합니다.
+
+PI/PVI의 왼쪽 드래그 편집과 우클릭 선택은 유지합니다. 확대 후에도 클릭·이동·PI 중간 삽입·PVI Shift+클릭 추가는 표시 좌표를 실제 설계 좌표로 변환합니다. 편집 드래그 중에는 확대와 화면 이동을 막아 좌표계가 바뀌지 않게 합니다. 종단은 보이는 측점 범위에서 원지반과 계획을 다시 표본화하고 차트 경계에서 잘라 그립니다. 원지반은 화면 표시용 표본이며 상세 지형의 모든 변화를 나타내지는 않습니다.
+
+화면 이동·확대만으로 설계 revision·실행 취소·수량·지형 메시를 갱신하지 않습니다. DEM/프로젝트를 열거나 데모로 바꾸면 화면을 전체 맞춤으로 초기화합니다. 뷰 상태는 프로젝트에 저장하지 않습니다. DLL과 프로젝트 형식은 0.11과 같습니다(kroad_core_v011 / v5).
+
+[뷰 조작](docs/view-navigation.md)을 참조하세요.
+
+```powershell
+godot --headless --path godot/project -- --navigation-smoke
+godot --path godot/project -- --visual-test "C:/absolute/path/navigation-preview.png" --curve-demo --navigation-demo
+```
+
+커서 기준 확대, 종단 축별 확대, 가운데 버튼 이동·해제, 지형 업로드/revision 불변, 확대 후 PI/PVI 드래그·undo, PI 삽입, PVI 추가 및 끝점 선택을 검사했습니다. 기존 횡단·선형 편집·저장·수량·검토 검사도 통과했습니다.
+
+합성 3601×3601 DEM / 약 98.235km 노선 / GTX 1060 6GB에서 확대된 평면·종단 동시 이동+Orbit의 중앙값 13.33ms, p95 13.40ms, 지형 업로드 0회를 관측했습니다. 같은 실행의 PVI 드래그+Orbit p95는 22.09ms였습니다. 합성 시험값이며 실제 사용자 노선의 일정한 성능을 보장하지 않습니다.

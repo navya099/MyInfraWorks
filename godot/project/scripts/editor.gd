@@ -79,7 +79,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--section-smoke" in OS.get_cmdline_user_args():
+ if "--navigation-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_navigation_smoke")
+ elif "--section-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_section_smoke")
  elif "--crossfall-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_crossfall_smoke")
@@ -132,6 +134,16 @@ func make_canvas(parent,title,mode):
  canvas.custom_minimum_size=Vector2(280,180)
  canvas.size_flags_vertical=Control.SIZE_EXPAND_FILL
  box.add_child(canvas)
+ if mode in ["plan","profile"]:
+  var tools_row=HBoxContainer.new()
+  box.add_child(tools_row)
+  button(tools_row,"확대",func():canvas.zoom_navigation(canvas.size/2.0,0.8))
+  button(tools_row,"축소",func():canvas.zoom_navigation(canvas.size/2.0,1.25))
+  button(tools_row,"전체 맞춤",func():cancel_gesture();canvas.fit_navigation())
+  var hint=Label.new()
+  hint.text="휠: 확대 / 가운데 드래그: 이동" if mode=="plan" else "휠: 확대 / Shift: 가로 / Ctrl: 세로 / 가운데: 이동"
+  hint.add_theme_font_size_override("font_size",12)
+  tools_row.add_child(hint)
  return canvas
 
 func number(row,title,value,minimum,maximum,step):
@@ -411,6 +423,8 @@ func show_error(text):
  message.popup_centered(Vector2i(620,220))
 
 func reset_terrain():
+ if plan!=null:plan.fit_navigation()
+ if profile!=null:profile.fit_navigation()
  if section!=null:section.fit_section(false)
  cancel_pi_insertion()
  insert_dialog.hide()
@@ -1058,6 +1072,40 @@ func run_visual_test():
    await get_tree().process_frame
   if not earthwork_report.result.is_empty():
    print("BENCH EARTHWORK: %.1f ms / %d sections / %.2f%% covered / %d rendered frames" % [earthwork_report.result.ms,earthwork_report.result.sections.size(),earthwork_report.result.coverage*100,work_frames])
+ if "--navigation-demo" in arguments:
+  var map=plan.map_rect()
+  var point=model.sample(model.length()*0.5).point
+  var screen=map.position+Vector2(point.x,point.z)/model.extent()*map.size
+  plan.zoom_navigation(screen,0.4)
+  profile.zoom_navigation(profile.profile_screen(model.pvi_stations[1],model.pvi_heights[1]+model.offset),0.4)
+  var press_pan=InputEventMouseButton.new()
+  press_pan.button_index=MOUSE_BUTTON_MIDDLE
+  press_pan.pressed=true
+  press_pan.position=plan.size/2
+  plan._gui_input(press_pan)
+  press_pan.position=profile.plot_rect().get_center()
+  profile._gui_input(press_pan)
+  var frame_times=[]
+  var previous_frame=Time.get_ticks_usec()
+  var uploads_before=total_mesh_updates
+  for i in range(60):
+   var pan=InputEventMouseMotion.new()
+   pan.button_mask=MOUSE_BUTTON_MASK_MIDDLE
+   pan.relative=Vector2(sin(i*0.2)*2,cos(i*0.2))
+   plan._gui_input(pan)
+   profile._gui_input(pan)
+   yaw+=0.001
+   update_camera()
+   await get_tree().process_frame
+   var now=Time.get_ticks_usec()
+   frame_times.append((now-previous_frame)/1000.0)
+   previous_frame=now
+  press_pan.pressed=false
+  plan._gui_input(press_pan)
+  profile._gui_input(press_pan)
+  assert(total_mesh_updates==uploads_before)
+  frame_times.sort()
+  print("BENCH 2D NAVIGATION+ORBIT: zoomed plan/profile pan median %.2f ms / p95 %.2f ms / zero terrain uploads" % [frame_times[30],frame_times[56]])
  if "--section-zoom-demo" in arguments:
   left_fall_input.value=2
   right_fall_input.value=4
@@ -1926,4 +1974,143 @@ func run_section_smoke():
  assert(section.section_mode=="full")
  assert(model.edit_state()==before and revision==rev)
  print("PASS SECTION NAVIGATION: visible 2% crossfall, cursor zoom, axis zoom, pan/release, full fit, unchanged design/revision")
+ get_tree().quit(0)
+
+
+func run_navigation_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,3000))
+ add_point(Vector2(2400,3000))
+ add_point(Vector2(3600,1000))
+ assert(add_pvi(model.length()*0.5,210))
+ var before=model.edit_state()
+ var rev=revision
+ var history=undo_stack.size()
+ var uploads=total_mesh_updates
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ uploads=total_mesh_updates
+ # Plan cursor anchor and middle-button pan are purely visual.
+ var wheel=InputEventMouseButton.new()
+ wheel.button_index=MOUSE_BUTTON_WHEEL_UP
+ wheel.pressed=true
+ wheel.position=plan.size*Vector2(0.6,0.45)
+ var old=plan.map_rect()
+ var anchor=(wheel.position-old.position)/old.size
+ plan._gui_input(wheel)
+ var current=plan.map_rect()
+ assert(current.size.x>old.size.x and current.size.y>old.size.y)
+ assert(((wheel.position-current.position)/current.size).distance_to(anchor)<1e-6)
+ var press=InputEventMouseButton.new()
+ press.button_index=MOUSE_BUTTON_MIDDLE
+ press.pressed=true
+ press.position=plan.size/2
+ plan._gui_input(press)
+ var move=InputEventMouseMotion.new()
+ move.button_mask=MOUSE_BUTTON_MASK_MIDDLE
+ move.relative=Vector2(20,-10)
+ old=plan.map_rect()
+ plan._gui_input(move)
+ assert((plan.map_rect().position-old.position).distance_to(move.relative)<0.0001)
+ press.pressed=false
+ plan._gui_input(press)
+ assert(not plan.navigation_panning)
+ # Profile zoom including axis modifiers preserves cursor station and elevation.
+ wheel.position=profile.plot_rect().get_center()
+ var world=profile.profile_world(wheel.position)
+ profile._gui_input(wheel)
+ assert(profile.profile_manual and profile.profile_world(wheel.position).distance_to(world)<0.000001)
+ var view=profile.profile_view
+ wheel.shift_pressed=true
+ profile._gui_input(wheel)
+ assert(profile.profile_view.size.x<view.size.x and is_equal_approx(profile.profile_view.size.y,view.size.y))
+ view=profile.profile_view
+ wheel.shift_pressed=false
+ wheel.ctrl_pressed=true
+ profile._gui_input(wheel)
+ assert(is_equal_approx(profile.profile_view.size.x,view.size.x) and profile.profile_view.size.y<view.size.y)
+ press.pressed=true
+ press.position=profile.plot_rect().get_center()
+ profile._gui_input(press)
+ move.relative=Vector2(12,8)
+ view=profile.profile_view
+ profile._gui_input(move)
+ assert(profile.profile_view.position!=view.position)
+ press.pressed=false
+ profile._gui_input(press)
+ assert(not profile.navigation_panning)
+ assert(model.edit_state()==before and revision==rev and undo_stack.size()==history)
+ await get_tree().process_frame
+ assert(total_mesh_updates==uploads)
+ # Actual PI drag after zoom/pan uses the new map transform.
+ var map=plan.map_rect()
+ var pi=model.route[1]
+ var screen=map.position+Vector2(pi.x,pi.z)/model.extent()*map.size
+ var click=InputEventMouseButton.new()
+ click.button_index=MOUSE_BUTTON_LEFT
+ click.pressed=true
+ click.position=screen
+ plan._gui_input(click)
+ assert(plan.drag_index==1)
+ var wheel_zoom=plan.plan_zoom
+ wheel.position=screen
+ plan._gui_input(wheel)
+ assert(plan.plan_zoom==wheel_zoom)
+ move.button_mask=MOUSE_BUTTON_MASK_LEFT
+ move.position=screen+Vector2(5,-3)
+ plan._gui_input(move)
+ click.pressed=false
+ plan._gui_input(click)
+ assert(model.route[1].x!=pi.x and undo_stack.size()==history+1)
+ undo_edit()
+ assert(model.edit_state()==before)
+ # Armed insertion still picks the intended local coordinate after navigation.
+ select_pi(0)
+ show_pi_insert()
+ insert_dialog.custom_action.emit("pick")
+ map=plan.map_rect()
+ click.pressed=true
+ click.position=map.position+Vector2(1500,3100)/model.extent()*map.size
+ assert(plan.plan_area().has_point(click.position))
+ plan._gui_input(click)
+ assert(model.route.size()==before.pi_route.size()+1)
+ assert(Vector2(model.route[1].x,model.route[1].z).distance_to(Vector2(1500,3100))<0.001)
+ undo_edit()
+ assert(model.edit_state()==before)
+ # PVI hit testing, station/elevation edits and undo work in the zoomed chart.
+ var station=model.pvi_stations[1]
+ var height=model.pvi_heights[1]
+ var pvi=profile.profile_screen(station,height+model.offset)
+ assert(profile.plot_rect().has_point(pvi))
+ click.pressed=true
+ click.position=pvi
+ profile._gui_input(click)
+ assert(profile.edit_index==1)
+ var target=pvi+Vector2(8,-4)
+ var expected=profile.profile_world(target)
+ move.position=target
+ profile._gui_input(move)
+ click.pressed=false
+ profile._gui_input(click)
+ assert(abs(model.pvi_stations[1]-expected.x)<0.00001 and abs(model.pvi_heights[1]-(expected.y-model.offset))<0.00001)
+ undo_edit()
+ assert(model.edit_state()==before)
+ # Shift-click adds a PVI at visible station, then undo restores the design.
+ click.pressed=true
+ click.shift_pressed=true
+ click.position=profile.profile_screen(station+100,height+1+model.offset)
+ expected=profile.profile_world(click.position)
+ profile._gui_input(click)
+ assert(model.pvi_stations.size()==before.pvi_stations.size()+1)
+ var found=false
+ for s in model.pvi_stations:
+  if abs(s-expected.x)<0.00001:found=true
+ assert(found)
+ undo_edit()
+ assert(model.edit_state()==before)
+ plan.fit_navigation()
+ profile.fit_navigation()
+ assert(plan.plan_zoom==1 and plan.plan_shift==Vector2.ZERO and not profile.profile_manual)
+ var endpoint=profile.profile_screen(model.length(),model.pvi_heights[-1]+model.offset)
+ assert(profile.nearest_pvi(endpoint)==model.pvi_stations.size()-1)
+ print("PASS PLAN/PROFILE NAVIGATION: cursor/axis zoom, middle pan, no design/revision/mesh changes, zoomed PI/PVI edits and undo, Shift-add, full fit")
  get_tree().quit(0)
