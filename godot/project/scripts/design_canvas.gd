@@ -21,6 +21,7 @@ var navigation_panning=false
 var section_mode="full"
 var section_view=Rect2(-100,-60,200,120) # offset and elevation relative to road centre
 var section_panning=false
+var section_mpp=0.0 # Shared horizontal/vertical metres per physical screen pixel.
 var drag_index=-1
 var drag_start=Vector2.ZERO
 var drag_target=Vector2.ZERO
@@ -163,6 +164,23 @@ func section_samples(view,at):
   samples.append(Vector3(d,model.ground(x,y),model.design(x,y)))
  return samples
 
+func section_pixels(r):
+ var transform=get_viewport().get_screen_transform()*get_global_transform_with_canvas()
+ return Vector2(r.size.x*max(0.000001,transform.x.length()),r.size.y*max(0.000001,transform.y.length()))
+
+func fit_equal_section(bounds,r):
+ var pixels=section_pixels(r)
+ section_mpp=clamp(max(bounds.size.x/pixels.x,bounds.size.y/pixels.y),0.0001,1000.0)
+ section_view=Rect2(bounds.get_center()-pixels*section_mpp/2.0,pixels*section_mpp)
+
+func sync_section_scale(r):
+ if section_mpp<=0:
+  fit_equal_section(section_view,r)
+ else:
+  var centre=section_view.get_center()
+  var span=section_pixels(r)*section_mpp
+  section_view=Rect2(centre-span/2.0,span)
+
 func section_screen(d,height,centre,r):
  return Vector2(r.position.x+(d-section_view.position.x)/section_view.size.x*r.size.x,r.end.y-(height-centre-section_view.position.y)/section_view.size.y*r.size.y)
 
@@ -175,10 +193,12 @@ func draw_section(r,length):
   var right=-half*model.right_fall/100.0
   var span=max(1.0,(max(0.0,max(left,right))-min(0.0,min(left,right)))*1.6)
   var middle=(max(0.0,max(left,right))+min(0.0,min(left,right)))/2.0
-  section_view=Rect2(-half*1.3,middle-span/2.0,half*2.6,span)
+  fit_equal_section(Rect2(-half*1.3,middle-span/2.0,half*2.6,span),r)
  elif section_mode=="full":
   var reach=max(100.0,model.road_width*4)
   section_view=Rect2(-reach,-60,reach*2,120)
+ else:
+  sync_section_scale(r)
  var samples=section_samples(section_view,at)
  if section_mode=="full":
   var low=centre
@@ -191,6 +211,10 @@ func draw_section(r,length):
   var pad=max(1.0,(high-low)*0.12)
   section_view.position.y=low-centre-pad
   section_view.size.y=max(2.0,high-low+pad*2)
+  var old_width=section_view.size.x
+  fit_equal_section(section_view,r)
+  # Equal scales can reveal extra horizontal context beyond the fitted span.
+  if not is_equal_approx(old_width,section_view.size.x):samples=section_samples(section_view,at)
  var previous_valid=false
  var previous_g=Vector2.ZERO
  var previous_d=Vector2.ZERO
@@ -217,7 +241,7 @@ func draw_section(r,length):
  label("%.2f" % (centre+section_view.position.y),Vector2(1,r.end.y))
  label("%.2fm" % section_view.position.x,Vector2(r.position.x,r.end.y+16))
  label("%.2fm" % section_view.end.x,Vector2(r.end.x-65,r.end.y+16))
- label("STA %.3fm | 좌 %.1f%% / 우 %.1f%% | 진행 방향 기준 좌/우" % [length*model.station,model.left_fall,model.right_fall],Vector2(r.position.x,size.y-4))
+ label("STA %.3fm | H:V 1:1 | 좌 %.1f%% / 우 %.1f%%" % [length*model.station,model.left_fall,model.right_fall],Vector2(r.position.x,size.y-4))
 
 func section_line(a,b,rect,color,width):
  if rect.has_point(a) and rect.has_point(b):
@@ -245,11 +269,12 @@ func section_input(event):
   if event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN] and event.pressed:
    var r=plot_rect()
    if not r.has_point(event.position):return
+   sync_section_scale(r)
    var anchor=Vector2((event.position.x-r.position.x)/r.size.x,(r.end.y-event.position.y)/r.size.y)
    var world=section_view.position+anchor*section_view.size
    var factor=0.8 if event.button_index==MOUSE_BUTTON_WHEEL_UP else 1.25
-   var zoom=Vector2(1 if event.ctrl_pressed else factor,1 if event.shift_pressed else factor)
-   section_view.size=Vector2(clamp(section_view.size.x*zoom.x,0.2,20000),clamp(section_view.size.y*zoom.y,0.02,20000))
+   section_mpp=clamp(section_mpp*factor,0.0001,1000.0)
+   section_view.size=section_pixels(r)*section_mpp
    section_view.position=world-anchor*section_view.size
    section_mode="manual"
    queue_redraw()
@@ -262,6 +287,7 @@ func section_input(event):
    section_panning=false
    return
   var r=plot_rect()
+  sync_section_scale(r)
   section_view.position+=Vector2(-event.relative.x/r.size.x,event.relative.y/r.size.y)*section_view.size
   section_mode="manual"
   queue_redraw()

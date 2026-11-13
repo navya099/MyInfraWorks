@@ -417,7 +417,7 @@ func build_ui():
  button(section_tools,"도로 확대",func():section.fit_section(true))
  button(section_tools,"전체 맞춤",func():section.fit_section(false))
  var section_hint=Label.new()
- section_hint.text="휠: 확대 / Shift: 가로 / Ctrl: 세로 / 드래그: 이동"
+ section_hint.text="H:V 1:1 고정 · 휠: 양축 확대 / 드래그: 이동"
  section_hint.add_theme_font_size_override("font_size",12)
  section_tools.add_child(section_hint)
  var footer=Label.new()
@@ -1987,6 +1987,16 @@ func run_crossfall_smoke():
  get_tree().quit(0)
 
 
+func section_equal_check():
+ var rect=section.plot_rect()
+ var at=model.sample(model.length()*model.station)
+ var centre=at.elevation+model.offset
+ var transform=section.get_viewport().get_screen_transform()*section.get_global_transform_with_canvas()
+ var zero=transform*section.section_screen(0,centre,centre,rect)
+ var east=transform*section.section_screen(1,centre,centre,rect)
+ var up=transform*section.section_screen(0,centre+1,centre,rect)
+ assert(abs(zero.distance_to(east)-zero.distance_to(up))<max(0.001,zero.distance_to(east)*0.00001))
+
 func run_section_smoke():
  while worker!=null or not dirty.is_empty():await get_tree().process_frame
  add_point(Vector2(600,1000))
@@ -2000,31 +2010,39 @@ func run_section_smoke():
  section.queue_redraw()
  await get_tree().process_frame
  await get_tree().process_frame
- assert(section.section_view.size.y<2 and section.section_view.size.x<30)
+ section_equal_check()
  var at=model.sample(model.length()*model.station)
  var rect=section.plot_rect()
  var centre=at.elevation+model.offset
  var a=section.section_screen(0,centre,centre,rect)
  var b=section.section_screen(-10,centre-0.2,centre,rect)
- assert(abs(a.y-b.y)>10)
+ var rendered=section.get_viewport().get_screen_transform()*section.get_global_transform_with_canvas()
+ a=rendered*a
+ b=rendered*b
+ assert(abs(abs((b.y-a.y)/(b.x-a.x))-0.02)<0.00001)
  var old_view=section.section_view
  var wheel=InputEventMouseButton.new()
  wheel.pressed=true
- wheel.position=rect.get_center()
+ wheel.position=rect.position+rect.size*Vector2(0.37,0.65)
  wheel.button_index=MOUSE_BUTTON_WHEEL_UP
+ var cursor=Vector2(0.37,0.35)
+ var anchor=old_view.position+cursor*old_view.size
  section._gui_input(wheel)
  assert(section.section_mode=="manual" and section.section_view.size.x<old_view.size.x and section.section_view.size.y<old_view.size.y)
- var anchor=old_view.get_center()
- assert(section.section_view.get_center().distance_to(anchor)<0.000001)
+ assert((section.section_view.position+cursor*section.section_view.size).distance_to(anchor)<0.00001)
+ section_equal_check()
+ # Modifier keys can no longer distort one axis.
  old_view=section.section_view
  wheel.shift_pressed=true
  section._gui_input(wheel)
- assert(section.section_view.size.x<old_view.size.x and section.section_view.size.y==old_view.size.y)
+ assert(section.section_view.size.x<old_view.size.x and section.section_view.size.y<old_view.size.y)
+ section_equal_check()
  wheel.shift_pressed=false
  wheel.ctrl_pressed=true
  old_view=section.section_view
  section._gui_input(wheel)
- assert(section.section_view.size.x==old_view.size.x and section.section_view.size.y<old_view.size.y)
+ assert(section.section_view.size.x<old_view.size.x and section.section_view.size.y<old_view.size.y)
+ section_equal_check()
  var press=InputEventMouseButton.new()
  press.button_index=MOUSE_BUTTON_LEFT
  press.pressed=true
@@ -2039,10 +2057,31 @@ func run_section_smoke():
  press.pressed=false
  section._gui_input(press)
  assert(not section.section_panning)
+ section_equal_check()
+ # Resize preserves physical pixel scale and view centre, not independent spans.
+ var old_centre=section.section_view.get_center()
+ var mpp=section.section_mpp
+ var resized=Rect2(Vector2(48,20),Vector2(900,260))
+ section.sync_section_scale(resized)
+ assert(section.section_view.get_center().distance_to(old_centre)<0.00001 and section.section_mpp==mpp)
+ var pixels=section.section_pixels(resized)
+ assert(abs(pixels.x/section.section_view.size.x-pixels.y/section.section_view.size.y)<0.00001)
+ section.sync_section_scale(rect)
+ # Also compensate unequal parent/window scaling in the rendered geometry.
+ var old_scale=section.scale
+ section.scale=Vector2(1.4,0.8)
+ section.sync_section_scale(rect)
+ section_equal_check()
+ section.scale=old_scale
+ section.sync_section_scale(rect)
  section.fit_section(false)
+ section.queue_redraw()
+ await get_tree().process_frame
+ await get_tree().process_frame
  assert(section.section_mode=="full")
+ section_equal_check()
  assert(model.edit_state()==before and revision==rev)
- print("PASS SECTION NAVIGATION: visible 2% crossfall, cursor zoom, axis zoom, pan/release, full fit, unchanged design/revision")
+ print("PASS SECTION 1:1: physical metre equality, actual 2% slope, cursor zoom, modifiers remain equal, pan, resize/nonuniform scaling, full fit, unchanged design/revision")
  get_tree().quit(0)
 
 
