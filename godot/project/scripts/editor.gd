@@ -1,6 +1,8 @@
 extends Control
 const EarthworkReport=preload("res://scripts/earthwork_report.gd")
 var earthwork_report
+const StationTable=preload("res://scripts/station_table.gd")
+var station_table
 const ReviewWindow=preload("res://scripts/review_window.gd")
 var review_window
 const Model = preload("res://scripts/road_model.gd")
@@ -87,7 +89,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--station-smoke" in OS.get_cmdline_user_args():
+ if "--station-table-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_station_table_smoke")
+ elif "--station-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_station_smoke")
  elif "--pi-add-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_pi_add_smoke")
@@ -214,6 +218,7 @@ func build_ui():
  button(toolbar,"화면 맞춤",fit_camera)
  button(toolbar,"측점 보기",focus_station)
  button(toolbar,"토공량",func():earthwork_report.popup_centered(Vector2i(1200,720)))
+ button(toolbar,"측점표",func():station_table.popup_centered(Vector2i(1250,650)))
  button(toolbar,"설계 검토",func():review_window.popup_centered(Vector2i(1250,650)))
  undo_button=button(toolbar,"실행 취소",undo_edit)
  redo_button=button(toolbar,"다시 실행",redo_edit)
@@ -438,6 +443,12 @@ func build_ui():
  earthwork_report.station_selected.connect(func(station):
   if model.length()>0:station_slider.value=station/model.length())
  add_child(earthwork_report)
+ station_table=StationTable.new()
+ station_table.visible=false
+ station_table.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision}
+ station_table.revision_provider=func():return revision
+ station_table.station_selected.connect(set_station_distance)
+ add_child(station_table)
  review_window=ReviewWindow.new()
  review_window.visible=false
  review_window.snapshot_provider=func():return {"design":model.edit_state(),"revision":revision}
@@ -472,6 +483,7 @@ func reset_terrain():
  cancel_pi_insertion()
  insert_dialog.hide()
  if earthwork_report!=null:earthwork_report.invalidate()
+ if station_table!=null:station_table.invalidate()
  if review_window!=null:review_window.invalidate()
  clear_history()
  revision+=1
@@ -575,6 +587,7 @@ func changed(previous, record_history=true, quiet=false):
  cancel_pi_insertion()
  revision+=1
  if earthwork_report!=null:earthwork_report.invalidate()
+ if station_table!=null:station_table.invalidate()
  if review_window!=null:review_window.invalidate()
  apply_queue.clear()
  dirty.merge(Model.affected(previous,TILE),true)
@@ -1170,6 +1183,12 @@ func run_visual_test():
   apply_parameters()
   section.fit_section(true)
   while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ if "--station-table-demo" in arguments:
+  station_table.popup_centered(Vector2i(1250,650))
+  station_table.start_calculation()
+  while station_table.worker!=null:await get_tree().process_frame
+  assert(not station_table.result.is_empty())
+  print("BENCH STATION TABLE: %.1f ms / %d rows / %d missing" % [station_table.result.ms,station_table.result.rows.size(),station_table.result.missing])
  if "--review-demo" in arguments:
   review_window.popup_centered(Vector2i(1250,650))
   review_window.inputs.min_r.value=1000
@@ -2524,4 +2543,51 @@ func run_slopes_smoke():
  assert(model.edit_state()==preserved)
  message.hide()
  print("PASS CUT/FILL SLOPES UI: controls/history, worker quantities, 21-column CSV, v6 roundtrip, v5 shared-slope migration, invalid/missing cut rollback")
+ get_tree().quit(0)
+
+
+func run_station_table_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var rev=revision
+ var history=undo_stack.size()
+ station_table.start_calculation()
+ while station_table.worker!=null:await get_tree().process_frame
+ assert(not station_table.result.is_empty() and station_table.result.rows.size()>20)
+ station_table.table.set_caret_line(3)
+ station_table.select_row()
+ assert(abs(model.station*model.length()-station_table.result.rows[2].station)<0.00001)
+ assert(model.edit_state()==before and revision==rev and undo_stack.size()==history)
+ assert(station_table.export_csv("user://station-table.csv"))
+ var file=FileAccess.open("user://station-table.csv",FileAccess.READ)
+ assert(file.get_csv_line().size()==21)
+ var row=file.get_csv_line()
+ assert(row.size()==21 and row[3]=="" and row[4]=="" and row[5]=="LOCAL" and row[11]=="")
+ file.close()
+ station_table.interval.value=25
+ assert(station_table.result.is_empty() and station_table.csv_button.disabled)
+ station_table.start_calculation()
+ assert(move_pi(1,Vector2(1900,1000)))
+ while station_table.worker!=null:await get_tree().process_frame
+ assert(station_table.result.is_empty())
+ assert(not station_table.export_csv("user://stale-station-table.csv"))
+ var original=model.source
+ model.source=model.source.duplicate(true)
+ var heights=model.source.Heights.duplicate()
+ heights.fill(NAN)
+ model.source.Heights=heights
+ station_table.start_calculation()
+ while station_table.worker!=null:await get_tree().process_frame
+ assert(station_table.result.missing==station_table.result.rows.size())
+ assert(station_table.export_csv("user://nodata-station-table.csv"))
+ file=FileAccess.open("user://nodata-station-table.csv",FileAccess.READ)
+ file.get_csv_line()
+ row=file.get_csv_line()
+ assert(row[7]=="" and row[8]=="" and row[14]=="nodata" and row[6]!="")
+ file.close()
+ model.source=original
+ station_table.invalidate()
+ print("PASS STATION TABLE UI: async result, row navigation, unchanged design/history, 21-column CSV, local/NoData blanks, interval invalidation and stale result rejection")
  get_tree().quit(0)

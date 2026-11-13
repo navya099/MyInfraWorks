@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/cut-fill-slopes` (0.16). 확인된 0.15는 `main`에 반영했습니다.
+개발 브랜치: `feature/alignment-station-table` (0.17). 확인된 0.16은 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.16. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.17. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/cut-fill-slopes --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/alignment-station-table --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.16 실행
+## Godot 편집기 0.17 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -397,7 +397,7 @@ godot --path godot/project -- --visual-test "C:/absolute/path/navigation-preview
 `--section-smoke`는 실제 화면 변환 후 1m 가로/세로 길이 일치, 2% 선분 기울기, 커서 기준 확대, 보조키, 이동, 크기 변경·비균일 상위 배율 보정과 전체 맞춤을 검사합니다. headless와 실제 OpenGL 실행에서 통과했고 측점·확대·PI 추가 모드·횡단구배 저장 검사도 통과했습니다. 설계 데이터·수량·프로젝트 v5·DLL은 바꾸지 않습니다.
 
 
-## 0.16 절토·성토 사면비 분리 (개발 브랜치)
+## 0.16 절토·성토 사면비 분리 (main 반영 완료)
 
 상단 `성토 H:V`와 `절토 H:V`를 각각 입력하고 `적용`합니다. 원지반이 계획 도로면보다 낮은 쪽은 성토비, 높은 쪽은 절토비를 적용합니다. 도로 폭·중심 계획고·좌우 횡단구배는 유지하고 가장자리 바깥 사면과 그에 따른 수량을 갱신합니다. 횡단은 H:V=1:1 화면 표시를 유지합니다.
 
@@ -417,3 +417,26 @@ godot --headless --path godot/project -- --slopes-smoke
 평탄 지반의 절토/성토 해석해, 혼합 단면, 횡단구배 조합, 공간 검색과 실제 배경 지형 작업의 결과 일치, CSV, undo/redo, v6 저장·복원과 v5 형상 보존, 잘못된 입력의 원자적 거절을 검사했습니다. 기존 네이티브/선형/지형/횡단/확대/측점/추가 모드/저장/수량/검토 검사도 통과했습니다.
 
 합성 3601×3601 DEM / 약 98.235km 노선 / 성토2·절토0.5 / GTX 1060 6GB에서 Orbit p95 13.46ms, PVI 드래그+Orbit p95 19.30ms, 4,920개 단면 수량 1122.0ms(계산 중 86프레임 갱신)를 관측했습니다. 실제 사용자 노선의 일정한 성능을 보장하는 값은 아닙니다.
+
+
+## 0.17 노선 측점표·CSV (개발 브랜치)
+
+상단 `측점표` → 간격 지정 → `산출`로 표를 만듭니다. 기본 간격은 20m이며 시·종점, PI/PVI, 평면 요소 경계와 종단곡선 시작/끝을 추가합니다. 같은 측점은 합치고 경계 종류를 함께 기록합니다.
+
+- 로컬 좌표, 실제 중심 계획고·지반고·차이·종단구배·곡률반경·좌우 가장자리 계획고를 조회합니다. PVI 제어고가 아닌 sample(s)의 실제 종단곡선 표고를 사용합니다.
+- 행을 선택하면 기존 4뷰 연동 측점으로 이동합니다. 설계와 실행 취소 이력, 토공량을 변경하지 않습니다.
+- `CSV 저장`은 UTF-8 BOM의 21열 파일입니다. 원점 정보가 있는 DEM은 EPSG:5179 E/N을 포함하고, 없는 합성/로컬 지형은 LOCAL과 빈 E/N 셀로 구분합니다.
+- 지반 결측이어도 계획선형 정보는 유지하며 지반고·차이는 빈 CSV 셀, 표에는 NA입니다. 직선의 반경은 표에 직선, CSV에는 빈 셀입니다.
+- 산출은 별도 스레드에서 수행합니다. 설계·DEM·간격 변경 시 결과·출력을 무효화하고 계산 중인 이전 결과도 버립니다. 최대 20,000행입니다.
+- 측점표/설정은 프로젝트에 저장하지 않습니다. 프로젝트 v6 / DLL v016을 유지합니다. 수량 CSV와는 별도 형식입니다.
+
+[측점표 항목·좌표·검사](docs/alignment-station-table.md)를 참조하세요.
+
+```powershell
+godot --headless --path godot/project --script verify_station_table.gd
+godot --headless --path godot/project -- --station-table-smoke
+```
+
+정규·경계 측점 병합, 포물선 해석고·구배, 좌우 가장자리, 원곡선 반경, 좌표 부호/LOCAL, NoData, 행 수 제한, 행 선택, CSV, 설계 불변과 변경 무효화 검사를 통과했습니다. 기존 측점·횡단 1:1·추가 모드·확대·사면·수량·검토 검사도 통과했습니다.
+
+합성 3601×3601 DEM / 약 98.235km 노선에서 4,921행 측점표의 작업 스레드 계산은 128.0ms였습니다. UI 표시·파일 저장 시간은 별도이며 사용자 데이터에서 일정한 성능을 보장하는 수치는 아닙니다.
