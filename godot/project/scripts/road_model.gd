@@ -208,3 +208,15 @@ func migrate_linked_profile():
  pvi_heights=result.pvi_heights
  pvi_lengths=result.pvi_lengths
  return ""
+
+
+func inspect_station(distance):
+ if route.size()<2 or length()<=0 or not is_finite(distance):return {"ok":false}
+ var at=sample(clamp(distance,0.0,length()))
+ var ground_height=ground(at.x,at.y)
+ var planned=at.elevation+offset
+ var result={"ok":true,"station":at.station,"x":at.x,"y":at.y,"elevation":planned,"ground":ground_height,"delta":planned-ground_height,"grade_pct":at.grade*100.0,"curvature":at.curvature,"heading":at.heading}
+ if source.has("OriginX") and source.has("OriginY"):
+  result.easting=float(source.OriginX)+at.x
+  result.northing=float(source.OriginY)-at.y
+ return result

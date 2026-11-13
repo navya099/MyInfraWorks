@@ -14,6 +14,12 @@ var viewport: SubViewport
 var camera: Camera3D
 var terrain_root: Node3D
 var road_node: MeshInstance3D
+var station_node: MeshInstance3D
+var station_input: SpinBox
+var station_step: SpinBox
+var station_info: Label
+var station_previous: Button
+var station_next: Button
 var terrain_material: StandardMaterial3D
 var status: Label
 var metrics: Label
@@ -80,7 +86,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--pi-add-smoke" in OS.get_cmdline_user_args():
+ if "--station-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_station_smoke")
+ elif "--pi-add-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_pi_add_smoke")
  elif "--navigation-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_navigation_smoke")
@@ -150,8 +158,9 @@ func make_canvas(parent,title,mode):
   button(tools_row,"확대",func():canvas.zoom_navigation(canvas.size/2.0,0.8))
   button(tools_row,"축소",func():canvas.zoom_navigation(canvas.size/2.0,1.25))
   button(tools_row,"전체 맞춤",func():cancel_gesture();canvas.fit_navigation())
+  button(tools_row,"측점 맞춤",func():cancel_gesture();canvas.focus_navigation())
   var hint=Label.new()
-  hint.text="휠: 확대 / 가운데 드래그: 이동" if mode=="plan" else "휠: 확대 / Shift: 가로 / Ctrl: 세로 / 가운데: 이동"
+  hint.text="휠 확대 · 가운데 이동" if mode=="plan" else "휠 확대 · Shift 가로 · Ctrl 세로 · 가운데 이동"
   hint.add_theme_font_size_override("font_size",12)
   tools_row.add_child(hint)
  return canvas
@@ -334,6 +343,12 @@ func build_ui():
  viewport.add_child(terrain_root)
  road_node=MeshInstance3D.new()
  viewport.add_child(road_node)
+ station_node=MeshInstance3D.new()
+ var station_material=StandardMaterial3D.new()
+ station_material.albedo_color=Color("7eeaff")
+ station_material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
+ station_node.material_override=station_material
+ viewport.add_child(station_node)
  camera=Camera3D.new()
  camera.current=true
  viewport.add_child(camera)
@@ -377,7 +392,19 @@ func build_ui():
  station_slider.max_value=1
  station_slider.step=0 # Preserve exact table stations on long alignments.
  station_slider.value=0.5
- station_slider.value_changed.connect(func(value):model.station=value;profile.queue_redraw();section.queue_redraw())
+ station_slider.value_changed.connect(func(value):set_station_distance(value*model.length()))
+ var station_row=HBoxContainer.new()
+ section_box.add_child(station_row)
+ station_input=number(station_row,"STA(m)",0,0,0,0.001)
+ station_input.value_changed.connect(set_station_distance)
+ station_step=number(station_row,"이동(m)",20,0.001,10000,0.001)
+ station_previous=button(station_row,"◀",func():set_station_distance(station_input.value-station_step.value))
+ station_next=button(station_row,"▶",func():set_station_distance(station_input.value+station_step.value))
+ station_info=Label.new()
+ station_info.add_theme_font_size_override("font_size",12)
+ station_info.text_overrun_behavior=TextServer.OVERRUN_TRIM_ELLIPSIS
+ station_info.tooltip_text="계획−지반은 중심선 한 점의 높이 차이이며 토공량이 아닙니다."
+ section_box.add_child(station_info)
  section_box.add_child(station_slider)
  section=DesignCanvas.new()
  section.model=model
@@ -597,6 +624,7 @@ func redraw_canvases():
  section.queue_redraw()
 
 func update_road():
+ refresh_station_controls()
  road_node.mesh=null
  if model.route.size()<2:
   return
@@ -1132,6 +1160,27 @@ func run_visual_test():
   review_window.inputs.min_k_crest.value=500
   assert(review_window.run_review())
   print("BENCH REVIEW: %.2f ms / %d findings / %d checks" % [review_window.result.ms,review_window.result.issues.size(),review_window.result.checks])
+ if "--station-demo" in arguments:
+  var samples=[]
+  var previous_time=Time.get_ticks_usec()
+  var uploads_before=total_mesh_updates
+  var rev_before=revision
+  for i in range(60):
+   set_station_distance(model.length()*(0.43+sin(i*0.15)*0.01))
+   yaw+=0.001
+   update_camera()
+   await get_tree().process_frame
+   var now=Time.get_ticks_usec()
+   samples.append((now-previous_time)/1000.0)
+   previous_time=now
+  assert(total_mesh_updates==uploads_before and revision==rev_before)
+  samples.sort()
+  print("BENCH STATION+ORBIT: median %.2f ms / p95 %.2f ms / zero terrain uploads and revision changes" % [samples[30],samples[56]])
+  set_station_distance(model.length()*0.43)
+  plan.zoom_navigation(plan.size/2,0.6)
+  plan.focus_navigation()
+  profile.focus_navigation()
+  focus_station()
  if "--pi-add-demo" in arguments:
   set_pi_add_mode(true)
  if "--table-demo" in arguments:
@@ -2225,4 +2274,141 @@ func run_pi_add_smoke():
  apply_document(document,true)
  assert(not plan.append_mode and not pi_add_button.button_pressed and model.edit_state()==created)
  print("PASS PI ADD MODE: default/Shift no append, toggled continuous add, Esc preserves design, select/drag/undo, navigation, insert exclusivity, right cancel, reload resets mode")
+ get_tree().quit(0)
+
+
+func set_station_distance(distance_m):
+ if not is_finite(distance_m):return
+ if model.length()>0:model.station=clamp(distance_m/model.length(),0.0,1.0)
+ refresh_station_controls()
+ plan.queue_redraw()
+ profile.queue_redraw()
+ section.queue_redraw()
+
+func refresh_station_controls():
+ if station_input==null:return
+ var length=model.length()
+ station_input.editable=length>0
+ station_slider.editable=length>0
+ station_input.set_block_signals(true)
+ station_input.max_value=max(0.0,length)
+ station_previous.disabled=length<=0 or model.station<=0
+ station_next.disabled=length<=0 or model.station>=1
+ station_input.set_value_no_signal(length*model.station if length>0 else 0.0)
+ station_input.set_block_signals(false)
+ station_slider.set_value_no_signal(model.station)
+ var info=model.inspect_station(length*model.station)
+ if not info.ok:
+  station_info.text="노선을 작성하면 선택 측점의 정보를 표시합니다."
+  if station_node!=null:station_node.mesh=null
+  return
+ var ground_text="NoData" if not is_finite(info.ground) else "%.2fm" % info.ground
+ var delta_text="NoData" if not is_finite(info.delta) else "%+.2fm" % info.delta
+ var radius="직선" if abs(info.curvature)<1e-12 else "R %.2fm" % abs(1.0/info.curvature)
+ station_info.text="계획 %.2fm / 지반 %s / 계획−지반 %s / 구배 %+.3f%% / %s" % [info.elevation,ground_text,delta_text,info.grade_pct,radius]
+ var coordinates="로컬 X %.3f / 남 Y %.3f" % [info.x,info.y]
+ if info.has("easting"):coordinates="EPSG:5179 E %.3f / N %.3f" % [info.easting,info.northing]
+ station_info.tooltip_text=station_info.text+"\n"+coordinates+"\n계획−지반은 중심선 한 점의 높이 차이이며 토공량이 아닙니다."
+ update_station_marker(info)
+
+func update_station_marker(info):
+ if station_node==null:return
+ var centre=Vector3(info.x,info.elevation+0.65,info.y)
+ var normal=Vector3(-sin(info.heading),0,cos(info.heading))
+ var left=centre-normal*model.road_width/2.0
+ var right=centre+normal*model.road_width/2.0
+ left.y-=model.road_width/2.0*model.left_fall/100.0
+ right.y-=model.road_width/2.0*model.right_fall/100.0
+ var top=centre+Vector3(0,max(2.0,model.road_width*0.15),0)
+ var vertices=PackedVector3Array([model.world(left),model.world(centre),model.world(centre),model.world(right),model.world(centre),model.world(top)])
+ if is_finite(info.ground):vertices.append_array(PackedVector3Array([model.world(centre),model.world(Vector3(info.x,info.ground+0.05,info.y))]))
+ var arrays=[]
+ arrays.resize(Mesh.ARRAY_MAX)
+ arrays[Mesh.ARRAY_VERTEX]=vertices
+ var mesh=ArrayMesh.new()
+ mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES,arrays)
+ station_node.mesh=mesh
+
+
+func run_station_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ assert(not station_input.editable and station_previous.disabled and station_next.disabled and station_node.mesh==null)
+ add_point(Vector2(600,3000))
+ add_point(Vector2(3000,3000))
+ add_point(Vector2(3000,600))
+ select_pi(1)
+ radius_input.value=300
+ spiral_input.value=50
+ apply_curves()
+ assert(add_pvi(1500,230))
+ select_pvi(1)
+ vertical_input.value=200
+ apply_pvi_values()
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ var before=model.edit_state()
+ var rev=revision
+ var history=undo_stack.size()
+ var uploads=total_mesh_updates
+ var previous_target=target
+ # Numeric control, stepping and slider share one exact station state.
+ station_input.value=1234.567
+ assert(abs(model.station*model.length()-1234.567)<1e-8)
+ assert(abs(station_slider.value*model.length()-1234.567)<1e-8)
+ assert(station_node.mesh!=null)
+ var info=model.inspect_station(1234.567)
+ assert(info.ok and abs(info.station-1234.567)<1e-8)
+ assert(abs(info.elevation-(model.sample(info.station).elevation+model.offset))<1e-10)
+ assert(abs(info.grade_pct-model.sample(info.station).grade*100)<1e-10)
+ station_step.value=20
+ station_next.pressed.emit()
+ assert(abs(station_input.value-1254.567)<1e-8)
+ station_previous.pressed.emit()
+ assert(abs(station_input.value-1234.567)<1e-8)
+ set_station_distance(-100)
+ assert(model.station==0 and station_previous.disabled)
+ set_station_distance(model.length()+100)
+ assert(model.station==1 and station_next.disabled)
+ station_slider.value=0.37
+ assert(abs(station_input.value-model.length()*0.37)<=0.001)
+ set_station_distance(1550)
+ # The 3D marker follows the actual centre elevation and crossfall.
+ var arrays=station_node.mesh.surface_get_arrays(0)
+ var world_centre=arrays[Mesh.ARRAY_VERTEX][1]
+ var at=model.sample(1550)
+ assert(world_centre.distance_to(model.world(Vector3(at.x,at.elevation+model.offset+0.65,at.y)))<0.001)
+ # Explicit focus affects view transforms only, and preserves manual scale.
+ plan.zoom_navigation(plan.size/2,0.5)
+ var zoom=plan.plan_zoom
+ plan.focus_navigation()
+ var rect=plan.map_rect()
+ var screen=rect.position+Vector2(at.x,at.y)/model.extent()*rect.size
+ assert(screen.distance_to(plan.size/2)<0.001 and plan.plan_zoom==zoom)
+ profile.focus_navigation()
+ assert(profile.profile_screen(1550,at.elevation+model.offset).distance_to(profile.plot_rect().get_center())<0.001)
+ var span=profile.profile_view.size
+ set_station_distance(1750)
+ profile.focus_navigation()
+ assert(profile.profile_view.size==span)
+ assert(target==previous_target) # Moving station never drags the 3D camera.
+ focus_station()
+ assert(target!=previous_target)
+ await get_tree().process_frame
+ assert(model.edit_state()==before and revision==rev and undo_stack.size()==history and total_mesh_updates==uploads)
+ # NoData is reported explicitly rather than inventing zero elevation/difference.
+ var source=model.source
+ model.source=model.source.duplicate(true)
+ var values=model.source.Heights.duplicate()
+ values.fill(NAN)
+ model.source.Heights=values
+ info=model.inspect_station(1550)
+ assert(info.ok and not is_finite(info.ground) and not is_finite(info.delta))
+ set_station_distance(1550)
+ assert("NoData" in station_info.text)
+ model.source=source
+ refresh_station_controls()
+ clear_route()
+ assert(not station_input.editable and station_node.mesh==null)
+ undo_edit()
+ assert(station_input.editable and station_node.mesh!=null)
+ print("PASS STATION NAVIGATION: numeric mm station, step/slider sync, endpoint clamp, exact grade/elevation, plan/profile focus, marker, NoData, no design/history/revision/terrain changes, clear/undo")
  get_tree().quit(0)

@@ -114,6 +114,15 @@ func _draw():
     var q=r.position+Vector2(point.x,point.z)/ext*r.size
     draw_circle(q,3,Color("a8d4ef"))
     label("ST" if element.type=="spiral_out" else "EC",q+Vector2(8,20),Color("a8d4ef"))
+  if model.length()>0:
+   var at=model.sample(model.length()*model.station)
+   var q=r.position+Vector2(at.x,at.y)/ext*r.size
+   if plan_area().has_point(q):
+    var cross=Vector2(-sin(at.heading),cos(at.heading))*model.road_width/2.0/ext*r.size
+    if cross.length()<10:cross=cross.normalized()*10
+    draw_line(q-cross,q+cross,Color("7eeaff"),2,true)
+    draw_circle(q,4,Color("7eeaff"))
+    label("STA %.3f" % at.station,q+Vector2(10,-12),Color("7eeaff"))
   draw_rect(Rect2(0,0,size.x,26),Color("13212c"))
   draw_rect(Rect2(0,size.y-26,size.x,26),Color("13212c"))
   label("N ↑  |  %.1f × %.1f km" % [ext.x/1000,ext.y/1000],Vector2(14,18))
@@ -504,3 +513,19 @@ func draw_profile(r,length):
  label("%.2f" % bounds.y,Vector2(1,r.position.y+5))
  label("%.2f" % bounds.x,Vector2(1,r.end.y))
  label("STA %.2f → %.2f | 녹색: 원지반 / 주황: 계획" % [stations.x,stations.y],Vector2(r.position.x,size.y-10))
+
+
+func focus_navigation():
+ if model.length()<=0:return
+ var at=model.sample(model.length()*model.station)
+ if mode=="plan":
+  var r=map_rect()
+  var screen=r.position+Vector2(at.x,at.y)/model.extent()*r.size
+  plan_shift+=(size/2.0-screen)/size
+ elif mode=="profile":
+  var bounds=chart_bounds()
+  var span=profile_view.size if profile_manual else Vector2(max(20.0,model.length()*0.2),max(10.0,(bounds.y-bounds.x)*0.3))
+  profile_view=Rect2(Vector2(at.station,at.elevation+model.offset)-span/2.0,span)
+  profile_manual=true
+ stop_navigation()
+ queue_redraw()
