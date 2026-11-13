@@ -11,20 +11,20 @@ class CorridorIndex {
  struct Segment {double x,y,z,dx,dy,dz,ll;};
  std::vector<Segment> segments;
  std::unordered_map<uint64_t,std::vector<int>> buckets;
- double cell=250,width=20,offset=0,slope=1.5,radius=0,padding=0,left_fall=0,right_fall=0;
+ double cell=250,width=20,offset=0,slope=1.5,radius=0,padding=0,left_fall=0,right_fall=0,cut_slope=1.5;
  static uint64_t key(int x,int y){return (uint64_t(uint32_t(x))<<32)|uint32_t(y);}
  const std::vector<int> *candidates(double x,double y) const {
   auto found=buckets.find(key(int(std::floor(x/cell)),int(std::floor(y/cell))));return found==buckets.end()?nullptr:&found->second;
  }
 public:
  bool ready=false;
- void prepare(const godot::PackedVector3Array &route,double w,double o,double sl,double low,double high,double pad,double left=0,double right=0){
-  segments.clear();buckets.clear();ready=true;width=w;offset=o;slope=sl;padding=pad;left_fall=left;right_fall=right;
+ void prepare(const godot::PackedVector3Array &route,double w,double o,double sl,double low,double high,double pad,double left=0,double right=0,double cut=0){
+  segments.clear();buckets.clear();ready=true;width=w;offset=o;slope=sl;padding=pad;left_fall=left;right_fall=right;cut_slope=cut>0?cut:sl;
   double zlow=low,zhigh=high;
   if(!route.is_empty()){zlow=route[0].y+offset;zhigh=zlow;for(int i=0;i<route.size();i++){zlow=std::min(zlow,double(route[i].y)+offset);zhigh=std::max(zhigh,double(route[i].y)+offset);}}
   double crown=width/2*std::max(std::abs(left_fall),std::abs(right_fall))/100;
   zlow-=crown;zhigh+=crown;
-  radius=width/2+std::max(std::abs(zlow-high),std::abs(zhigh-low))*slope;
+  radius=width/2+std::max(std::abs(zlow-high),std::abs(zhigh-low))*std::max(slope,cut_slope);
   cell=std::max(100.0,radius+padding);
   for(int i=1;i<route.size();i++){
    auto a=route[i-1],b=route[i];Segment s{a.x,a.z,a.y,b.x-a.x,b.z-a.z,b.y-a.y,0};s.ll=s.dx*s.dx+s.dy*s.dy;if(s.ll<1e-12)continue;
@@ -51,7 +51,7 @@ public:
   for(int index:*list){const auto &s=segments[index];double f=std::clamp(((x-s.x)*s.dx+(y-s.y)*s.dy)/s.ll,0.0,1.0);
    double dx=x-s.x-s.dx*f,dy=y-s.y-s.dy*f,d2=dx*dx+dy*dy;if(d2>=best)continue;best=d2;
    double distance=std::sqrt(d2),side=(s.dx*dy-s.dy*dx)<0?-distance:distance;
-   double road=s.z+s.dz*f+offset-crossfall_drop(distance,side,width,left_fall,right_fall),edge=std::max(0.0,std::sqrt(d2)-width/2)/slope;
+   double road=s.z+s.dz*f+offset-crossfall_drop(distance,side,width,left_fall,right_fall),edge=std::max(0.0,std::sqrt(d2)-width/2)/(ground<road?slope:cut_slope);
    height=ground<road?std::max(ground,road-edge):std::min(ground,road+edge);
   }return height;
  }

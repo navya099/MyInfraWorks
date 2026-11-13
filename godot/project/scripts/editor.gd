@@ -26,6 +26,7 @@ var metrics: Label
 var width_input: SpinBox
 var offset_input: SpinBox
 var slope_input: SpinBox
+var cut_slope_input: SpinBox
 var left_fall_input: SpinBox
 var right_fall_input: SpinBox
 var station_slider: HSlider
@@ -92,6 +93,8 @@ func _ready():
   call_deferred("run_pi_add_smoke")
  elif "--navigation-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_navigation_smoke")
+ elif "--slopes-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_slopes_smoke")
  elif "--section-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_section_smoke")
  elif "--crossfall-smoke" in OS.get_cmdline_user_args():
@@ -220,7 +223,8 @@ func build_ui():
  root.add_child(settings)
  width_input=number(settings,"전체 폭(m)",20,1,200,0.5)
  offset_input=number(settings,"계획고 보정(m)",0,-1000,1000,0.5)
- slope_input=number(settings,"사면 H:V",1.5,0.1,10,0.1)
+ slope_input=number(settings,"성토 H:V",1.5,0.1,10,0.1)
+ cut_slope_input=number(settings,"절토 H:V",1.5,0.1,10,0.1)
  left_fall_input=number(settings,"좌측 하향(%)",0,-12,12,0.1)
  right_fall_input=number(settings,"우측 하향(%)",0,-12,12,0.1)
  left_fall_input.tooltip_text="진행 방향 기준 좌측. 양수: 중심에서 바깥으로 낮아짐 / 음수: 높아짐"
@@ -489,6 +493,7 @@ func reset_terrain():
  width_input.value=model.road_width
  offset_input.value=model.offset
  slope_input.value=model.slope
+ cut_slope_input.value=model.cut_slope
  left_fall_input.value=model.left_fall
  right_fall_input.value=model.right_fall
  fit_camera()
@@ -602,6 +607,7 @@ func apply_parameters():
  model.road_width=width_input.value
  model.offset=offset_input.value
  model.slope=slope_input.value
+ model.cut_slope=cut_slope_input.value
  model.left_fall=left_fall_input.value
  model.right_fall=right_fall_input.value
  changed(previous)
@@ -644,6 +650,7 @@ static func build_job(snapshot_data,keys):
  var start=Time.get_ticks_usec()
  var core=ClassDB.instantiate("KRoadCore")
  core.set_crossfall(snapshot_data.left_fall,snapshot_data.right_fall)
+ core.set_cut_slope(snapshot_data.get("cut_slope",snapshot_data.slope))
  var result=[]
  core.prepare_corridor(snapshot_data.route,snapshot_data.width,snapshot_data.offset,snapshot_data.slope,snapshot_data.terrain.Min,snapshot_data.terrain.Max,max(snapshot_data.terrain.Dx,snapshot_data.terrain.Dy)*2)
  for key in keys:
@@ -779,7 +786,7 @@ func apply_document(document,is_project):
   show_error(error)
   return
  if is_project:
-  if document.get("version",0) not in [1,2,3,4,5]:
+  if document.get("version",0) not in [1,2,3,4,5,6]:
    show_error("지원하지 않는 프로젝트 버전입니다.")
    return
   var points=document.get("route",[])
@@ -799,6 +806,13 @@ func apply_document(document,is_project):
   candidate.road_width=float(document.get("width",20))
   candidate.offset=float(document.get("offset",0))
   candidate.slope=float(document.get("slope",1.5))
+  candidate.cut_slope=candidate.slope
+  if int(document.version)>=6:
+   var cut_value=document.get("cut_slope",null)
+   if typeof(cut_value) not in [TYPE_INT,TYPE_FLOAT] or not is_finite(float(cut_value)) or cut_value<0.1 or cut_value>10:
+    show_error("절토 사면비는 0.1~10의 유한한 숫자여야 합니다.")
+    return
+   candidate.cut_slope=float(cut_value)
   if int(document.version)>=5:
    var fall=document.get("crossfall",null)
    if not fall is Dictionary:
@@ -883,7 +897,7 @@ func project_document():
  var points=[]
  for point in model.route:
   points.append([point.x,point.y,point.z])
- return {"version":5,"crossfall":{"left":model.left_fall,"right":model.right_fall},"profile":{"stations":model.pvi_stations.duplicate(),"heights":model.pvi_heights.duplicate(),"lengths":model.pvi_lengths.duplicate()},"alignment":{"radii":model.radii.duplicate(),"spirals":model.spirals.duplicate(),"vertical_lengths":model.vertical_lengths.duplicate()},"terrain":model.terrain.duplicate(),"source":model.source.duplicate(),"route":points,"width":model.road_width,"offset":model.offset,"slope":model.slope}
+ return {"version":6,"cut_slope":model.cut_slope,"crossfall":{"left":model.left_fall,"right":model.right_fall},"profile":{"stations":model.pvi_stations.duplicate(),"heights":model.pvi_heights.duplicate(),"lengths":model.pvi_lengths.duplicate()},"alignment":{"radii":model.radii.duplicate(),"spirals":model.spirals.duplicate(),"vertical_lengths":model.vertical_lengths.duplicate()},"terrain":model.terrain.duplicate(),"source":model.source.duplicate(),"route":points,"width":model.road_width,"offset":model.offset,"slope":model.slope}
 
 static func save_job(path,document):
  var temporary=path+".tmp_"+str(Time.get_ticks_usec())
@@ -952,7 +966,7 @@ func run_smoke():
  var loaded=read_document("user://smoke.kroadg",true)
  apply_document(loaded.document,true)
  assert(model.route==saved_route,"Project roundtrip changed route")
- assert(loaded.document.version==5,"New projects must store alignment parameters")
+ assert(loaded.document.version==6,"New projects must store alignment parameters")
  print("PASS GODOT EDITOR: async tiles, stale edit coalescing, camera independence, local rebuild, road mesh, project roundtrip")
  get_tree().quit(0)
 
@@ -1003,6 +1017,10 @@ func run_visual_test():
   vertical_input.value=4000
   apply_pvi_values()
   print("LONG ALIGNMENT: %.3fm / %d corridor points" % [model.length(),model.centerline.size()])
+ if "--slopes-demo" in arguments:
+  slope_input.value=2.0
+  cut_slope_input.value=0.5
+  apply_parameters()
  if "--crossfall-demo" in arguments:
   width_input.value=40
   left_fall_input.value=8
@@ -1232,7 +1250,7 @@ func run_dem_smoke():
  while import_worker!=null:
   await get_tree().process_frame
  var saved=read_document("user://source_roundtrip.kroadg",true)
- assert(saved.document.version==5)
+ assert(saved.document.version==6)
  assert(saved.document.source.Heights is PackedFloat32Array)
  apply_document(saved.document,true)
  assert(model.source.Heights.size()==source_count)
@@ -1324,7 +1342,7 @@ func run_alignment_smoke():
 
 static func compact_state(state):
  var result={}
- for key in ["pi_route","radii","spirals","vertical_lengths","pvi_stations","pvi_heights","pvi_lengths","width","offset","slope","left_fall","right_fall"]:
+ for key in ["pi_route","radii","spirals","vertical_lengths","pvi_stations","pvi_heights","pvi_lengths","width","offset","slope","cut_slope","left_fall","right_fall"]:
   result[key]=state[key]
  return result.duplicate(true)
 
@@ -1386,6 +1404,7 @@ func apply_history_state(state):
  width_input.value=model.road_width
  offset_input.value=model.offset
  slope_input.value=model.slope
+ cut_slope_input.value=model.cut_slope
  left_fall_input.value=model.left_fall
  right_fall_input.value=model.right_fall
  sync_alignment_controls()
@@ -1619,7 +1638,7 @@ func run_pvi_smoke():
  while import_worker!=null:
   await get_tree().process_frame
  var stored=read_document("user://independent_pvi.kroadg",true)
- assert(stored.document.version==5)
+ assert(stored.document.version==6)
  apply_document(stored.document,true)
  assert(model.edit_state()==saved and undo_stack.is_empty())
  # Actual v3 document migration must preserve the legacy shape, not just array sizes.
@@ -1636,7 +1655,7 @@ func run_pvi_smoke():
   assert(abs(model.sample(station_v).elevation-reference.sample(station_v).elevation)<0.0000001)
   assert(abs(model.sample(station_v).grade-reference.sample(station_v).grade)<0.0000001)
  print("PASS V3 MIGRATION: preserved 101 elevation/grade samples")
- print("PASS INDEPENDENT PVI EDITOR: add/apply, absolute stations across PI move, endpoint anchor, profile drag/history, invalid rollback, delete/undo, v5 roundtrip")
+ print("PASS INDEPENDENT PVI EDITOR: add/apply, absolute stations across PI move, endpoint anchor, profile drag/history, invalid rollback, delete/undo, v6 roundtrip")
  get_tree().quit(0)
 
 func run_earthwork_smoke():
@@ -1660,7 +1679,7 @@ func run_earthwork_smoke():
  csv.get_buffer(3)
  var header=csv.get_csv_line()
  var row=csv.get_csv_line()
- assert(header.size()==19 and row.size()==19)
+ assert(header.size()==21 and row.size()==21)
  assert(row[0]=="average_end_area")
  var old=earthwork_report.result
  edit_elevation(1,model.pvi_heights[1]+1)
@@ -1670,7 +1689,7 @@ func run_earthwork_smoke():
  edit_elevation(1,model.pvi_heights[1]+1)
  while earthwork_report.worker!=null:await get_tree().process_frame
  assert(earthwork_report.result.is_empty())
- print("PASS EARTHWORK UI: background calculation, camera response, 19-column CSV, invalidated export and stale result discard")
+ print("PASS EARTHWORK UI: background calculation, camera response, 21-column CSV, invalidated export and stale result discard")
  get_tree().quit(0)
 
 
@@ -1849,7 +1868,7 @@ func run_topology_smoke():
  current_revision=revision
  assert(not delete_selected_pi(true))
  assert(model.edit_state()==detour and undo_stack.size()==history_count and revision==current_revision)
- print("PASS PI TOPOLOGY: canvas/numeric insert, R/Ls association, independent PVI, delete/undo/redo, overlap/NoData/bounds/endpoint rejection, Esc/right-click, v5 roundtrip, shortening rollback")
+ print("PASS PI TOPOLOGY: canvas/numeric insert, R/Ls association, independent PVI, delete/undo/redo, overlap/NoData/bounds/endpoint rejection, Esc/right-click, v6 roundtrip, shortening rollback")
  get_tree().quit(0)
 
 
@@ -1962,10 +1981,10 @@ func run_crossfall_smoke():
  assert(quantity.ok and quantity.left_fall==2 and quantity.right_fall==4)
  while worker!=null or not dirty.is_empty():await get_tree().process_frame
  assert(road_node.mesh!=null)
- save_project("user://crossfall-v5.kroadg")
+ save_project("user://crossfall-v6.kroadg")
  while import_worker!=null:await get_tree().process_frame
- var saved=read_document("user://crossfall-v5.kroadg",true)
- assert(saved.document.version==5 and saved.document.crossfall.left==2)
+ var saved=read_document("user://crossfall-v6.kroadg",true)
+ assert(saved.document.version==6 and saved.document.crossfall.left==2)
  apply_document(saved.document,true)
  assert(model.edit_state()==crowned)
  # Bad v5 parameters must leave the current model untouched.
@@ -1983,7 +2002,7 @@ func run_crossfall_smoke():
  assert(model.pvi_heights==crowned.pvi_heights)
  var legacy=model.edit_state()
  assert(legacy.radii==crowned.radii and legacy.pi_route==crowned.pi_route)
- print("PASS CROSSFALL UI: parameters/history, shared quantities, rendered mesh, v5 roundtrip, bad v5 rollback, v4 flat migration")
+ print("PASS CROSSFALL UI: parameters/history, shared quantities, rendered mesh, v6 roundtrip, bad v6 rollback, v4 flat migration")
  get_tree().quit(0)
 
 
@@ -2450,4 +2469,59 @@ func run_station_smoke():
  undo_edit()
  assert(station_input.editable and station_node.mesh!=null)
  print("PASS STATION NAVIGATION: numeric mm station, step/slider sync, endpoint clamp, exact grade/elevation, plan/profile focus, marker, NoData, no design/history/revision/terrain changes, clear/undo")
+ get_tree().quit(0)
+
+
+func run_slopes_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var shared=model.edit_state()
+ slope_input.value=2
+ cut_slope_input.value=0.5
+ apply_parameters()
+ assert(model.slope==2 and model.cut_slope==0.5)
+ var separated=model.edit_state()
+ undo_edit()
+ assert(model.edit_state()==shared and cut_slope_input.value==shared.cut_slope)
+ redo_edit()
+ assert(model.edit_state()==separated and cut_slope_input.value==0.5)
+ var report=EarthworkReport.calculate_job(model.snapshot(),20,300,2)
+ assert(report.ok and report.fill_slope==2 and report.cut_slope==0.5)
+ earthwork_report.start_calculation()
+ while earthwork_report.worker!=null:await get_tree().process_frame
+ assert(earthwork_report.export_csv("user://slopes.csv"))
+ var csv=FileAccess.open("user://slopes.csv",FileAccess.READ)
+ var header=csv.get_csv_line()
+ var row=csv.get_csv_line()
+ assert(header.size()==21 and row.size()==21 and header[19]=="fill_slope_hv" and header[20]=="cut_slope_hv")
+ assert(float(row[19])==2 and float(row[20])==0.5)
+ csv.close()
+ save_project("user://slopes-v6.kroadg")
+ while import_worker!=null:await get_tree().process_frame
+ var stored=read_document("user://slopes-v6.kroadg",true)
+ assert(stored.document.version==6 and stored.document.cut_slope==0.5)
+ apply_document(stored.document,true)
+ assert(model.edit_state()==separated)
+ var old=stored.document.duplicate(true)
+ old.version=5
+ old.erase("cut_slope")
+ apply_document(old,true)
+ assert(model.slope==2 and model.cut_slope==2)
+ var preserved=model.edit_state()
+ var invalid=stored.document.duplicate(true)
+ invalid.cut_slope="bad"
+ apply_document(invalid,true)
+ assert(model.edit_state()==preserved)
+ message.hide()
+ invalid=stored.document.duplicate(true)
+ invalid.cut_slope=0
+ apply_document(invalid,true)
+ assert(model.edit_state()==preserved)
+ message.hide()
+ invalid.erase("cut_slope")
+ apply_document(invalid,true)
+ assert(model.edit_state()==preserved)
+ message.hide()
+ print("PASS CUT/FILL SLOPES UI: controls/history, worker quantities, 21-column CSV, v6 roundtrip, v5 shared-slope migration, invalid/missing cut rollback")
  get_tree().quit(0)

@@ -15,7 +15,8 @@ var alignment_data = {"length":0.0,"pi_stations":PackedFloat64Array(),"elements"
 var centerline = PackedVector3Array()
 var road_width = 20.0
 var offset = 0.0
-var slope = 1.5
+var slope = 1.5 # fill H:V
+var cut_slope=1.5
 var left_fall=0.0
 var right_fall=0.0
 var station = 0.5
@@ -113,6 +114,7 @@ func design(x, y):
  return core.design_height(source, centerline, x, y, road_width, offset, slope)
 
 func rebuild_alignment():
+ if not is_finite(cut_slope) or cut_slope<0.1 or cut_slope>10 or not core.set_cut_slope(cut_slope):return "절토 사면비는 0.1~10의 유한한 값이어야 합니다."
  if not core.set_crossfall(left_fall,right_fall):return "횡단구배는 -12~12%의 유한한 값이어야 합니다."
  var count=route.size()
  var old_size=radii.size()
@@ -163,6 +165,7 @@ func restore(snapshot_data):
  road_width=snapshot_data.width
  offset=snapshot_data.offset
  slope=snapshot_data.slope
+ cut_slope=snapshot_data.get("cut_slope",snapshot_data.slope)
  left_fall=snapshot_data.get("left_fall",0.0)
  right_fall=snapshot_data.get("right_fall",0.0)
  rebuild_alignment()
@@ -182,7 +185,7 @@ func world(point):
 
 func snapshot():
  # Packed arrays use copy-on-write. Main thread replaces route, never mutates worker data.
- return {"source":source.duplicate(),"terrain":terrain.duplicate(),"pi_route":route.duplicate(),"radii":radii.duplicate(),"spirals":spirals.duplicate(),"vertical_lengths":vertical_lengths.duplicate(),"pvi_stations":pvi_stations.duplicate(),"pvi_heights":pvi_heights.duplicate(),"pvi_lengths":pvi_lengths.duplicate(),"route":centerline.duplicate(),"width":road_width,"offset":offset,"slope":slope,"left_fall":left_fall,"right_fall":right_fall,"refinement":refinement()}
+ return {"source":source.duplicate(),"terrain":terrain.duplicate(),"pi_route":route.duplicate(),"radii":radii.duplicate(),"spirals":spirals.duplicate(),"vertical_lengths":vertical_lengths.duplicate(),"pvi_stations":pvi_stations.duplicate(),"pvi_heights":pvi_heights.duplicate(),"pvi_lengths":pvi_lengths.duplicate(),"route":centerline.duplicate(),"width":road_width,"offset":offset,"slope":slope,"cut_slope":cut_slope,"left_fall":left_fall,"right_fall":right_fall,"refinement":refinement()}
 
 func refinement():
  var desired=max(5.0,max(min(source.Dx,source.Dy)/2.0,road_width/3.0))
@@ -191,6 +194,7 @@ func refinement():
 static func affected(snapshot_data, tile_size):
  var result={}
  var engine=ClassDB.instantiate("KRoadCore")
+ engine.set_cut_slope(snapshot_data.get("cut_slope",snapshot_data.slope))
  engine.set_crossfall(snapshot_data.get("left_fall",0.0),snapshot_data.get("right_fall",0.0))
  for point in engine.affected_tiles(snapshot_data.terrain,snapshot_data.route,snapshot_data.width,snapshot_data.offset,snapshot_data.slope,tile_size):
   result[Vector2i(point)]=true
@@ -198,7 +202,7 @@ static func affected(snapshot_data, tile_size):
 
 func edit_state():
  # History stores design parameters only, never DEM arrays or derived meshes.
- return {"pi_route":route.duplicate(),"radii":radii.duplicate(),"spirals":spirals.duplicate(),"vertical_lengths":vertical_lengths.duplicate(),"pvi_stations":pvi_stations.duplicate(),"pvi_heights":pvi_heights.duplicate(),"pvi_lengths":pvi_lengths.duplicate(),"width":road_width,"offset":offset,"slope":slope,"left_fall":left_fall,"right_fall":right_fall}
+ return {"pi_route":route.duplicate(),"radii":radii.duplicate(),"spirals":spirals.duplicate(),"vertical_lengths":vertical_lengths.duplicate(),"pvi_stations":pvi_stations.duplicate(),"pvi_heights":pvi_heights.duplicate(),"pvi_lengths":pvi_lengths.duplicate(),"width":road_width,"offset":offset,"slope":slope,"cut_slope":cut_slope,"left_fall":left_fall,"right_fall":right_fall}
 
 func migrate_linked_profile():
  var result=alignment.configure(route,radii,spirals,vertical_lengths)

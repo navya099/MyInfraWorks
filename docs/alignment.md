@@ -41,7 +41,7 @@ PVI 제어고 zI, 전·후 구배 g1, g2, 곡선 전체 길이 L에 대해 시�
 
 ## 저장 및 제한
 
-프로젝트 내부 버전은 5이며 KROAD2 바이너리 컨테이너 헤더를 유지합니다. profile에는 stations/heights/lengths를 저장합니다. v1/v2/v3는 레거시 configure로 원래 PVI 위치·표고·Lv를 계산한 뒤 configure_independent로 전환합니다. 내부 PVI의 절대 측점은 보존하고 종점 측점만 노선 길이를 따라갑니다.
+프로젝트 내부 버전은 6이며 KROAD2 바이너리 컨테이너 헤더를 유지합니다. profile에는 stations/heights/lengths를 저장합니다. v1/v2/v3는 레거시 configure로 원래 PVI 위치·표고·Lv를 계산한 뒤 configure_independent로 전환합니다. 내부 PVI의 절대 측점은 보존하고 종점 측점만 노선 길이를 따라갑니다.
 
 지원하지 않는 것: 비대칭 종단곡선, 복합·난형 곡선의 직접 요소 편집, 편경사·확폭, 시거·설계속도 기준 검사, 자기 교차·교차로 처리, 측점 방정식과 시작 측점 오프셋.
 
@@ -66,3 +66,6 @@ PI 좌표 드래그·수치 편집과 설계 매개변수 undo/redo를 지원합
 
 
 0.11부터 좌·우 일정 횡단구배를 [횡단 단면](crossfall.md)에 적용합니다. 종단 중심선의 sample(s)는 유지하며, v5에는 crossfall.left/right를 추가 저장합니다. v1~v4는 0% 단면으로 보존합니다.
+
+
+0.16의 프로젝트 v6는 cut_slope에 절토 사면비를 별도로 저장합니다. v1~v5는 기존 slope를 성토/절토 모두에 복사합니다. 선형·독립 PVI 계산은 바꾸지 않습니다.

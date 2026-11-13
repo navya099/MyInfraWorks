@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/section-equal-scale` (0.15). 확인된 0.14는 `main`에 반영했습니다.
+개발 브랜치: `feature/cut-fill-slopes` (0.16). 확인된 0.15는 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.15. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.16. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/section-equal-scale --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/cut-fill-slopes --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -55,7 +55,7 @@ dotnet run --project legacy/wpf/KRoadPrototype.csproj -c Release
 python -m SCons -C godot platform=windows target=template_debug arch=x86_64 build_profile=build_profile.json -j4
 ```
 
-생성 파일은 `godot/project/bin/kroad_core_v011.windows.template_debug.x86_64.dll`입니다. 아래 `godot` 명령은 설치한 Godot 실행 파일 경로로 바꿔 실행해도 됩니다.
+생성 파일은 `godot/project/bin/kroad_core_v016.windows.template_debug.x86_64.dll`입니다. 아래 `godot` 명령은 설치한 Godot 실행 파일 경로로 바꿔 실행해도 됩니다.
 
 ```powershell
 godot --headless --path godot/project --editor --import --quit
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.15 실행
+## Godot 편집기 0.16 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -96,7 +96,7 @@ godot --path godot/project
 - 종단에서 드래그: 수평 측점상 가까운 제어점의 계획고 변경. 드래그 동안 세로 축 범위는 고정됩니다.
 - 3D 왼쪽 드래그: Orbit. 오른쪽 또는 가운데 드래그: Pan. 휠: Zoom.
 - 폭·높이 보정·사면비 변경 후 적용. 횡단 슬라이더로 측점 선택.
-- `.kroadg`로 저장·불러오기. 새 프로젝트는 독립 PVI·횡단구배와 계산용 높이를 저장하는 바이너리 v5 형식입니다. 기존 v1 JSON 및 v2/v3 프로젝트는 기존 종단 형상을 보존해 독립 PVI로 변환합니다. v1~v4의 횡단구배는 0%로 보존합니다. 0.10 이하 앱은 v5를 열 수 없습니다. WPF의 `.kroad`와는 다릅니다.
+- `.kroadg`로 저장·불러오기. 새 프로젝트는 독립 PVI·횡단구배·절토/성토 사면비와 계산용 높이를 저장하는 바이너리 v6 형식입니다. 기존 v1 JSON 및 v2/v3 프로젝트는 기존 종단 형상을 보존해 독립 PVI로 변환합니다. v1~v4의 횡단구배는 0%로 보존합니다. 0.15 이하 앱은 v6를 열 수 없습니다. WPF의 `.kroad`와는 다릅니다.
 - `측점 보기`: 선택한 횡단 측점의 도로·사면을 3D에서 가까이 봅니다.
 - 새 DEM 또는 프로젝트를 열면 현재 설계를 교체합니다. 작업을 먼저 저장하세요.
 
@@ -388,10 +388,32 @@ godot --path godot/project -- --visual-test "C:/absolute/path/navigation-preview
 합성 3601×3601 DEM / 약 98.235km 노선 / GTX 1060 6GB에서 연속 측점 이동+Orbit의 중앙값 15.29ms, p95 17.59ms, 지형 업로드 및 revision 변경 0회를 관측했습니다. 사용자 노선의 일정한 성능을 보장하는 값은 아닙니다.
 
 
-## 0.15 횡단 H:V 1:1 고정 (개발 브랜치)
+## 0.15 횡단 H:V 1:1 고정 (main 반영 완료)
 
 기존 횡단은 가로·세로 범위를 독립 조절해 기울기가 과장될 수 있었습니다. 이제 화면상의 수평 1m와 수직 1m가 같은 길이가 되도록 하나의 m/화면 픽셀 배율을 공유합니다. `도로 확대`·`전체 맞춤`, 휠 확대, 이동, 뷰 크기 변경에도 동일 비율을 적용하고 `H:V 1:1`을 표시합니다. 이 표시는 가로/세로 비율이며 종이 출력의 절대 축척 1:1이라는 의미는 아닙니다.
 
 횡단의 Shift/Ctrl 축별 확대는 제거했습니다. 어떤 보조키를 눌러도 휠은 양축을 같은 비율로 확대합니다. 이동과 창 크기 변경은 중심 위치와 공통 배율을 유지합니다. 화면 크기에 맞춰 필요한 주변 여백이 생기며, 2% 등 작은 구배는 실제 비율대로 완만하게 보입니다.
 
 `--section-smoke`는 실제 화면 변환 후 1m 가로/세로 길이 일치, 2% 선분 기울기, 커서 기준 확대, 보조키, 이동, 크기 변경·비균일 상위 배율 보정과 전체 맞춤을 검사합니다. headless와 실제 OpenGL 실행에서 통과했고 측점·확대·PI 추가 모드·횡단구배 저장 검사도 통과했습니다. 설계 데이터·수량·프로젝트 v5·DLL은 바꾸지 않습니다.
+
+
+## 0.16 절토·성토 사면비 분리 (개발 브랜치)
+
+상단 `성토 H:V`와 `절토 H:V`를 각각 입력하고 `적용`합니다. 원지반이 계획 도로면보다 낮은 쪽은 성토비, 높은 쪽은 절토비를 적용합니다. 도로 폭·중심 계획고·좌우 횡단구배는 유지하고 가장자리 바깥 사면과 그에 따른 수량을 갱신합니다. 횡단은 H:V=1:1 화면 표시를 유지합니다.
+
+- 횡단·3D 지형·영향 타일·토공량에 두 사면비를 공유합니다. 절토/성토가 섞인 횡단도 자동 구분합니다.
+- 한 번의 적용은 undo/redo 한 단계입니다. 지형을 비동기로 갱신하고 이전 수량·검토 결과는 무효화합니다.
+- 프로젝트 v6에 절토비를 추가 저장합니다. v1~v5는 기존 사면비를 성토·절토 모두에 적용해 형상을 보존합니다. 0.15 이하 앱은 v6를 열 수 없습니다.
+- 토공량 CSV 마지막에 fill_slope_hv/cut_slope_hv를 추가해 21열입니다. 기존 19열 순서는 유지합니다.
+- 노선 전체에 일정한 두 값을 사용합니다. 소단·다단 사면, 토질별 자동 사면 결정, 옹벽은 아직 포함하지 않습니다. 입력 범위 0.1~10은 프로그램 제한입니다.
+
+기존 실행 창을 저장하고 닫은 뒤 같은 `run-godot.cmd`로 실행합니다. 이전 DLL은 보존하고 `kroad_core_v016...dll`을 별도로 빌드했습니다. [분리 사면비 산식·검사](docs/cut-fill-slopes.md)를 참조하세요.
+
+```powershell
+godot --headless --path godot/project --script verify_slopes.gd
+godot --headless --path godot/project -- --slopes-smoke
+```
+
+평탄 지반의 절토/성토 해석해, 혼합 단면, 횡단구배 조합, 공간 검색과 실제 배경 지형 작업의 결과 일치, CSV, undo/redo, v6 저장·복원과 v5 형상 보존, 잘못된 입력의 원자적 거절을 검사했습니다. 기존 네이티브/선형/지형/횡단/확대/측점/추가 모드/저장/수량/검토 검사도 통과했습니다.
+
+합성 3601×3601 DEM / 약 98.235km 노선 / 성토2·절토0.5 / GTX 1060 6GB에서 Orbit p95 13.46ms, PVI 드래그+Orbit p95 19.30ms, 4,920개 단면 수량 1122.0ms(계산 중 86프레임 갱신)를 관측했습니다. 실제 사용자 노선의 일정한 성능을 보장하는 값은 아닙니다.
