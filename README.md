@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/pi-topology-editing` (0.9). 사용자 확인을 마친 0.8은 `main`에 반영했습니다.
+개발 브랜치: `feature/design-review` (0.10). 사용자 확인을 마친 0.9는 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.9. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.10. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/pi-topology-editing --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/design-review --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -75,14 +75,14 @@ python tests/verify_dem.py
 
 ## 다음 개발 범위
 
-설계 기준 검사, 편경사·확폭, 토공량 보정을 확장합니다. 이후 카메라 거리 기반 LOD와 다중 DEM 타일을 추가합니다.
+설계 검토 항목, 편경사·확폭, 토공량 보정을 확장합니다. 이후 카메라 거리 기반 LOD와 다중 DEM 타일을 추가합니다.
 
 ## 저장소 관리
 
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.9 실행
+## Godot 편집기 0.10 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -258,7 +258,7 @@ godot --headless --path godot/project -- --earthwork-smoke
 합성 3601×3601 DEM / 약 98.235km 노선 / GTX 1060 6GB에서 4,920개 단면 계산 816.8ms, 계산 중 63프레임 갱신을 관측했습니다. Orbit p95는 13.44ms였습니다. 실제 사용자 DEM이나 일정한 성능을 보장하는 수치는 아닙니다.
 
 
-## 0.9 평면 PI 중간 삽입·삭제 (개발 브랜치)
+## 0.9 평면 PI 중간 삽입·삭제 (main 반영 완료)
 
 기존 창을 저장하고 닫은 뒤 같은 `run-godot.cmd`를 실행하세요. 이번 변경은 GDScript 편집 기능이며 C++ DLL은 검증한 `kroad_core_v08`을 그대로 사용합니다. 프로젝트 형식도 v4입니다.
 
@@ -281,3 +281,26 @@ godot --path godot/project -- --visual-test "C:/absolute/path/topology-preview.p
 실제 canvas 클릭과 좌표 대화상자, 두 기존 곡선의 R/Ls 대응, 삭제·undo/redo, 독립 PVI 보존과 노선 단축 거절, NoData·범위·인접점·끝점 검사, Esc·우클릭 취소, 토공량 무효화, v4 저장·복원을 검사했습니다.
 
 합성 3601×3601 DEM / 편집 전 약 98.235km 노선 / GTX 1060 6GB에서 PI 삽입 3.42ms, 삭제 2.89ms, Orbit p95 13.42ms를 관측했습니다. 지형 메시 갱신은 이후 비동기로 처리하며 이 수치는 편집 호출 시간입니다. 사용자 노선의 일정한 성능을 보장하지 않습니다.
+
+
+## 0.10 사용자 기준 설계 검토 (개발 브랜치)
+
+기존 창을 저장하고 닫은 뒤 같은 `run-godot.cmd`를 실행하세요. `설계 검토`에서 기준을 입력하고 `검토`를 누릅니다. 초기값은 동작 확인용 예시이며 국내 설계기준을 내장한 값이 아닙니다. C++ DLL은 `kroad_core_v08`, 프로젝트 형식은 v4를 유지합니다.
+
+- 최소 원곡선 반경 R, 각 진입·진출 완화길이 Ls, 최대 절대 종단구배(%), 볼록·오목 최소 K(m/%)를 비교합니다. 기준 0은 해당 비교만 생략합니다.
+- R=0이면서 방향이 바뀌는 평면 교점, Lv=0이면서 구배가 바뀌는 종단 교점은 별도 경고로 표시합니다. 직선상 PI와 구배차 0인 PVI는 무곡선 경고 대상이 아닙니다.
+- 포물선 구간의 구배 한계 교차 측점을 해석적으로 구합니다. 고정 간격 DEM 표본을 검사하는 방식이 아닙니다. 최대 절대 구배는 접선구배와 포물선의 선형 구배에서 구합니다.
+- 행을 선택하면 해당 범위의 중간 측점으로 이동하고 관련 PI/PVI를 선택합니다. 위치와 횡단, 3D를 함께 확인할 수 있습니다. 항목별 사유는 행의 툴팁으로 표시합니다.
+- 설정값·집계·지적 항목을 22열 UTF-8 CSV로 내보냅니다. 지적이 없어도 summary 행은 저장합니다. 설계·DEM·기준 변경 시 결과와 CSV 출력을 무효화합니다. 거절된 편집은 기존 결과를 유지합니다.
+- 검토 설정과 결과는 프로젝트에 저장하지 않습니다. 설계 형상·DEM·실행 취소 이력을 변경하지 않습니다. 시거·편경사·배수·지형 적합성 등은 검사하지 않으며 지적 없음은 설계기준 적합성 판정이 아닙니다.
+- 측점 슬라이더의 기존 0.1% 반올림을 제거했습니다. 토공량 표와 설계 검토표 모두 장거리 노선에서 지정 측점으로 이동합니다.
+
+상세 산식·항목은 [설계 검토](docs/design-review.md)를 참조하세요.
+
+```powershell
+godot --headless --path godot/project --script verify_review.gd
+godot --headless --path godot/project -- --review-smoke
+godot --path godot/project -- --visual-test "C:/absolute/path/review-preview.png" --curve-demo --review-demo
+```
+
+반경·완화길이 경계값, 볼록·오목 K 분리, ±10% → ∓10% 포물선의 구배 한계 교차, 무곡선 교점, 0/잘못된 기준값, 행 선택·정확한 측점 이동, CSV, 변경 무효화 및 기존 PI/PVI/토공량 회귀 검사를 통과했습니다. 합성 3601×3601 DEM / 약 98.235km 노선에서 검토 계산 0.12ms를 관측했습니다. DEM을 읽지 않는 선형 매개변수 계산 시간이며 임의 노선의 일정한 성능을 보장하는 값은 아닙니다.

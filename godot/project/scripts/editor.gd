@@ -1,6 +1,8 @@
 extends Control
 const EarthworkReport=preload("res://scripts/earthwork_report.gd")
 var earthwork_report
+const ReviewWindow=preload("res://scripts/review_window.gd")
+var review_window
 const Model = preload("res://scripts/road_model.gd")
 const DesignCanvas = preload("res://scripts/design_canvas.gd")
 const TILE = 32
@@ -75,7 +77,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--topology-smoke" in OS.get_cmdline_user_args():
+ if "--review-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_review_smoke")
+ elif "--topology-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_topology_smoke")
  elif "--earthwork-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_earthwork_smoke")
@@ -170,6 +174,7 @@ func build_ui():
  button(toolbar,"화면 맞춤",fit_camera)
  button(toolbar,"측점 보기",focus_station)
  button(toolbar,"토공량",func():earthwork_report.popup_centered(Vector2i(1200,720)))
+ button(toolbar,"설계 검토",func():review_window.popup_centered(Vector2i(1250,650)))
  undo_button=button(toolbar,"실행 취소",undo_edit)
  redo_button=button(toolbar,"다시 실행",redo_edit)
  undo_button.tooltip_text="설계 실행 취소 (Ctrl+Z)"
@@ -337,7 +342,7 @@ func build_ui():
  station_slider=HSlider.new()
  station_slider.min_value=0
  station_slider.max_value=1
- station_slider.step=0.001
+ station_slider.step=0 # Preserve exact table stations on long alignments.
  station_slider.value=0.5
  station_slider.value_changed.connect(func(value):model.station=value;profile.queue_redraw();section.queue_redraw())
  section_box.add_child(station_slider)
@@ -361,6 +366,16 @@ func build_ui():
  earthwork_report.station_selected.connect(func(station):
   if model.length()>0:station_slider.value=station/model.length())
  add_child(earthwork_report)
+ review_window=ReviewWindow.new()
+ review_window.visible=false
+ review_window.snapshot_provider=func():return {"design":model.edit_state(),"revision":revision}
+ review_window.revision_provider=func():return revision
+ review_window.finding_selected.connect(func(row):
+  if model.length()>0:station_slider.value=row.station/model.length()
+  if row.kind=="PI":select_pi(row.index-1)
+  elif row.kind=="PVI":select_pvi(row.index-1)
+  focus_station())
+ add_child(review_window)
  message=AcceptDialog.new()
  add_child(message)
 
@@ -381,6 +396,7 @@ func reset_terrain():
  cancel_pi_insertion()
  insert_dialog.hide()
  if earthwork_report!=null:earthwork_report.invalidate()
+ if review_window!=null:review_window.invalidate()
  clear_history()
  revision+=1
  apply_queue.clear()
@@ -480,6 +496,7 @@ func changed(previous, record_history=true, quiet=false):
  cancel_pi_insertion()
  revision+=1
  if earthwork_report!=null:earthwork_report.invalidate()
+ if review_window!=null:review_window.invalidate()
  apply_queue.clear()
  dirty.merge(Model.affected(previous,TILE),true)
  dirty.merge(Model.affected(model.snapshot(),TILE),true)
@@ -998,6 +1015,14 @@ func run_visual_test():
    await get_tree().process_frame
   if not earthwork_report.result.is_empty():
    print("BENCH EARTHWORK: %.1f ms / %d sections / %.2f%% covered / %d rendered frames" % [earthwork_report.result.ms,earthwork_report.result.sections.size(),earthwork_report.result.coverage*100,work_frames])
+ if "--review-demo" in arguments:
+  review_window.popup_centered(Vector2i(1250,650))
+  review_window.inputs.min_r.value=1000
+  review_window.inputs.min_ls.value=200
+  review_window.inputs.max_grade.value=1
+  review_window.inputs.min_k_crest.value=500
+  assert(review_window.run_review())
+  print("BENCH REVIEW: %.2f ms / %d findings / %d checks" % [review_window.result.ms,review_window.result.issues.size(),review_window.result.checks])
  if "--table-demo" in arguments:
   show_curve_table()
   await get_tree().process_frame
@@ -1657,4 +1682,93 @@ func run_topology_smoke():
  assert(not delete_selected_pi(true))
  assert(model.edit_state()==detour and undo_stack.size()==history_count and revision==current_revision)
  print("PASS PI TOPOLOGY: canvas/numeric insert, R/Ls association, independent PVI, delete/undo/redo, overlap/NoData/bounds/endpoint rejection, Esc/right-click, v4 roundtrip, shortening rollback")
+ get_tree().quit(0)
+
+
+func run_review_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(300,3300))
+ add_point(Vector2(2700,3300))
+ add_point(Vector2(2700,600))
+ select_pi(1)
+ radius_input.value=300
+ spiral_input.value=50
+ apply_curves()
+ assert(add_pvi(1000,220))
+ select_pvi(1)
+ vertical_input.value=200
+ apply_pvi_values()
+ review_window.inputs.min_r.value=500
+ review_window.inputs.min_ls.value=100
+ review_window.inputs.max_grade.value=1
+ assert(review_window.run_review())
+ assert(review_window.result.violations>=2)
+ var item=review_window.table.get_root().get_first_child()
+ var selected=-1
+ while item!=null:
+  var index=int(item.get_metadata(0))
+  if review_window.result.issues[index].kind=="PI":
+   selected=index
+   item.select(0)
+   review_window.table.item_selected.emit()
+   break
+  item=item.get_next()
+ assert(selected>=0)
+ var row=review_window.result.issues[selected]
+ assert(pi_selector.selected==row.index-1)
+ assert(abs(station_slider.value*model.length()-row.station)<0.01)
+ item=review_window.table.get_root().get_first_child()
+ var pvi_found=false
+ while item!=null:
+  var index=int(item.get_metadata(0))
+  var finding=review_window.result.issues[index]
+  if finding.kind=="PVI":
+   item.select(0)
+   review_window.table.item_selected.emit()
+   assert(pvi_selector.selected==finding.index-1)
+   assert(abs(model.station*model.length()-finding.station)<0.00001)
+   pvi_found=true
+   break
+  item=item.get_next()
+ assert(pvi_found)
+ var exact_fraction=12345.6789/98234.998
+ station_slider.value=exact_fraction
+ assert(abs(station_slider.value-exact_fraction)<1e-12)
+ assert(review_window.export_csv("user://review-smoke.csv"))
+ var csv=FileAccess.open("user://review-smoke.csv",FileAccess.READ)
+ assert(csv.get_csv_line().size()==22)
+ var summary_row=csv.get_csv_line()
+ assert(summary_row.size()==22 and summary_row[0]=="summary")
+ var count=0
+ while csv.get_position()<csv.get_length():
+  var record=csv.get_csv_line()
+  assert(record.size()==22 and record[0]=="finding")
+  count+=1
+ assert(count==review_window.result.issues.size())
+ csv.close()
+ # Rejected geometry does not discard a valid review; accepted edits do.
+ var before=model.edit_state()
+ assert(not insert_pi(0,Vector2(-10,100),true))
+ assert(model.edit_state()==before and not review_window.result.is_empty())
+ assert(move_pi(1,Vector2(2800,3300)))
+ assert(review_window.result.is_empty() and review_window.csv_button.disabled)
+ assert(not review_window.export_csv("user://stale-review.csv"))
+ undo_edit()
+ assert(review_window.result.is_empty())
+ assert(review_window.run_review())
+ review_window.inputs.min_r.value=600
+ assert(review_window.result.is_empty() and review_window.csv_button.disabled)
+ # A report with no issues still exports settings and summary.
+ clear_route()
+ add_point(Vector2(300,1000))
+ add_point(Vector2(2000,1000))
+ for key in review_window.inputs:review_window.inputs[key].value=0
+ assert(review_window.run_review() and review_window.result.issues.is_empty())
+ assert(review_window.export_csv("user://review-empty.csv"))
+ csv=FileAccess.open("user://review-empty.csv",FileAccess.READ)
+ assert(csv.get_csv_line().size()==22)
+ assert(csv.get_csv_line()[0]=="summary")
+ assert(csv.get_position()==csv.get_length())
+ csv.close()
+ print("PASS DESIGN REVIEW UI: row navigation, 22-column CSV, settings/revision invalidation, rejected edit preservation, empty summary export")
  get_tree().quit(0)
