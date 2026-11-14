@@ -98,7 +98,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--comparison-smoke" in OS.get_cmdline_user_args():
+ if "--mass-haul-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_mass_haul_smoke")
+ elif "--comparison-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_comparison_smoke")
  elif "--alternatives-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_alternatives_smoke")
@@ -457,8 +459,7 @@ func build_ui():
  earthwork_report.visible=false
  earthwork_report.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision,"length":model.length()}
  earthwork_report.revision_provider=func():return revision
- earthwork_report.station_selected.connect(func(station):
-  if model.length()>0:station_slider.value=station/model.length())
+ earthwork_report.station_selected.connect(set_station_distance)
  add_child(earthwork_report)
  station_table=StationTable.new()
  station_table.visible=false
@@ -1187,7 +1188,7 @@ func run_visual_test():
   if "--insert-dialog" in arguments:
    select_pi(0)
    show_pi_insert()
- if "--earthwork-demo" in arguments:
+ if "--earthwork-demo" in arguments or "--mass-haul-demo" in arguments:
   earthwork_report.popup_centered(Vector2i(1200,720))
   earthwork_report.start_calculation()
   var work_start=Time.get_ticks_usec()
@@ -1199,6 +1200,11 @@ func run_visual_test():
    await get_tree().process_frame
   if not earthwork_report.result.is_empty():
    print("BENCH EARTHWORK: %.1f ms / %d sections / %.2f%% covered / %d rendered frames" % [earthwork_report.result.ms,earthwork_report.result.sections.size(),earthwork_report.result.coverage*100,work_frames])
+ if "--mass-haul-demo" in arguments:
+  var graph_started=Time.get_ticks_usec()
+  earthwork_report.mass_window.show_report(earthwork_report.result,revision)
+  print("BENCH MASS HAUL: %.2f ms / %d segments / %d CSV rows" % [(Time.get_ticks_usec()-graph_started)/1000.0,earthwork_report.mass_window.graph.data.segments.size(),earthwork_report.mass_window.graph.data.rows.size()])
+  await get_tree().process_frame
  if "--navigation-demo" in arguments:
   var map=plan.map_rect()
   var point=model.sample(model.length()*0.5).point
@@ -2891,4 +2897,51 @@ func run_comparison_smoke():
  alternative_comparison.interval.value=25
  assert(alternative_comparison.result.is_empty())
  print("PASS ALTERNATIVE COMPARISON UI: readonly batch, quoted 25-column CSV, library/settings invalidation, stale results, explicit cancellation")
+ get_tree().quit(0)
+
+
+func run_mass_haul_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ earthwork_report.start_calculation()
+ while earthwork_report.worker!=null:await get_tree().process_frame
+ assert(not earthwork_report.mass_button.disabled)
+ var window=earthwork_report.mass_window
+ assert(window.show_report(earthwork_report.result,revision))
+ var before=model.edit_state()
+ var undo_before=undo_stack.size()
+ var rev=revision
+ var graph=window.graph
+ assert(not graph.data.segments.is_empty())
+ graph.zoom_at(graph.plot_rect().get_center().x,0.5)
+ assert(graph.view_end-graph.view_start<model.length())
+ graph.fit()
+ var click=InputEventMouseButton.new()
+ click.button_index=MOUSE_BUTTON_LEFT
+ click.pressed=true
+ click.position=graph.screen(Vector2(600,0))
+ graph._gui_input(click)
+ assert(abs(model.station*model.length()-graph.selected)<0.000001)
+ assert(model.edit_state()==before and undo_stack.size()==undo_before and revision==rev)
+ assert(window.export_csv("user://mass-haul.csv"))
+ var csv=FileAccess.open("user://mass-haul.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ assert(csv.get_csv_line().size()==12 and csv.get_csv_line().size()==12)
+ var mock=earthwork_report.result.duplicate(true)
+ mock.sections=[{"station":0.0},{"station":10.0,"interval_status":"excluded","cut_volume":null,"fill_volume":null},{"station":20.0,"interval_status":"included","cut_volume":0.0,"fill_volume":0.0}]
+ assert(window.show_report(mock,revision))
+ assert(window.export_csv("user://mass-haul-gap.csv"))
+ csv=FileAccess.open("user://mass-haul-gap.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ csv.get_csv_line()
+ var missing=csv.get_csv_line()
+ var zero=csv.get_csv_line()
+ assert(missing[6]=="" and missing[7]=="excluded" and missing[8]=="" and missing[10]=="" and float(missing[11])==0)
+ assert(zero[6]=="1" and zero[7]=="segment_start" and float(zero[10])==0)
+ edit_elevation(1,model.pvi_heights[1]+1)
+ assert(window.report.is_empty() and graph.data.is_empty() and window.csv_button.disabled and earthwork_report.mass_button.disabled)
+ assert(not window.export_csv("user://stale-mass-haul.csv"))
+ assert(not window.show_report(earthwork_report.result,rev))
+ print("PASS MASS HAUL UI: plot, zoom, station navigation, immutable design/history, CSV and invalidation")
  get_tree().quit(0)

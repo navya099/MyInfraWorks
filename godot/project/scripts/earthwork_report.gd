@@ -18,6 +18,8 @@ var csv_button: Button
 var csv_dialog: FileDialog
 var setting_table=false
 var note: Label
+var mass_window
+var mass_button: Button
 
 func _ready():
  title="절토·성토량 / 평균단면법"
@@ -67,6 +69,17 @@ func _ready():
  csv_dialog.filters=PackedStringArray(["*.csv ; Earthwork CSV"])
  csv_dialog.file_selected.connect(export_csv)
  add_child(csv_dialog)
+ if get_script()==load("res://scripts/earthwork_report.gd"):
+  mass_window=load("res://scripts/mass_haul_window.gd").new()
+  mass_window.visible=false
+  mass_window.revision_provider=func():return revision_provider.call()
+  mass_window.station_selected.connect(func(station):station_selected.emit(station))
+  add_child(mass_window)
+  mass_button=Button.new()
+  mass_button.text="누가토량도"
+  mass_button.disabled=true
+  mass_button.pressed.connect(func():mass_window.show_report(result,result_revision))
+  settings.add_child(mass_button)
 
 func number(parent,label_text,value,minimum,maximum,step):
  var label=Label.new()
@@ -82,6 +95,8 @@ func number(parent,label_text,value,minimum,maximum,step):
  return input
 
 func invalidate():
+ if mass_window!=null:mass_window.invalidate()
+ if mass_button!=null:mass_button.disabled=true
  generation+=1
  result={}
  result_revision=-1
@@ -159,6 +174,7 @@ func _process(_delta):
   show_result()
 
 func show_result():
+ if mass_button!=null:mass_button.disabled=false
  csv_button.disabled=false
  var label="전 구간 추정량" if result.complete else "유효 구간 부분합"
  summary.text="%s | 절토 %.1f m³ / 성토 %.1f m³ / 절토−성토 %.1f m³\n산출 길이 %.1f / %.1f m (%.2f%%) · 제외 구간 %d · 무효 단면 %d" % [label,result.cut_volume,result.fill_volume,result.net_cut_minus_fill,result.covered_length,result.total_length,result.coverage*100,result.excluded_intervals,result.invalid_sections]
