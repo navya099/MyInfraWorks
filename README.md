@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/alignment-station-table` (0.17). 확인된 0.16은 `main`에 반영했습니다.
+개발 브랜치: `feature/dxf-export` (0.18). 확인된 0.17은 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.17. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.18. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/alignment-station-table --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/dxf-export --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -55,7 +55,7 @@ dotnet run --project legacy/wpf/KRoadPrototype.csproj -c Release
 python -m SCons -C godot platform=windows target=template_debug arch=x86_64 build_profile=build_profile.json -j4
 ```
 
-생성 파일은 `godot/project/bin/kroad_core_v016.windows.template_debug.x86_64.dll`입니다. 아래 `godot` 명령은 설치한 Godot 실행 파일 경로로 바꿔 실행해도 됩니다.
+생성 파일은 `godot/project/bin/kroad_core_v018.windows.template_debug.x86_64.dll`입니다. 아래 `godot` 명령은 설치한 Godot 실행 파일 경로로 바꿔 실행해도 됩니다.
 
 ```powershell
 godot --headless --path godot/project --editor --import --quit
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.17 실행
+## Godot 편집기 0.18 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -419,7 +419,7 @@ godot --headless --path godot/project -- --slopes-smoke
 합성 3601×3601 DEM / 약 98.235km 노선 / 성토2·절토0.5 / GTX 1060 6GB에서 Orbit p95 13.46ms, PVI 드래그+Orbit p95 19.30ms, 4,920개 단면 수량 1122.0ms(계산 중 86프레임 갱신)를 관측했습니다. 실제 사용자 노선의 일정한 성능을 보장하는 값은 아닙니다.
 
 
-## 0.17 노선 측점표·CSV (개발 브랜치)
+## 0.17 노선 측점표·CSV (main 반영 완료)
 
 상단 `측점표` → 간격 지정 → `산출`로 표를 만듭니다. 기본 간격은 20m이며 시·종점, PI/PVI, 평면 요소 경계와 종단곡선 시작/끝을 추가합니다. 같은 측점은 합치고 경계 종류를 함께 기록합니다.
 
@@ -440,3 +440,26 @@ godot --headless --path godot/project -- --station-table-smoke
 정규·경계 측점 병합, 포물선 해석고·구배, 좌우 가장자리, 원곡선 반경, 좌표 부호/LOCAL, NoData, 행 수 제한, 행 선택, CSV, 설계 불변과 변경 무효화 검사를 통과했습니다. 기존 측점·횡단 1:1·추가 모드·확대·사면·수량·검토 검사도 통과했습니다.
 
 합성 3601×3601 DEM / 약 98.235km 노선에서 4,921행 측점표의 작업 스레드 계산은 128.0ms였습니다. UI 표시·파일 저장 시간은 별도이며 사용자 데이터에서 일정한 성능을 보장하는 수치는 아닙니다.
+
+
+## 0.18 CAD DXF 내보내기 (개발 브랜치)
+
+`DXF` → 최대 측점 간격/좌표 모드 지정 → `산출` → `DXF 저장`을 사용합니다. 중심선과 좌우 도로 가장자리를 별도 레이어의 열린 3D 폴리라인으로 내보냅니다. 형식은 ASCII DXF R12이며 1 도면 단위는 1m입니다. CAD 가져오기 단위도 m로 지정하세요.
+
+- 로컬 모드는 X 동쪽 / Y 북쪽(앱의 남 Y 부호 반전) / Z 설계고입니다. DEM 원점이 있으면 EPSG:5179 E/N 좌표 모드도 선택할 수 있습니다.
+- 앱의 적응 분할 측점과 지정 최대 간격을 함께 사용하고 정확한 double sample(s)로 정점을 만듭니다. 기본 최대 측점 간격은 10m, 허용 1~25m, 분할 포함 최대30,000측점입니다.
+- 좌우 가장자리 표고에 도로 폭·계획고 보정·횡단구배를 적용합니다. 화면용 0.5m 표시 높이는 제외합니다.
+- 산출은 별도 스레드이며 설계·DEM·간격·좌표 모드가 바뀌면 이전 결과와 출력을 무효화합니다. 설계와 실행 취소 이력은 바꾸지 않습니다.
+- CAD 선형 객체나 정확한 원호/클로소이드 객체가 아닌 선분 근사입니다. 지형·사면 메시·시트 도면은 이번 출력에 포함하지 않습니다.
+
+프로젝트는 v6를 유지하고 새 DLL kroad_core_v018을 빌드했습니다. 기존 창을 저장하고 닫은 뒤 같은 run-godot.cmd로 실행하세요. 런타임에 DXF용 Python 패키지를 요구하지 않습니다.
+
+[DXF 좌표·형식·검증](docs/dxf-export.md)을 참조하세요. 별도 판독기 ezdxf 1.3.0에서 오류/자동 수정 0건, 3개 3D 레이어, 좌표 부호, 설계고·횡단구배, 원곡선/가장자리 반경과 포물선 높이를 검증했습니다. 실제 저장 신호, 조건/설계 변경 무효화와 기존 측점·횡단1:1·추가모드·사면 검사도 통과했습니다.
+
+```powershell
+godot --headless --path godot/project --script verify_dxf.gd
+python tests/verify_dxf_export.py "verify_dxf.gd가 출력한 DXF FIXTURES 경로"
+godot --headless --path godot/project -- --dxf-smoke
+```
+
+합성 3601×3601 DEM / 약 98.235km 노선의 41,265정점 DXF 작업 스레드 계산은 734.2ms였습니다. 파일 저장/UI 표시 시간은 별도이며 사용자 데이터에서 일정한 성능을 보장하는 값은 아닙니다.

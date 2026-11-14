@@ -6,7 +6,7 @@ if not exist "%GODOT_BIN%" (
  pause
  exit /b 1
 )
-if not exist "%~dp0godot\project\bin\kroad_core_v016.windows.template_debug.x86_64.dll" (
+if not exist "%~dp0godot\project\bin\kroad_core_v018.windows.template_debug.x86_64.dll" (
  echo Build the C++ extension first. See README.md.
  pause
  exit /b 1

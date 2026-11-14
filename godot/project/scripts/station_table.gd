@@ -15,6 +15,8 @@ var table: TextEdit
 var csv_button: Button
 var csv_dialog: FileDialog
 var setting_table=false
+var settings: HBoxContainer
+var hint: Label
 
 func _ready():
  title="노선 측점표"
@@ -26,7 +28,8 @@ func _ready():
  add_child(margin)
  var root=VBoxContainer.new()
  margin.add_child(root)
- var row=HBoxContainer.new()
+ settings=HBoxContainer.new()
+ var row=settings
  root.add_child(row)
  var label=Label.new()
  label.text="측점 간격(m)"
@@ -51,7 +54,7 @@ func _ready():
  status.text="노선 작성 후 산출하세요."
  status.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  root.add_child(status)
- var hint=Label.new()
+ hint=Label.new()
  hint.text="행 선택: 측점 이동 · 좌표는 로컬 동/남 · CSV에 EPSG:5179 좌표 포함(원점 정보가 있는 DEM) · 지반/차이 NA는 결측"
  hint.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  root.add_child(hint)

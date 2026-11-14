@@ -3,6 +3,8 @@ const EarthworkReport=preload("res://scripts/earthwork_report.gd")
 var earthwork_report
 const StationTable=preload("res://scripts/station_table.gd")
 var station_table
+const DxfWindow=preload("res://scripts/dxf_window.gd")
+var dxf_window
 const ReviewWindow=preload("res://scripts/review_window.gd")
 var review_window
 const Model = preload("res://scripts/road_model.gd")
@@ -89,7 +91,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--station-table-smoke" in OS.get_cmdline_user_args():
+ if "--dxf-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_dxf_smoke")
+ elif "--station-table-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_station_table_smoke")
  elif "--station-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_station_smoke")
@@ -219,6 +223,7 @@ func build_ui():
  button(toolbar,"측점 보기",focus_station)
  button(toolbar,"토공량",func():earthwork_report.popup_centered(Vector2i(1200,720)))
  button(toolbar,"측점표",func():station_table.popup_centered(Vector2i(1250,650)))
+ button(toolbar,"DXF",func():dxf_window.open_export())
  button(toolbar,"설계 검토",func():review_window.popup_centered(Vector2i(1250,650)))
  undo_button=button(toolbar,"실행 취소",undo_edit)
  redo_button=button(toolbar,"다시 실행",redo_edit)
@@ -449,6 +454,11 @@ func build_ui():
  station_table.revision_provider=func():return revision
  station_table.station_selected.connect(set_station_distance)
  add_child(station_table)
+ dxf_window=DxfWindow.new()
+ dxf_window.visible=false
+ dxf_window.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision}
+ dxf_window.revision_provider=func():return revision
+ add_child(dxf_window)
  review_window=ReviewWindow.new()
  review_window.visible=false
  review_window.snapshot_provider=func():return {"design":model.edit_state(),"revision":revision}
@@ -484,6 +494,7 @@ func reset_terrain():
  insert_dialog.hide()
  if earthwork_report!=null:earthwork_report.invalidate()
  if station_table!=null:station_table.invalidate()
+ if dxf_window!=null:dxf_window.invalidate()
  if review_window!=null:review_window.invalidate()
  clear_history()
  revision+=1
@@ -588,6 +599,7 @@ func changed(previous, record_history=true, quiet=false):
  revision+=1
  if earthwork_report!=null:earthwork_report.invalidate()
  if station_table!=null:station_table.invalidate()
+ if dxf_window!=null:dxf_window.invalidate()
  if review_window!=null:review_window.invalidate()
  apply_queue.clear()
  dirty.merge(Model.affected(previous,TILE),true)
@@ -1183,6 +1195,12 @@ func run_visual_test():
   apply_parameters()
   section.fit_section(true)
   while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ if "--dxf-demo" in arguments:
+  dxf_window.open_export()
+  dxf_window.start_calculation()
+  while dxf_window.worker!=null:await get_tree().process_frame
+  assert(not dxf_window.result.is_empty())
+  print("BENCH DXF: %.1f ms / %d vertices" % [dxf_window.result.ms,dxf_window.result.vertices])
  if "--station-table-demo" in arguments:
   station_table.popup_centered(Vector2i(1250,650))
   station_table.start_calculation()
@@ -2590,4 +2608,47 @@ func run_station_table_smoke():
  model.source=original
  station_table.invalidate()
  print("PASS STATION TABLE UI: async result, row navigation, unchanged design/history, 21-column CSV, local/NoData blanks, interval invalidation and stale result rejection")
+ get_tree().quit(0)
+
+
+func run_dxf_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var rev=revision
+ dxf_window.open_export()
+ assert(dxf_window.coordinate_mode.is_item_disabled(1))
+ dxf_window.start_calculation()
+ while dxf_window.worker!=null:await get_tree().process_frame
+ assert(not dxf_window.result.is_empty())
+ # Test the inherited dialog's actual save signal dispatches to DXF export.
+ dxf_window.csv_dialog.file_selected.emit("user://dxf-ui.dxf")
+ var file=FileAccess.open("user://dxf-ui.dxf",FileAccess.READ)
+ assert(file!=null and "POLYLINE" in file.get_as_text())
+ file.close()
+ dxf_window.table.set_caret_line(2)
+ dxf_window.select_row()
+ assert(model.edit_state()==before and revision==rev)
+ dxf_window.interval.value=12
+ assert(dxf_window.result.is_empty() and dxf_window.csv_button.disabled)
+ dxf_window.start_calculation()
+ assert(move_pi(1,Vector2(1900,1000)))
+ while dxf_window.worker!=null:await get_tree().process_frame
+ assert(dxf_window.result.is_empty())
+ assert(not dxf_window.export_csv("user://stale-dxf.dxf"))
+ dxf_window.start_calculation()
+ while dxf_window.worker!=null:await get_tree().process_frame
+ dxf_window.coordinate_mode.item_selected.emit(0)
+ assert(dxf_window.result.is_empty())
+ model.source.OriginX=1000000.0
+ model.source.OriginY=2000000.0
+ dxf_window.open_export()
+ assert(not dxf_window.coordinate_mode.is_item_disabled(1))
+ dxf_window.coordinate_mode.select(1)
+ dxf_window.coordinate_mode.item_selected.emit(1)
+ dxf_window.start_calculation()
+ while dxf_window.worker!=null:await get_tree().process_frame
+ assert(dxf_window.result.crs=="EPSG:5179" and "1000600.000000000" in dxf_window.result.text)
+ print("PASS DXF UI: background build, real save signal, no design edits, spacing/coordinate invalidation, stale export rejection")
  get_tree().quit(0)

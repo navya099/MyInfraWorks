@@ -2,5 +2,5 @@
 entry_symbol = "kroad_library_init"
 compatibility_minimum = "4.5"
 [libraries]
-windows.debug.x86_64 = "res://bin/kroad_core_v016.windows.template_debug.x86_64.dll"
-windows.release.x86_64 = "res://bin/kroad_core_v016.windows.template_release.x86_64.dll"
+windows.debug.x86_64 = "res://bin/kroad_core_v018.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://bin/kroad_core_v018.windows.template_release.x86_64.dll"

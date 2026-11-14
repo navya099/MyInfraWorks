@@ -3,6 +3,7 @@
 #include <godot_cpp/variant/packed_int32_array.hpp>
 using namespace godot;
 void KRoadAlignment::_bind_methods(){
+ ClassDB::bind_method(D_METHOD("sampling_stations"),&KRoadAlignment::sampling_stations);
  ClassDB::bind_method(D_METHOD("ribbon_crossfall","width","offset","base","center_x","center_y","left_percent","right_percent"),&KRoadAlignment::ribbon_crossfall);
  ClassDB::bind_method(D_METHOD("configure","points","radii","spirals","vertical_lengths"),&KRoadAlignment::configure);
  ClassDB::bind_method(D_METHOD("configure_independent","points","radii","spirals","stations","heights","lengths"),&KRoadAlignment::configure_independent);
@@ -77,4 +78,8 @@ Dictionary KRoadAlignment::ribbon_crossfall(double width,double offset,double ba
   if(i>0){int a=int(i-1)*3;for(int side:{0,1})for(int k:{a+side,a+side+1,a+side+3,a+side+1,a+side+4,a+side+3})indices.push_back(k);}
  }
  out["vertices"]=vertices;out["indices"]=indices;return out;
+}
+
+PackedFloat64Array KRoadAlignment::sampling_stations() const {
+ PackedFloat64Array result;for(double s:alignment.tessellation())result.push_back(s);return result;
 }
