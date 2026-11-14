@@ -4,6 +4,7 @@ signal apply_requested(index)
 signal rename_requested(index,name)
 signal delete_requested(index)
 signal save_requested
+signal compare_requested
 var library
 var current_provider: Callable
 var name_input: LineEdit
@@ -72,6 +73,10 @@ func _ready():
  hint.text="보관 후 프로젝트 저장 · 적용은 실행 취소 1단계 · DEM 중복 저장 없음 · 최대 20개"
  hint.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  root.add_child(hint)
+ var compare=Button.new()
+ compare.text="보관 대안 토공량 비교"
+ compare.pressed.connect(func():compare_requested.emit())
+ root.add_child(compare)
  confirmation=ConfirmationDialog.new()
  confirmation.title="보관 대안 삭제"
  confirmation.confirmed.connect(func():

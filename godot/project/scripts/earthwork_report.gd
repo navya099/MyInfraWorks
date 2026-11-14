@@ -17,6 +17,7 @@ var table: TextEdit
 var csv_button: Button
 var csv_dialog: FileDialog
 var setting_table=false
+var note: Label
 
 func _ready():
  title="절토·성토량 / 평균단면법"
@@ -51,17 +52,14 @@ func _ready():
  summary.text="노선을 작성한 뒤 계산하세요."
  summary.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  root.add_child(summary)
- var note=Label.new()
+ note=Label.new()
  note.text="개략 추정 · 곡선 면적중심/중첩/토량변화율 보정 없음 · 행 클릭: 횡단 측점 이동"
  root.add_child(note)
  table=TextEdit.new()
  table.editable=false
  table.size_flags_vertical=Control.SIZE_EXPAND_FILL
  table.add_theme_color_override("font_readonly_color",Color("dce8f2"))
- table.caret_changed.connect(func():
-  if setting_table or result.is_empty():return
-  var index=table.get_caret_line()-1
-  if index>=0 and index<result.sections.size():station_selected.emit(result.sections[index].station))
+ table.caret_changed.connect(select_row)
  root.add_child(table)
  csv_dialog=FileDialog.new()
  csv_dialog.access=FileDialog.ACCESS_FILESYSTEM
@@ -200,3 +198,9 @@ func export_csv(path):
 
 func _exit_tree():
  if worker!=null:worker.wait_to_finish()
+
+
+func select_row():
+ if setting_table or result.is_empty():return
+ var index=table.get_caret_line()-1
+ if index>=0 and index<result.sections.size():station_selected.emit(result.sections[index].station)

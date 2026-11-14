@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/design-alternatives` (0.19). 확인된 0.18은 `main`에 반영했습니다.
+개발 브랜치: `feature/alternative-earthwork-comparison` (0.20). 확인된 0.19는 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.19. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.20. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/design-alternatives --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/alternative-earthwork-comparison --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.19 실행
+## Godot 편집기 0.20 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -465,7 +465,7 @@ godot --headless --path godot/project -- --dxf-smoke
 합성 3601×3601 DEM / 약 98.235km 노선의 41,265정점 DXF 작업 스레드 계산은 734.2ms였습니다. 파일 저장/UI 표시 시간은 별도이며 사용자 데이터에서 일정한 성능을 보장하는 값은 아닙니다.
 
 
-## 0.19 설계 대안 보관·전환 (개발 브랜치)
+## 0.19 설계 대안 보관·전환 (main 반영 완료)
 
 상단 `대안` → 이름 입력 → `현재 설계 보관`으로 현재 노선을 보관합니다. 표에서 길이·PI/PVI 수와 현재 설계와의 일치 여부를 확인하고 `선택 대안 적용`으로 전환합니다.
 
@@ -486,3 +486,23 @@ godot --headless --path godot/project -- --alternatives-smoke
 불변 보관·이름/개수 제한, 형상 검증, 대안 적용/undo/redo, 삭제 확인, 빈 노선에서 복원, v7 저장·복원, 잘못된 대안 목록의 원자적 거절, v6·DEM 전환 검사를 통과했습니다. 기존 선형·PVI/PI 편집·횡단1:1·확대·사면·측점표·DXF 회귀 검사도 통과했습니다.
 
 합성 3601×3601 DEM / 약 98.235km 노선에서 계획고 수정·두 대안 보관·원안 재적용은 8.86ms, DEM을 제외한 두 보관본 직렬화 크기는 1200바이트였습니다. 비동기 지형 갱신 시간은 별도이며 노선의 제어점 수와 형상에 따라 달라집니다.
+
+
+## 0.20 보관 대안 토공량 비교 (개발 브랜치)
+
+`대안` 창 아래 `보관 대안 토공량 비교`를 열고 측점 간격·조사 반폭·횡단 간격을 지정해 `계산`합니다. 보관한 전체 대안을 같은 조사 조건으로 순차 계산하며 현재 설계를 전환하지 않습니다.
+
+- 길이·절토/성토·차이·유효/전체 길이와 제외 사유를 비교합니다. 첫 보관 대안이 기준이며 양쪽 모두 전 구간 계산 완료일 때만 Δ절토/Δ성토를 표시합니다.
+- 전 구간·유효 구간 부분합·미산출·오류를 구분합니다. 유효 구간이 전혀 없으면 수량을 NA/CSV 빈 셀로 기록하고, 실제 유효한 0m³와 구분합니다. 부분합끼리 수량 차이를 만들지 않습니다.
+- 계산 중 진행 대안을 표시하고 `중단`을 지원합니다. 중단은 현재 대안 계산 완료 후 처리하며 미완성 비교 결과는 내보내지 않습니다.
+- 설계/DEM/대안 추가·이름 변경·삭제/조사 조건 변경은 결과를 무효화하고 작업 중 결과도 버립니다. CSV는 기준명·산식·각 대안 설정과 상태를 포함한25열입니다.
+- 결과는 현재 실행에만 유지합니다. 프로젝트 v7과 DLL v018은 그대로이며 보관 대안이나 활성 설계/undo 이력을 변경하지 않습니다.
+
+[대안 수량 비교와 유효성](docs/alternative-comparison.md)을 참조하세요.
+
+```powershell
+godot --headless --path godot/project --script verify_comparison.gd
+godot --headless --path godot/project -- --comparison-smoke
+```
+
+해석해 체적/기준차, 부분합/미산출/유효0, 개별 대안 오류, 중단, 읽기 전용 동작, CSV 따옴표와 조건/목록 변경 무효화를 검사했습니다. 기존 대안 저장·수량·사면·횡단1:1·측점표 검사도 통과했습니다. 약98.235km 합성 노선의 두 대안 비교 계산은1709.7ms였습니다(파일 저장/UI 표시 시간 별도, 실제 데이터 성능 보장 아님).

@@ -9,6 +9,9 @@ const Alternatives=preload("res://scripts/design_alternatives.gd")
 const AlternativesWindow=preload("res://scripts/alternatives_window.gd")
 var alternatives=Alternatives.new()
 var alternatives_window
+const AlternativeComparison=preload("res://scripts/alternative_comparison.gd")
+var alternative_comparison
+var alternatives_revision=0
 const ReviewWindow=preload("res://scripts/review_window.gd")
 var review_window
 const Model = preload("res://scripts/road_model.gd")
@@ -95,7 +98,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--alternatives-smoke" in OS.get_cmdline_user_args():
+ if "--comparison-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_comparison_smoke")
+ elif "--alternatives-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_alternatives_smoke")
  elif "--dxf-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_dxf_smoke")
@@ -478,6 +483,12 @@ func build_ui():
   if import_worker==null:save_dialog.popup_centered_ratio(0.65)
   else:alternatives_window.status.text="파일 작업 중입니다. 완료 후 저장하세요.")
  add_child(alternatives_window)
+ alternative_comparison=AlternativeComparison.new()
+ alternative_comparison.visible=false
+ alternative_comparison.snapshot_provider=func():return {"entries":alternatives.serialize(),"source":model.source.duplicate(),"terrain":model.terrain.duplicate(),"revision":comparison_revision()}
+ alternative_comparison.revision_provider=comparison_revision
+ alternatives_window.compare_requested.connect(func():alternative_comparison.popup_centered(Vector2i(1250,650)))
+ add_child(alternative_comparison)
  review_window=ReviewWindow.new()
  review_window.visible=false
  review_window.snapshot_provider=func():return {"design":model.edit_state(),"revision":revision}
@@ -517,6 +528,7 @@ func reset_terrain(preserve_alternatives=false):
  cancel_pi_insertion()
  insert_dialog.hide()
  if earthwork_report!=null:earthwork_report.invalidate()
+ if alternative_comparison!=null:alternative_comparison.invalidate()
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
  if review_window!=null:review_window.invalidate()
@@ -623,6 +635,7 @@ func changed(previous, record_history=true, quiet=false):
  cancel_pi_insertion()
  revision+=1
  if earthwork_report!=null:earthwork_report.invalidate()
+ if alternative_comparison!=null:alternative_comparison.invalidate()
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
  if review_window!=null:review_window.invalidate()
@@ -1226,6 +1239,16 @@ func run_visual_test():
   apply_parameters()
   section.fit_section(true)
   while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ if "--comparison-demo" in arguments:
+  capture_alternative("기준 노선")
+  offset_input.value=5
+  apply_parameters()
+  capture_alternative("계획고 +5m")
+  alternative_comparison.popup_centered(Vector2i(1250,650))
+  alternative_comparison.start_calculation()
+  while alternative_comparison.worker!=null:await get_tree().process_frame
+  assert(not alternative_comparison.result.is_empty())
+  print("BENCH COMPARISON: %.1f ms / %d alternatives" % [alternative_comparison.result.ms,alternative_comparison.result.rows.size()])
  if "--alternatives-demo" in arguments:
   var begin=Time.get_ticks_usec()
   capture_alternative("기본 노선")
@@ -2698,12 +2721,15 @@ func run_dxf_smoke():
 func capture_alternative(name):
  var error=alternatives.capture(name,model)
  alternatives_window.status.text=error if error!="" else "대안 보관 완료 · 프로젝트를 저장하세요."
- if error=="":alternatives_window.selected=alternatives.entries.size()-1
+ if error=="":
+  alternatives_window.selected=alternatives.entries.size()-1
+  alternatives_changed()
  alternatives_window.refresh()
  return error==""
 
 func rename_alternative(index,name):
  var error=alternatives.rename(index,name)
+ if error=="":alternatives_changed()
  alternatives_window.status.text=error if error!="" else "이름 변경 완료 · 프로젝트를 저장하세요."
  alternatives_window.refresh()
  return error==""
@@ -2711,6 +2737,7 @@ func rename_alternative(index,name):
 func delete_alternative(index):
  if index<0 or index>=alternatives.entries.size():return false
  alternatives.entries.remove_at(index)
+ alternatives_changed()
  alternatives_window.selected=-1
  alternatives_window.refresh()
  alternatives_window.status.text="보관본 삭제 완료 · 현재 설계는 유지됩니다. 프로젝트를 저장하세요."
@@ -2813,4 +2840,55 @@ func run_alternatives_smoke():
  apply_document(imported,false)
  assert(alternatives.entries.is_empty())
  print("PASS ALTERNATIVES UI: capture unchanged design/revision, apply one undo step, undo/redo, rename, confirmed delete, v7 persistence, invalid list atomic rejection, v6 migration and DEM clear")
+ get_tree().quit(0)
+
+
+func comparison_revision():
+ return "%d:%d" % [revision,alternatives_revision]
+
+func alternatives_changed():
+ alternatives_revision+=1
+ if alternative_comparison!=null:alternative_comparison.invalidate()
+
+
+func run_comparison_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ assert(capture_alternative('A, "기준"'))
+ offset_input.value=5
+ apply_parameters()
+ assert(capture_alternative("B"))
+ var before=model.edit_state()
+ var library_before=alternatives.serialize()
+ var rev=revision
+ var history=undo_stack.size()
+ alternative_comparison.start_calculation()
+ while alternative_comparison.worker!=null:await get_tree().process_frame
+ assert(not alternative_comparison.result.is_empty() and alternative_comparison.result.rows.size()==2)
+ alternative_comparison.table.set_caret_line(1)
+ alternative_comparison.select_row()
+ assert(model.edit_state()==before and alternatives.serialize()==library_before and revision==rev and undo_stack.size()==history)
+ assert(alternative_comparison.export_csv("user://comparison.csv"))
+ var file=FileAccess.open("user://comparison.csv",FileAccess.READ)
+ assert(file.get_csv_line().size()==25)
+ var row=file.get_csv_line()
+ assert(row.size()==25 and row[0]=='A, "기준"')
+ file.close()
+ assert(rename_alternative(0,"A renamed"))
+ assert(alternative_comparison.result.is_empty() and alternative_comparison.csv_button.disabled)
+ assert(not alternative_comparison.export_csv("user://stale-comparison.csv"))
+ alternative_comparison.start_calculation()
+ assert(capture_alternative("C"))
+ while alternative_comparison.worker!=null:await get_tree().process_frame
+ assert(alternative_comparison.result.is_empty())
+ alternative_comparison.start_calculation()
+ alternative_comparison.token.cancel()
+ while alternative_comparison.worker!=null:await get_tree().process_frame
+ assert(alternative_comparison.result.is_empty() and alternative_comparison.csv_button.disabled)
+ alternative_comparison.start_calculation()
+ while alternative_comparison.worker!=null:await get_tree().process_frame
+ alternative_comparison.interval.value=25
+ assert(alternative_comparison.result.is_empty())
+ print("PASS ALTERNATIVE COMPARISON UI: readonly batch, quoted 25-column CSV, library/settings invalidation, stale results, explicit cancellation")
  get_tree().quit(0)
