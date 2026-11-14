@@ -5,6 +5,10 @@ const StationTable=preload("res://scripts/station_table.gd")
 var station_table
 const DxfWindow=preload("res://scripts/dxf_window.gd")
 var dxf_window
+const Alternatives=preload("res://scripts/design_alternatives.gd")
+const AlternativesWindow=preload("res://scripts/alternatives_window.gd")
+var alternatives=Alternatives.new()
+var alternatives_window
 const ReviewWindow=preload("res://scripts/review_window.gd")
 var review_window
 const Model = preload("res://scripts/road_model.gd")
@@ -91,7 +95,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--dxf-smoke" in OS.get_cmdline_user_args():
+ if "--alternatives-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_alternatives_smoke")
+ elif "--dxf-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_dxf_smoke")
  elif "--station-table-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_station_table_smoke")
@@ -214,7 +220,7 @@ func build_ui():
  var toolbar=HBoxContainer.new()
  root.add_child(toolbar)
  open_button=button(toolbar,"DEM 열기",func():dem_dialog.popup_centered_ratio(0.75))
- demo_button=button(toolbar,"데모",func():model.demo();reset_terrain())
+ demo_button=button(toolbar,"데모",func():alternatives.entries.clear();model.demo();reset_terrain())
  save_button=button(toolbar,"저장",func():save_dialog.popup_centered_ratio(0.65))
  load_button=button(toolbar,"프로젝트 열기",func():load_dialog.popup_centered_ratio(0.65))
  button(toolbar,"마지막 점 취소",remove_last)
@@ -224,6 +230,7 @@ func build_ui():
  button(toolbar,"토공량",func():earthwork_report.popup_centered(Vector2i(1200,720)))
  button(toolbar,"측점표",func():station_table.popup_centered(Vector2i(1250,650)))
  button(toolbar,"DXF",func():dxf_window.open_export())
+ button(toolbar,"대안",func():alternatives_window.open_library())
  button(toolbar,"설계 검토",func():review_window.popup_centered(Vector2i(1250,650)))
  undo_button=button(toolbar,"실행 취소",undo_edit)
  redo_button=button(toolbar,"다시 실행",redo_edit)
@@ -459,6 +466,18 @@ func build_ui():
  dxf_window.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision}
  dxf_window.revision_provider=func():return revision
  add_child(dxf_window)
+ alternatives_window=AlternativesWindow.new()
+ alternatives_window.visible=false
+ alternatives_window.library=alternatives
+ alternatives_window.current_provider=func():return model.edit_state()
+ alternatives_window.capture_requested.connect(capture_alternative)
+ alternatives_window.apply_requested.connect(apply_alternative)
+ alternatives_window.rename_requested.connect(rename_alternative)
+ alternatives_window.delete_requested.connect(delete_alternative)
+ alternatives_window.save_requested.connect(func():
+  if import_worker==null:save_dialog.popup_centered_ratio(0.65)
+  else:alternatives_window.status.text="파일 작업 중입니다. 완료 후 저장하세요.")
+ add_child(alternatives_window)
  review_window=ReviewWindow.new()
  review_window.visible=false
  review_window.snapshot_provider=func():return {"design":model.edit_state(),"revision":revision}
@@ -485,7 +504,12 @@ func show_error(text):
  message.dialog_text=text
  message.popup_centered(Vector2i(620,220))
 
-func reset_terrain():
+func reset_terrain(preserve_alternatives=false):
+ if not preserve_alternatives:alternatives.entries.clear()
+ if alternatives_window!=null:
+  alternatives_window.selected=-1
+  alternatives_window.name_input.clear()
+  alternatives_window.status.text="대안 %d개 · 보관/이름 변경/삭제 후 프로젝트를 저장하세요." % alternatives.entries.size()
  set_pi_add_mode(false)
  if plan!=null:plan.fit_navigation()
  if profile!=null:profile.fit_navigation()
@@ -496,6 +520,7 @@ func reset_terrain():
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
  if review_window!=null:review_window.invalidate()
+ if alternatives_window!=null and alternatives_window.visible:alternatives_window.refresh()
  clear_history()
  revision+=1
  apply_queue.clear()
@@ -601,6 +626,7 @@ func changed(previous, record_history=true, quiet=false):
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
  if review_window!=null:review_window.invalidate()
+ if alternatives_window!=null and alternatives_window.visible:alternatives_window.refresh()
  apply_queue.clear()
  dirty.merge(Model.affected(previous,TILE),true)
  dirty.merge(Model.affected(model.snapshot(),TILE),true)
@@ -811,7 +837,7 @@ func apply_document(document,is_project):
   show_error(error)
   return
  if is_project:
-  if document.get("version",0) not in [1,2,3,4,5,6]:
+  if document.get("version",0) not in [1,2,3,4,5,6,7]:
    show_error("지원하지 않는 프로젝트 버전입니다.")
    return
   var points=document.get("route",[])
@@ -910,19 +936,24 @@ func apply_document(document,is_project):
  if alignment_error!="":
   show_error("저장된 선형이 올바르지 않습니다.\n"+alignment_error)
   return
+ var decoded=Alternatives.decode(document.get("alternatives",null) if is_project and int(document.get("version",0))>=7 else [],candidate.terrain,candidate.source)
+ if not decoded.ok:
+  show_error(decoded.error)
+  return
+ alternatives.entries=decoded.entries
  model=candidate
  plan.model=model
  profile.model=model
  section.model=model
  section.fit_section(false)
  profile.edit_index=-1
- reset_terrain()
+ reset_terrain(true)
 
 func project_document():
  var points=[]
  for point in model.route:
   points.append([point.x,point.y,point.z])
- return {"version":6,"cut_slope":model.cut_slope,"crossfall":{"left":model.left_fall,"right":model.right_fall},"profile":{"stations":model.pvi_stations.duplicate(),"heights":model.pvi_heights.duplicate(),"lengths":model.pvi_lengths.duplicate()},"alignment":{"radii":model.radii.duplicate(),"spirals":model.spirals.duplicate(),"vertical_lengths":model.vertical_lengths.duplicate()},"terrain":model.terrain.duplicate(),"source":model.source.duplicate(),"route":points,"width":model.road_width,"offset":model.offset,"slope":model.slope}
+ return {"version":7,"alternatives":alternatives.serialize(),"cut_slope":model.cut_slope,"crossfall":{"left":model.left_fall,"right":model.right_fall},"profile":{"stations":model.pvi_stations.duplicate(),"heights":model.pvi_heights.duplicate(),"lengths":model.pvi_lengths.duplicate()},"alignment":{"radii":model.radii.duplicate(),"spirals":model.spirals.duplicate(),"vertical_lengths":model.vertical_lengths.duplicate()},"terrain":model.terrain.duplicate(),"source":model.source.duplicate(),"route":points,"width":model.road_width,"offset":model.offset,"slope":model.slope}
 
 static func save_job(path,document):
  var temporary=path+".tmp_"+str(Time.get_ticks_usec())
@@ -991,7 +1022,7 @@ func run_smoke():
  var loaded=read_document("user://smoke.kroadg",true)
  apply_document(loaded.document,true)
  assert(model.route==saved_route,"Project roundtrip changed route")
- assert(loaded.document.version==6,"New projects must store alignment parameters")
+ assert(loaded.document.version==7,"New projects must store alignment parameters")
  print("PASS GODOT EDITOR: async tiles, stale edit coalescing, camera independence, local rebuild, road mesh, project roundtrip")
  get_tree().quit(0)
 
@@ -1195,6 +1226,16 @@ func run_visual_test():
   apply_parameters()
   section.fit_section(true)
   while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ if "--alternatives-demo" in arguments:
+  var begin=Time.get_ticks_usec()
+  capture_alternative("기본 노선")
+  offset_input.value=5
+  apply_parameters()
+  capture_alternative("계획고 +5m 검토안")
+  apply_alternative(0)
+  print("BENCH ALTERNATIVES: edit, two captures and apply %.2f ms / design library %d bytes" % [(Time.get_ticks_usec()-begin)/1000.0,var_to_bytes(alternatives.serialize()).size()])
+  while worker!=null or not dirty.is_empty():await get_tree().process_frame
+  alternatives_window.open_library()
  if "--dxf-demo" in arguments:
   dxf_window.open_export()
   dxf_window.start_calculation()
@@ -1287,7 +1328,7 @@ func run_dem_smoke():
  while import_worker!=null:
   await get_tree().process_frame
  var saved=read_document("user://source_roundtrip.kroadg",true)
- assert(saved.document.version==6)
+ assert(saved.document.version==7)
  assert(saved.document.source.Heights is PackedFloat32Array)
  apply_document(saved.document,true)
  assert(model.source.Heights.size()==source_count)
@@ -1675,7 +1716,7 @@ func run_pvi_smoke():
  while import_worker!=null:
   await get_tree().process_frame
  var stored=read_document("user://independent_pvi.kroadg",true)
- assert(stored.document.version==6)
+ assert(stored.document.version==7)
  apply_document(stored.document,true)
  assert(model.edit_state()==saved and undo_stack.is_empty())
  # Actual v3 document migration must preserve the legacy shape, not just array sizes.
@@ -1692,7 +1733,7 @@ func run_pvi_smoke():
   assert(abs(model.sample(station_v).elevation-reference.sample(station_v).elevation)<0.0000001)
   assert(abs(model.sample(station_v).grade-reference.sample(station_v).grade)<0.0000001)
  print("PASS V3 MIGRATION: preserved 101 elevation/grade samples")
- print("PASS INDEPENDENT PVI EDITOR: add/apply, absolute stations across PI move, endpoint anchor, profile drag/history, invalid rollback, delete/undo, v6 roundtrip")
+ print("PASS INDEPENDENT PVI EDITOR: add/apply, absolute stations across PI move, endpoint anchor, profile drag/history, invalid rollback, delete/undo, v7 roundtrip")
  get_tree().quit(0)
 
 func run_earthwork_smoke():
@@ -1905,7 +1946,7 @@ func run_topology_smoke():
  current_revision=revision
  assert(not delete_selected_pi(true))
  assert(model.edit_state()==detour and undo_stack.size()==history_count and revision==current_revision)
- print("PASS PI TOPOLOGY: canvas/numeric insert, R/Ls association, independent PVI, delete/undo/redo, overlap/NoData/bounds/endpoint rejection, Esc/right-click, v6 roundtrip, shortening rollback")
+ print("PASS PI TOPOLOGY: canvas/numeric insert, R/Ls association, independent PVI, delete/undo/redo, overlap/NoData/bounds/endpoint rejection, Esc/right-click, v7 roundtrip, shortening rollback")
  get_tree().quit(0)
 
 
@@ -2018,10 +2059,10 @@ func run_crossfall_smoke():
  assert(quantity.ok and quantity.left_fall==2 and quantity.right_fall==4)
  while worker!=null or not dirty.is_empty():await get_tree().process_frame
  assert(road_node.mesh!=null)
- save_project("user://crossfall-v6.kroadg")
+ save_project("user://crossfall-v7.kroadg")
  while import_worker!=null:await get_tree().process_frame
- var saved=read_document("user://crossfall-v6.kroadg",true)
- assert(saved.document.version==6 and saved.document.crossfall.left==2)
+ var saved=read_document("user://crossfall-v7.kroadg",true)
+ assert(saved.document.version==7 and saved.document.crossfall.left==2)
  apply_document(saved.document,true)
  assert(model.edit_state()==crowned)
  # Bad v5 parameters must leave the current model untouched.
@@ -2039,7 +2080,7 @@ func run_crossfall_smoke():
  assert(model.pvi_heights==crowned.pvi_heights)
  var legacy=model.edit_state()
  assert(legacy.radii==crowned.radii and legacy.pi_route==crowned.pi_route)
- print("PASS CROSSFALL UI: parameters/history, shared quantities, rendered mesh, v6 roundtrip, bad v6 rollback, v4 flat migration")
+ print("PASS CROSSFALL UI: parameters/history, shared quantities, rendered mesh, v7 roundtrip, bad v7 rollback, v4 flat migration")
  get_tree().quit(0)
 
 
@@ -2534,10 +2575,10 @@ func run_slopes_smoke():
  assert(header.size()==21 and row.size()==21 and header[19]=="fill_slope_hv" and header[20]=="cut_slope_hv")
  assert(float(row[19])==2 and float(row[20])==0.5)
  csv.close()
- save_project("user://slopes-v6.kroadg")
+ save_project("user://slopes-v7.kroadg")
  while import_worker!=null:await get_tree().process_frame
- var stored=read_document("user://slopes-v6.kroadg",true)
- assert(stored.document.version==6 and stored.document.cut_slope==0.5)
+ var stored=read_document("user://slopes-v7.kroadg",true)
+ assert(stored.document.version==7 and stored.document.cut_slope==0.5)
  apply_document(stored.document,true)
  assert(model.edit_state()==separated)
  var old=stored.document.duplicate(true)
@@ -2560,7 +2601,7 @@ func run_slopes_smoke():
  apply_document(invalid,true)
  assert(model.edit_state()==preserved)
  message.hide()
- print("PASS CUT/FILL SLOPES UI: controls/history, worker quantities, 21-column CSV, v6 roundtrip, v5 shared-slope migration, invalid/missing cut rollback")
+ print("PASS CUT/FILL SLOPES UI: controls/history, worker quantities, 21-column CSV, v7 roundtrip, v5 shared-slope migration, invalid/missing cut rollback")
  get_tree().quit(0)
 
 
@@ -2651,4 +2692,125 @@ func run_dxf_smoke():
  while dxf_window.worker!=null:await get_tree().process_frame
  assert(dxf_window.result.crs=="EPSG:5179" and "1000600.000000000" in dxf_window.result.text)
  print("PASS DXF UI: background build, real save signal, no design edits, spacing/coordinate invalidation, stale export rejection")
+ get_tree().quit(0)
+
+
+func capture_alternative(name):
+ var error=alternatives.capture(name,model)
+ alternatives_window.status.text=error if error!="" else "대안 보관 완료 · 프로젝트를 저장하세요."
+ if error=="":alternatives_window.selected=alternatives.entries.size()-1
+ alternatives_window.refresh()
+ return error==""
+
+func rename_alternative(index,name):
+ var error=alternatives.rename(index,name)
+ alternatives_window.status.text=error if error!="" else "이름 변경 완료 · 프로젝트를 저장하세요."
+ alternatives_window.refresh()
+ return error==""
+
+func delete_alternative(index):
+ if index<0 or index>=alternatives.entries.size():return false
+ alternatives.entries.remove_at(index)
+ alternatives_window.selected=-1
+ alternatives_window.refresh()
+ alternatives_window.status.text="보관본 삭제 완료 · 현재 설계는 유지됩니다. 프로젝트를 저장하세요."
+ return true
+
+func apply_alternative(index):
+ if index<0 or index>=alternatives.entries.size():return false
+ var state=alternatives.entries[index].design
+ if state==model.edit_state():return true
+ cancel_gesture()
+ set_pi_add_mode(false)
+ cancel_pi_insertion()
+ var previous=model.snapshot()
+ var error=model.restore(state)
+ if error!="":
+  model.restore(previous)
+  alternatives_window.status.text="적용 거절: "+error
+  return false
+ if not changed(previous):return false
+ width_input.value=model.road_width
+ offset_input.value=model.offset
+ slope_input.value=model.slope
+ cut_slope_input.value=model.cut_slope
+ left_fall_input.value=model.left_fall
+ right_fall_input.value=model.right_fall
+ alternatives_window.refresh()
+ alternatives_window.status.text="대안 적용 완료 · 실행 취소로 이전 설계를 복원할 수 있습니다."
+ return true
+
+
+func run_alternatives_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,3000))
+ add_point(Vector2(2400,3000))
+ add_point(Vector2(3600,1000))
+ assert(add_pvi(model.length()*0.5,220))
+ var a=model.edit_state()
+ var rev=revision
+ var history=undo_stack.size()
+ alternatives_window.open_library()
+ alternatives_window.name_input.text="노선 A"
+ alternatives_window.capture_requested.emit(alternatives_window.name_input.text)
+ assert(alternatives.entries.size()==1 and alternatives.entries[0].design==a)
+ assert(revision==rev and undo_stack.size()==history)
+ assert(move_pi(1,Vector2(2600,3100)))
+ left_fall_input.value=2
+ right_fall_input.value=4
+ cut_slope_input.value=0.5
+ apply_parameters()
+ var b=model.edit_state()
+ assert(capture_alternative("노선 B"))
+ history=undo_stack.size()
+ assert(apply_alternative(0))
+ assert(model.edit_state()==a and undo_stack.size()==history+1)
+ assert(left_fall_input.value==a.left_fall and cut_slope_input.value==a.cut_slope)
+ undo_edit()
+ assert(model.edit_state()==b)
+ redo_edit()
+ assert(model.edit_state()==a)
+ rev=revision
+ history=undo_stack.size()
+ assert(apply_alternative(0) and revision==rev and undo_stack.size()==history)
+ assert(rename_alternative(1,"노선 B 수정"))
+ # Confirmation deletes only the saved alternative, not the current design.
+ alternatives_window.selected=1
+ alternatives_window.request_delete()
+ assert(alternatives.entries.size()==2)
+ alternatives_window.confirmation.confirmed.emit()
+ assert(alternatives.entries.size()==1 and model.edit_state()==a and revision==rev)
+ assert(capture_alternative("노선 A 복사"))
+ clear_route()
+ assert(model.length()==0)
+ assert(apply_alternative(0) and model.edit_state()==a)
+ undo_edit()
+ assert(model.length()==0)
+ redo_edit()
+ assert(model.edit_state()==a)
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ save_project("user://alternatives-v7.kroadg")
+ while import_worker!=null:await get_tree().process_frame
+ var saved=read_document("user://alternatives-v7.kroadg",true)
+ assert(saved.document.version==7 and saved.document.alternatives.size()==2)
+ apply_document(saved.document,true)
+ assert(model.edit_state()==a and alternatives.entries.size()==2 and undo_stack.is_empty())
+ var library_before=alternatives.serialize()
+ var invalid=saved.document.duplicate(true)
+ invalid.alternatives[1].design.pi_route[0]=Vector3(-1,0,0)
+ apply_document(invalid,true)
+ assert(model.edit_state()==a and alternatives.serialize()==library_before)
+ message.hide()
+ var legacy=saved.document.duplicate(true)
+ legacy.version=6
+ legacy.erase("alternatives")
+ apply_document(legacy,true)
+ assert(model.edit_state()==a and alternatives.entries.is_empty())
+ # DEM replacement deliberately clears the old DEM's library.
+ assert(capture_alternative("Before DEM"))
+ var imported=model.terrain.duplicate()
+ imported.Source=model.source.duplicate()
+ apply_document(imported,false)
+ assert(alternatives.entries.is_empty())
+ print("PASS ALTERNATIVES UI: capture unchanged design/revision, apply one undo step, undo/redo, rename, confirmed delete, v7 persistence, invalid list atomic rejection, v6 migration and DEM clear")
  get_tree().quit(0)

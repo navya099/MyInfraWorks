@@ -168,7 +168,7 @@ func restore(snapshot_data):
  cut_slope=snapshot_data.get("cut_slope",snapshot_data.slope)
  left_fall=snapshot_data.get("left_fall",0.0)
  right_fall=snapshot_data.get("right_fall",0.0)
- rebuild_alignment()
+ return rebuild_alignment()
 
 func length():
  return float(alignment_data.length)
