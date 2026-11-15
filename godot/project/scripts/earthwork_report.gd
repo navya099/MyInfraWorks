@@ -22,6 +22,8 @@ var mass_window
 var mass_button: Button
 var range_window
 var range_button: Button
+var blocks_window
+var blocks_button: Button
 
 func _ready():
  title="절토·성토량 / 평균단면법"
@@ -95,6 +97,21 @@ func _ready():
   range_button.disabled=true
   range_button.pressed.connect(func():range_window.show_report(result,result_revision))
   derived.add_child(range_button)
+  blocks_window=load("res://scripts/earthwork_blocks_window.gd").new()
+  blocks_window.visible=false
+  blocks_window.revision_provider=func():return revision_provider.call()
+  blocks_window.station_selected.connect(func(station):station_selected.emit(station))
+  blocks_window.range_selected.connect(func(begin,finish):
+   if range_window.show_report(result,result_revision):
+    range_window.begin_input.text=str(begin)
+    range_window.end_input.text=str(finish)
+    range_window.calculate_range())
+  add_child(blocks_window)
+  blocks_button=Button.new()
+  blocks_button.text="일정 길이 구간 집계"
+  blocks_button.disabled=true
+  blocks_button.pressed.connect(func():blocks_window.show_report(result,result_revision))
+  derived.add_child(blocks_button)
 
 func number(parent,label_text,value,minimum,maximum,step):
  var label=Label.new()
@@ -110,6 +127,8 @@ func number(parent,label_text,value,minimum,maximum,step):
  return input
 
 func invalidate():
+ if blocks_window!=null:blocks_window.invalidate()
+ if blocks_button!=null:blocks_button.disabled=true
  if range_window!=null:range_window.invalidate()
  if range_button!=null:range_button.disabled=true
  if mass_window!=null:mass_window.invalidate()
@@ -191,6 +210,7 @@ func _process(_delta):
   show_result()
 
 func show_result():
+ if blocks_button!=null:blocks_button.disabled=false
  if range_button!=null:range_button.disabled=false
  if mass_button!=null:mass_button.disabled=false
  csv_button.disabled=false

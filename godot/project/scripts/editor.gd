@@ -98,7 +98,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--range-smoke" in OS.get_cmdline_user_args():
+ if "--blocks-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_blocks_smoke")
+ elif "--range-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_range_smoke")
  elif "--mass-haul-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_mass_haul_smoke")
@@ -1190,7 +1192,7 @@ func run_visual_test():
   if "--insert-dialog" in arguments:
    select_pi(0)
    show_pi_insert()
- if "--earthwork-demo" in arguments or "--mass-haul-demo" in arguments or "--range-demo" in arguments:
+ if "--earthwork-demo" in arguments or "--mass-haul-demo" in arguments or "--range-demo" in arguments or "--blocks-demo" in arguments:
   earthwork_report.popup_centered(Vector2i(1200,720))
   earthwork_report.start_calculation()
   var work_start=Time.get_ticks_usec()
@@ -1215,6 +1217,12 @@ func run_visual_test():
   window.begin_input.text=str(model.length()*0.2345)
   window.end_input.text=str(model.length()*0.7891)
   assert(window.calculate_range())
+  await get_tree().process_frame
+ if "--blocks-demo" in arguments:
+  var block_started=Time.get_ticks_usec()
+  var window=earthwork_report.blocks_window
+  assert(window.show_report(earthwork_report.result,revision))
+  print("BENCH BLOCKS: %.2f ms / %d groups / %.2f ms calculation" % [(Time.get_ticks_usec()-block_started)/1000.0,window.result.rows.size(),window.result.ms])
   await get_tree().process_frame
  if "--navigation-demo" in arguments:
   var map=plan.map_rect()
@@ -3033,4 +3041,79 @@ func run_range_smoke():
  assert(window.report.is_empty() and window.csv_button.disabled)
  assert(not window.show_report(original,rev))
  print("PASS EARTHWORK RANGE UI: arbitrary bounds, original result/history preserved, exact station navigation, 21-column CSV, missing quantities, settings/design invalidation and stale report rejection")
+ get_tree().quit(0)
+
+
+func run_blocks_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ earthwork_report.start_calculation()
+ while earthwork_report.worker!=null:await get_tree().process_frame
+ assert(not earthwork_report.blocks_button.disabled)
+ var window=earthwork_report.blocks_window
+ var original=earthwork_report.result.duplicate(true)
+ var before=model.edit_state()
+ var undo_before=undo_stack.size()
+ var rev=revision
+ assert(window.show_report(original,rev))
+ assert(window.result.rows.size()==2 and window.result.rows[-1].length==200)
+ var row=window.table.get_root().get_first_child()
+ row.select(0)
+ assert(abs(model.station*model.length()-500)<0.000001)
+ window.table.item_activated.emit()
+ var detail=earthwork_report.range_window
+ assert(not detail.result.is_empty() and detail.result.start==0 and detail.result.end==1000)
+ assert(abs(detail.result.fill-window.result.rows[0].fill)<0.000001)
+ assert(model.edit_state()==before and undo_stack.size()==undo_before and revision==rev and earthwork_report.result==original)
+ window.block_input.text="333"
+ window.block_input.text_changed.emit(window.block_input.text)
+ assert(window.result.is_empty() and window.csv_button.disabled)
+ assert(window.calculate_range() and window.result.rows.size()==4)
+ assert(window.export_csv("user://blocks.csv"))
+ var csv=FileAccess.open("user://blocks.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ assert(csv.get_csv_line().size()==20 and csv.get_csv_line().size()==20)
+ var paged=original.duplicate(true)
+ paged.sections=[{"station":0.0,"status":"ok","cut_area":0.0,"fill_area":0.0},{"station":1000.0,"status":"ok","interval_status":"included","cut_area":0.0,"fill_area":0.0}]
+ window.block_input.text="2"
+ assert(window.show_report(paged,rev) and window.table.get_root().get_child_count()==200)
+ window.next_button.pressed.emit()
+ window.next_button.pressed.emit()
+ assert(window.page==2 and window.table.get_root().get_child_count()==100 and window.next_button.disabled)
+ row=window.table.get_root().get_first_child()
+ row.select(0)
+ assert(abs(model.station*model.length()-801)<0.000001)
+ assert(window.export_csv("user://blocks-paged.csv"))
+ csv=FileAccess.open("user://blocks-paged.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ csv.get_csv_line()
+ var rows=0
+ while csv.get_position()<csv.get_length():
+  if csv.get_csv_line().size()==20:rows+=1
+ assert(rows==500)
+ window.block_input.text="3"
+ assert(not window.export_csv("user://blocks-uncomputed.csv"))
+ window.block_input.text="bad"
+ assert(not window.calculate_range() and window.result.is_empty())
+ window.block_input.text="1000"
+ assert(window.show_report(original,rev))
+ earthwork_report.interval.value+=1
+ assert(window.report.is_empty() and window.csv_button.disabled and earthwork_report.blocks_button.disabled)
+ assert(not window.export_csv("user://blocks-stale.csv"))
+ earthwork_report.start_calculation()
+ while earthwork_report.worker!=null:await get_tree().process_frame
+ assert(window.show_report(earthwork_report.result,revision))
+ var missing=original.duplicate(true)
+ missing.sections=[{"station":0.0,"status":"nodata"},{"station":10.0,"status":"nodata","interval_status":"excluded"}]
+ assert(window.show_report(missing,revision) and window.result.status=="missing")
+ assert(window.export_csv("user://blocks-missing.csv"))
+ csv=FileAccess.open("user://blocks-missing.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ csv.get_csv_line()
+ var values=csv.get_csv_line()
+ assert(values[12]=="missing" and values[13]=="" and values[14]=="")
+ edit_elevation(1,model.pvi_heights[1]+1)
+ assert(window.report.is_empty() and not window.show_report(original,rev))
+ print("PASS EARTHWORK BLOCKS UI: remainder, drill-down, exact station, immutable design/history/source, pagination and full 20-column CSV, invalidation and missing quantities")
  get_tree().quit(0)

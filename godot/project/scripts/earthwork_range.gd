@@ -36,7 +36,7 @@ static func calculate(report,begin,finish):
    for section in [previous,current]:
     if section.get("status")!="ok" or not quantity(section.get("cut_area")) or not quantity(section.get("fill_area")):
      return fail("유효 구간의 원본 단면적이 올바르지 않습니다.")
-   var length=current.station-previous.station
+   var length=float(current.station)-float(previous.station)
    var left=(a-previous.station)/length
    var right=(b-previous.station)/length
    row.cut_start=lerpf(previous.cut_area,current.cut_area,left)

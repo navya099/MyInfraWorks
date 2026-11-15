@@ -8,6 +8,9 @@ func _initialize():
  var partial=RangeCalculation.calculate(report,20,60)
  assert(partial.ok and partial.status=="complete" and partial.cut==720 and partial.fill==480 and partial.net==240 and partial.coverage==1)
  assert(partial.rows[0].cut_start==14 and partial.rows[0].cut_end==22 and partial.rows[0].source_start==0 and partial.rows[0].source_end==100)
+ var integers={"ok":true,"sections":[{"station":0,"status":"ok","cut_area":10,"fill_area":20},{"station":100,"status":"ok","interval_status":"included","cut_area":30,"fill_area":0}]}
+ var integer_result=RangeCalculation.calculate(integers,20,60)
+ assert(integer_result.cut==720 and integer_result.fill==480)
  var full=RangeCalculation.calculate(report,0,100)
  assert(full.cut==2000 and full.fill==1000)
  var a=RangeCalculation.calculate(report,0,30)
