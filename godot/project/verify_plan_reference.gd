@@ -1,0 +1,23 @@
+extends SceneTree
+const Model=preload("res://scripts/road_model.gd")
+const Reference=preload("res://scripts/plan_reference.gd")
+func _initialize():
+ var model=Model.new()
+ model.demo()
+ model.route=PackedVector3Array([Vector3(600,200,1000),Vector3(1800,240,1000),Vector3(1800,210,2400)])
+ model.radii=PackedFloat64Array([0,300,0])
+ model.spirals=PackedFloat64Array([0,60,0])
+ assert(model.rebuild_alignment()=="")
+ var state=model.edit_state()
+ var before=state.duplicate(true)
+ var built=Reference.build(state)
+ assert(built.ok and built.points.size()==model.centerline.size() and built.points.size()>3 and abs(built.length-model.length())<1e-8)
+ for i in range(built.points.size()):assert(built.points[i]==Vector2(model.centerline[i].x,model.centerline[i].z))
+ assert(state==before and model.edit_state()==before)
+ built.points[0]=Vector2(-1,-1)
+ assert(model.centerline[0].x==600 and state.pi_route[0].x==600)
+ var bad=state.duplicate(true)
+ bad.radii[1]=100000
+ assert(not Reference.build(bad).ok)
+ print("PASS PLAN REFERENCE CORE: exact native curve/spiral polyline, independent snapshot and rejected invalid alignment")
+ quit(0)

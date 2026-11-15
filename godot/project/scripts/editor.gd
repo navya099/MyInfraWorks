@@ -12,6 +12,9 @@ var alternatives_window
 const AlternativeComparison=preload("res://scripts/alternative_comparison.gd")
 var alternative_comparison
 var alternatives_revision=0
+const PlanReference=preload("res://scripts/plan_reference.gd")
+var reference_design={}
+var reference_builds=0
 const ReviewWindow=preload("res://scripts/review_window.gd")
 var review_window
 const Model = preload("res://scripts/road_model.gd")
@@ -98,7 +101,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--blocks-smoke" in OS.get_cmdline_user_args():
+ if "--overlay-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_overlay_smoke")
+ elif "--blocks-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_blocks_smoke")
  elif "--range-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_range_smoke")
@@ -177,6 +182,7 @@ func make_canvas(parent,title,mode):
   var tools_row=HBoxContainer.new()
   box.add_child(tools_row)
   if mode=="plan":
+   canvas.reference_clear_requested.connect(clear_plan_reference)
    pi_add_button=Button.new()
    pi_add_button.text="PI 추가"
    pi_add_button.toggle_mode=true
@@ -487,6 +493,7 @@ func build_ui():
  alternatives_window.save_requested.connect(func():
   if import_worker==null:save_dialog.popup_centered_ratio(0.65)
   else:alternatives_window.status.text="파일 작업 중입니다. 완료 후 저장하세요.")
+ alternatives_window.reference_requested.connect(set_plan_reference)
  add_child(alternatives_window)
  alternative_comparison=AlternativeComparison.new()
  alternative_comparison.visible=false
@@ -521,6 +528,7 @@ func show_error(text):
  message.popup_centered(Vector2i(620,220))
 
 func reset_terrain(preserve_alternatives=false):
+ clear_plan_reference()
  if not preserve_alternatives:alternatives.entries.clear()
  if alternatives_window!=null:
   alternatives_window.selected=-1
@@ -1284,6 +1292,36 @@ func run_visual_test():
   print("BENCH ALTERNATIVES: edit, two captures and apply %.2f ms / design library %d bytes" % [(Time.get_ticks_usec()-begin)/1000.0,var_to_bytes(alternatives.serialize()).size()])
   while worker!=null or not dirty.is_empty():await get_tree().process_frame
   alternatives_window.open_library()
+ if "--overlay-demo" in arguments:
+  assert(capture_alternative("보관 원안"))
+  var start=Time.get_ticks_usec()
+  alternatives_window.selected=0
+  alternatives_window.reference_toggle.button_pressed=true
+  var build_ms=(Time.get_ticks_usec()-start)/1000.0
+  var state=model.edit_state()
+  for i in range(1,state.pi_route.size()-1):state.pi_route[i].z+=300
+  if state.pi_route.size()==2:state.pi_route[-1].z+=200
+  var previous=model.snapshot()
+  assert(model.restore(state)=="")
+  changed(previous)
+  while worker!=null or not dirty.is_empty() or not apply_queue.is_empty():await get_tree().process_frame
+  plan.zoom_navigation(plan.size/2,0.05)
+  plan.focus_navigation()
+  var overlay_times=[]
+  var overlay_previous_frame=Time.get_ticks_usec()
+  var uploads=total_mesh_updates
+  var builds=reference_builds
+  for i in range(30):
+   plan.zoom_navigation(plan.size/2,0.995)
+   yaw+=0.001
+   update_camera()
+   await get_tree().process_frame
+   var overlay_now=Time.get_ticks_usec()
+   overlay_times.append((overlay_now-overlay_previous_frame)/1000.0)
+   overlay_previous_frame=overlay_now
+  overlay_times.sort()
+  assert(total_mesh_updates==uploads and reference_builds==builds)
+  print("BENCH PLAN OVERLAY: %.2f ms / %d points / zoom+orbit: p95 %.2fms / zero native rebuilds and terrain uploads" % [build_ms,plan.reference_points.size(),overlay_times[28]])
  if "--dxf-demo" in arguments:
   dxf_window.open_export()
   dxf_window.start_calculation()
@@ -3116,4 +3154,86 @@ func run_blocks_smoke():
  edit_elevation(1,model.pvi_heights[1]+1)
  assert(window.report.is_empty() and not window.show_report(original,rev))
  print("PASS EARTHWORK BLOCKS UI: remainder, drill-down, exact station, immutable design/history/source, pagination and full 20-column CSV, invalidation and missing quantities")
+ get_tree().quit(0)
+
+
+func clear_plan_reference():
+ reference_design={}
+ if plan!=null:plan.set_reference(PackedVector2Array(),"")
+ if alternatives_window!=null and alternatives_window.reference_toggle!=null:
+  alternatives_window.reference_toggle.set_pressed_no_signal(false)
+
+func set_plan_reference(index,enabled):
+ if not enabled or index<0 or index>=alternatives.entries.size():
+  clear_plan_reference()
+  return false
+ var entry=alternatives.entries[index]
+ if reference_design!=entry.design or plan.reference_points.is_empty():
+  var built=PlanReference.build(entry.design)
+  if not built.ok:
+   clear_plan_reference()
+   alternatives_window.status.text="평면 중첩 실패: "+str(built.get("error","unknown"))
+   return false
+  reference_builds+=1
+  reference_design=entry.design.duplicate(true)
+  plan.set_reference(built.points,entry.name)
+ else:plan.set_reference(plan.reference_points,entry.name)
+ return true
+
+
+func run_overlay_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ assert(capture_alternative("원안"))
+ while worker!=null or not dirty.is_empty() or not apply_queue.is_empty():await get_tree().process_frame
+ var before=model.edit_state()
+ var undo_before=undo_stack.size()
+ var rev=revision
+ var library=alternatives.serialize()
+ var uploads=total_mesh_updates
+ alternatives_window.open_library()
+ alternatives_window.reference_toggle.button_pressed=true
+ assert(plan.reference_points.size()>1 and plan.reference_name=="원안" and plan.reference_button.visible)
+ var points=plan.reference_points.duplicate()
+ var builds=reference_builds
+ alternatives_window.hide()
+ for i in range(5):
+  plan.zoom_navigation(plan.size/2,0.99)
+  yaw+=0.001
+  update_camera()
+  await get_tree().process_frame
+ assert(plan.reference_points==points and reference_builds==builds and total_mesh_updates==uploads)
+ assert(model.edit_state()==before and undo_stack.size()==undo_before and revision==rev and alternatives.serialize()==library)
+ plan.zoom_navigation(plan.size/2,0.05)
+ plan.focus_navigation()
+ set_pi_add_mode(true)
+ var header_click=InputEventMouseButton.new()
+ header_click.button_index=MOUSE_BUTTON_LEFT
+ header_click.pressed=true
+ header_click.position=Vector2(plan.size.x/2,40)
+ plan._gui_input(header_click)
+ assert(model.edit_state()==before and revision==rev)
+ set_pi_add_mode(false)
+ rename_alternative(0,"원안 이름 변경")
+ assert(plan.reference_name=="원안 이름 변경" and reference_builds==builds)
+ move_pi(1,Vector2(1800,1200))
+ assert(plan.reference_points==points and reference_builds==builds)
+ assert(capture_alternative("이동안"))
+ assert(plan.reference_name=="이동안" and plan.reference_points!=points)
+ alternatives_window.selected=0
+ alternatives_window.refresh()
+ assert(plan.reference_name=="원안 이름 변경" and plan.reference_points==points)
+ plan.reference_button.pressed.emit()
+ assert(plan.reference_points.is_empty() and not alternatives_window.reference_toggle.button_pressed and not plan.reference_button.visible)
+ alternatives_window.reference_toggle.button_pressed=true
+ delete_alternative(0)
+ assert(plan.reference_points.is_empty() and not alternatives_window.reference_toggle.button_pressed)
+ alternatives_window.selected=0
+ alternatives_window.refresh()
+ alternatives_window.reference_toggle.button_pressed=true
+ assert(not plan.reference_points.is_empty())
+ reset_terrain(true)
+ assert(plan.reference_points.is_empty() and reference_design.is_empty() and not alternatives_window.reference_toggle.button_pressed)
+ print("PASS PLAN OVERLAY UI: selected saved reference, shared navigation, cached native geometry, no design/history/revision/terrain changes, rename/edit/switch/clear/delete/DEM-reset lifecycle")
  get_tree().quit(0)

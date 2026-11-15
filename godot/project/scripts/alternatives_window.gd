@@ -5,6 +5,8 @@ signal rename_requested(index,name)
 signal delete_requested(index)
 signal save_requested
 signal compare_requested
+signal reference_requested(index,enabled)
+var reference_toggle: CheckBox
 var library
 var current_provider: Callable
 var name_input: LineEdit
@@ -67,12 +69,17 @@ func _ready():
   if item==null:return
   selected=int(item.get_metadata(0))
   name_input.text=library.entries[selected].name
-  update_apply_button())
+  update_apply_button()
+  update_reference())
  root.add_child(table)
  var hint=Label.new()
  hint.text="보관 후 프로젝트 저장 · 적용은 실행 취소 1단계 · DEM 중복 저장 없음 · 최대 20개"
  hint.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  root.add_child(hint)
+ reference_toggle=CheckBox.new()
+ reference_toggle.text="선택 대안을 평면에 중첩 표시 (중심선만 · 현재 설계 유지)"
+ reference_toggle.toggled.connect(func(_pressed):update_reference())
+ root.add_child(reference_toggle)
  var compare=Button.new()
  compare.text="보관 대안 토공량 비교"
  compare.pressed.connect(func():compare_requested.emit())
@@ -106,6 +113,7 @@ func refresh():
   if selected==i:item.select(0)
  table.set_block_signals(false)
  update_apply_button()
+ update_reference()
 
 func update_apply_button():
  apply_button.disabled=selected<0 or selected>=library.entries.size()
@@ -116,3 +124,11 @@ func request_delete():
  pending_delete=selected
  confirmation.dialog_text="'%s' 보관본을 삭제합니다. 현재 설계는 유지합니다." % library.entries[selected].name
  confirmation.popup_centered(Vector2i(560,150))
+
+
+func update_reference():
+ if reference_toggle==null:return
+ var valid=selected>=0 and selected<library.entries.size()
+ reference_toggle.disabled=not valid
+ if not valid:reference_toggle.set_pressed_no_signal(false)
+ reference_requested.emit(selected,valid and reference_toggle.button_pressed)

@@ -1,4 +1,8 @@
 extends Control
+signal reference_clear_requested
+var reference_points=PackedVector2Array()
+var reference_name=""
+var reference_button: Button
 signal point_added(point)
 signal point_inserted(after_index,point)
 signal insertion_cancelled
@@ -41,6 +45,14 @@ func _ready():
  clip_contents = true
  resized.connect(queue_redraw)
  get_window().focus_exited.connect(stop_navigation)
+ if mode=="plan":
+  reference_button=Button.new()
+  reference_button.text="중첩 해제"
+  reference_button.visible=false
+  reference_button.pressed.connect(func():reference_clear_requested.emit())
+  add_child(reference_button)
+  resized.connect(place_reference_button)
+  place_reference_button()
 
 func plot_rect():
  return Rect2(Vector2(48,20),Vector2(max(1,size.x-68),max(1,size.y-56)))
@@ -76,6 +88,10 @@ func _draw():
   var r = map_rect()
   draw_texture_rect(model.texture,r,false)
   var ext = model.extent()
+  if reference_points.size()>1:
+   var reference_screen=PackedVector2Array()
+   for point in reference_points:reference_screen.append(r.position+point/ext*r.size)
+   draw_polyline(reference_screen,Color("d987ed"),4.5,true)
   var points = PackedVector2Array()
   for i in range(1,model.route.size()):
    var a=model.route[i-1]
@@ -127,6 +143,9 @@ func _draw():
   draw_rect(Rect2(0,0,size.x,26),Color("13212c"))
   draw_rect(Rect2(0,size.y-26,size.x,26),Color("13212c"))
   label("N ↑  |  %.1f × %.1f km" % [ext.x/1000,ext.y/1000],Vector2(14,18))
+  if not reference_points.is_empty():
+   draw_rect(Rect2(0,26,size.x,26),Color("13212c"))
+   draw_string(ThemeDB.fallback_font,Vector2(14,44),"주황 현재 · 보라 보관 중심선: "+reference_name,HORIZONTAL_ALIGNMENT_LEFT,max(1,size.x-130),12,Color("d987ed"))
   if drag_index>=0 and drag_rejected:
    draw_circle(drag_target,9,Color("ff7777"),false,2)
   var hint="PI %d 뒤 삽입: 클릭 지정 / Esc·우클릭 취소" % (insert_after+1) if insert_after>=0 else "PI 추가 중: 클릭으로 노선 끝에 추가 / Esc·우클릭: 종료" if append_mode else "선택 모드: PI 클릭·드래그 / 새 점은 아래 PI 추가 버튼 선택"
@@ -413,7 +432,8 @@ func nearest_pvi(position):
 
 
 func plan_area():
- return Rect2(Vector2(12,26),Vector2(max(1,size.x-24),max(1,size.y-52)))
+ var top=52 if not reference_points.is_empty() else 26
+ return Rect2(Vector2(12,top),Vector2(max(1,size.x-24),max(1,size.y-top-26)))
 
 func station_range():
  return Vector2(profile_view.position.x,profile_view.end.x) if profile_manual else Vector2(0,max(1.0,model.length()))
@@ -554,4 +574,16 @@ func focus_navigation():
   profile_view=Rect2(Vector2(at.station,at.elevation+model.offset)-span/2.0,span)
   profile_manual=true
  stop_navigation()
+ queue_redraw()
+
+
+func place_reference_button():
+ if reference_button!=null:
+  reference_button.position=Vector2(max(0,size.x-104),27)
+  reference_button.size=Vector2(96,24)
+
+func set_reference(points,name):
+ reference_points=points
+ reference_name=name
+ if reference_button!=null:reference_button.visible=not points.is_empty()
  queue_redraw()
