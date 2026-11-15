@@ -161,10 +161,19 @@ func _process(_delta):
  result_revision=requested_revision
  csv_button.disabled=false
  status.text="%d개 측점 · 지반 결측 %d개 · %s · %.1fms · 곡률 0의 반경은 CSV 빈 셀" % [result.rows.size(),result.missing,result.crs,result.ms]
+ render_rows()
+
+func render_rows():
+ render_slice(0,result.rows.size())
+
+func render_slice(first,end):
  var lines=PackedStringArray(["STA(m) | 로컬 동 X | 남 Y | 중심 계획고 | 지반고 | 계획−지반 | 구배(%) | 반경(m) | 좌 가장자리 | 우 가장자리 | 경계"])
- for row in result.rows:lines.append("%.3f | %.3f | %.3f | %.3f | %s | %s | %.3f | %s | %.3f | %.3f | %s" % [row.station,row.x,row.y,row.planned,display_number(row.ground),display_number(row.delta),row.grade,"직선" if row.radius==null else display_number(row.radius),row.left_edge,row.right_edge,event_text(row.events)])
+ for i in range(first,end):
+  var row=result.rows[i]
+  lines.append("%.3f | %.3f | %.3f | %.3f | %s | %s | %.3f | %s | %.3f | %.3f | %s" % [row.station,row.x,row.y,row.planned,display_number(row.ground),display_number(row.delta),row.grade,"직선" if row.radius==null else display_number(row.radius),row.left_edge,row.right_edge,event_text(row.events)])
  setting_table=true
  table.text="\n".join(lines)
+ table.set_caret_line(0)
  setting_table=false
 
 static func event_text(raw):

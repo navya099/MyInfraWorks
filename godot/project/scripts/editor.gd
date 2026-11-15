@@ -112,6 +112,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
+ if "--station-paging-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_station_paging_smoke")
+  return
  if "--station-range-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_station_range_smoke")
   return
@@ -1459,15 +1462,19 @@ func run_visual_test():
   while profile_dxf.worker!=null:await get_tree().process_frame
   assert(not profile_dxf.result.is_empty())
   print("BENCH PROFILE DXF: %.2fms / %d samples / %d bytes" % [profile_dxf.result.ms,profile_dxf.result.stations.size(),profile_dxf.result.text.length()])
- if "--station-table-demo" in arguments or "--station-range-demo" in arguments:
+ if "--station-table-demo" in arguments or "--station-range-demo" in arguments or "--station-paging-demo" in arguments:
   station_table.open_export()
   if "--station-range-demo" in arguments:
    station_table.begin_input.text="%.3f" % (model.length()*0.2)
    station_table.end_input.text="%.3f" % (model.length()*0.8)
    station_table.interval.value=100
+  if "--station-paging-demo" in arguments:station_table.interval.value=1
   station_table.start_calculation()
   while station_table.worker!=null:await get_tree().process_frame
   assert(not station_table.result.is_empty())
+  if "--station-paging-demo" in arguments:
+   station_table.find_input.text="400"
+   station_table.find_station()
   print("BENCH STATION TABLE: %.1f ms / %d rows / %d missing" % [station_table.result.ms,station_table.result.rows.size(),station_table.result.missing])
  if "--review-demo" in arguments:
   review_window.popup_centered(Vector2i(1250,650))
@@ -3917,4 +3924,56 @@ func run_station_range_smoke():
  station_table.begin_input.text_changed.emit("100")
  assert(station_table.result.is_empty() and station_table.csv_button.disabled)
  print("PASS STATION RANGE UI: exact/global stations, row navigation, actual CSV signal, immutable design/history, full reset, bad input and stale result/export rejection")
+ get_tree().quit(0)
+
+
+func run_station_paging_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var rev=revision
+ station_table.open_export()
+ station_table.interval.value=1
+ station_table.start_calculation()
+ while station_table.worker!=null:await get_tree().process_frame
+ assert(station_table.result.rows.size()==1201 and station_table.table.get_line_count()==201)
+ assert(station_table.previous_button.disabled and not station_table.next_button.disabled)
+ var current=model.station
+ station_table.next_button.pressed.emit()
+ assert(station_table.page==1 and station_table.table.get_line_count()==201 and model.station==current)
+ station_table.table.set_caret_line(1)
+ station_table.select_row()
+ assert(abs(model.station*model.length()-200)<0.00001)
+ station_table.find_input.text="399.5"
+ station_table.find_station()
+ assert(station_table.page==1 and abs(model.station*model.length()-399)<0.00001)
+ station_table.find_input.text="400"
+ station_table.find_input.text_submitted.emit("400")
+ assert(station_table.page==2 and station_table.table.get_caret_line()==1 and abs(model.station*model.length()-400)<0.00001)
+ station_table.find_input.text="1200"
+ station_table.find_station()
+ assert(station_table.page==6 and station_table.table.get_line_count()==2 and station_table.next_button.disabled)
+ assert(abs(model.station*model.length()-1200)<0.00001)
+ station_table.next_button.pressed.emit()
+ assert(station_table.page==6)
+ station_table.find_input.text="1201"
+ station_table.find_station()
+ assert(station_table.page==6 and abs(model.station*model.length()-1200)<0.00001)
+ station_table.find_input.text="bad"
+ station_table.find_station()
+ assert(station_table.page==6)
+ station_table.csv_dialog.file_selected.emit("user://station-paging-ui.csv")
+ assert(FileAccess.file_exists("user://station-paging-ui.csv"))
+ assert(model.edit_state()==before and undo_stack.size()==history and revision==rev)
+ station_table.begin_input.text="100"
+ station_table.show_page()
+ assert(station_table.result.is_empty() and station_table.find_button.disabled and station_table.next_button.disabled)
+ assert(not station_table.export_csv("user://station-paging-stale.csv"))
+ station_table.full_range()
+ station_table.start_calculation()
+ while station_table.worker!=null:await get_tree().process_frame
+ assert(station_table.page==0 and station_table.previous_button.disabled)
+ print("PASS STATION PAGING UI: 200-row slices, page-offset selection, exact/tie/last STA search, invalid search, full CSV, immutable history and stale paging reset")
  get_tree().quit(0)

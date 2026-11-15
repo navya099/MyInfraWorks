@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/station-table-range` (0.34). 확인된 0.33는 `main`에 반영했습니다.
+개발 브랜치: `feature/station-table-paging` (0.35). 확인된 0.34는 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.34. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.35. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/station-table-range --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/station-table-paging --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.34 실행
+## Godot 편집기 0.35 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -789,7 +789,7 @@ python tests/verify_section_dxf_range_export.py "<SECTION RANGE FIXTURES 출력 
 독립 ezdxf 검사에서 오류·자동 수정 0건, 원래 STA·정확한 구간 양 끝·횡단 1:1/2%·4% 횡단구배·레이어/배치·결측/전체 결측·전체 범위 호환을 확인했습니다. 실제 저장 신호·설계/이력 불변·전체 범위 복원·입력/조건 무효화·오래된 결과/저장 거부 및 기존 횡단/종단/평면 구간/측점 주석 DXF 회귀 검사도 통과했습니다.
 
 
-## 0.34 측점표 구간 산출·CSV (개발 브랜치)
+## 0.34 측점표 구간 산출·CSV (main 반영 완료)
 
 상단 `측점표`에서 시작·끝 STA와 측점 간격을 입력하고 `산출` → `CSV 저장`을 누릅니다. 기본은 전체 노선이며 `전체 범위`로 복원합니다. 길이가 바뀐 노선을 다시 열면 전체 범위를 갱신합니다.
 
@@ -807,3 +807,22 @@ python tests/verify_station_range_export.py "<STATION RANGE FIXTURES 출력 경�
 ```
 
 구간 경계·이벤트 병합·실제 포물선 계획고/구배·횡단구배·곡선 경계·좌표 부호·NoData·전체 범위 호환·20,000행 한계를 확인했습니다. 실제 CSV 신호와 독립 Python 판독·행 선택/이력 불변·전체 범위 복원·입력 무효화·오래된 결과/저장 거부 및 기존 측점표/평면·횡단 구간/종단 DXF 회귀 검사도 통과했습니다.
+
+
+## 0.35 측점표 페이지·STA 찾기 (개발 브랜치)
+
+상단 `측점표`에서 산출한 뒤 `이전 페이지`·`다음 페이지`로 200행씩 확인합니다. `찾을 STA(m)` 입력 후 `STA 찾기` 또는 Enter를 누르면 가장 가까운 산출 측점의 페이지/행을 열고 해당 측점으로 이동합니다.
+
+- 페이지 전환은 현재 STA와 설계를 변경하지 않습니다. 행 선택은 페이지 오프셋을 반영해 원래 STA로 이동합니다.
+- STA 찾기는 산출 구간 안의 유한한 숫자만 받습니다. 두 산출 측점과 같은 거리라면 작은 STA를 선택합니다. 새 측점이나 보간 행을 만들지 않습니다.
+- 마지막 페이지의 남은 행과 이전/다음 버튼 상태를 처리합니다. 범위·간격·설계 변경 시 페이지를 초기화하고 오래된 결과의 탐색/저장을 거부합니다.
+- CSV는 현재 페이지와 관계없이 전체 산출 결과를 기존 21열로 저장합니다. 계산·설계·이력·프로젝트 v7·DLL v018은 유지합니다.
+
+[페이지 표시·STA 찾기·검증](docs/station-table-paging.md)을 참조하세요.
+
+```powershell
+godot --headless --path godot/project -- --station-paging-smoke
+python tests/verify_station_paging_export.py "<Godot user:// 데이터 경로>"
+```
+
+1,201행에서 페이지 전환·페이지별 행 선택·정확/중간/동률/종점 STA 찾기·잘못된 검색·마지막 1행 페이지·설계/이력 불변·오래된 페이지 초기화를 검사했습니다. 마지막 페이지에서 실제 저장 신호로 내보낸 CSV를 독립 Python으로 읽어 전체 1,201행·BOM·21열·순서/좌표 보존을 확인했습니다. 기존 측점표/구간/평면·횡단·종단 DXF 회귀 검사도 통과했습니다.
