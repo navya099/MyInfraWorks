@@ -5,6 +5,8 @@ signal rename_requested(index,name)
 signal delete_requested(index)
 signal save_requested
 signal compare_requested
+signal section_compare_requested
+var section_compare_button: Button
 signal profile_compare_requested
 signal selection_changed(index)
 var profile_compare_button: Button
@@ -92,6 +94,10 @@ func _ready():
  profile_compare_button.text="현재·선택 대안 계획고 비교표"
  profile_compare_button.pressed.connect(func():profile_compare_requested.emit())
  root.add_child(profile_compare_button)
+ section_compare_button=Button.new()
+ section_compare_button.text="현재 횡단선·선택 대안 표 / CSV"
+ section_compare_button.pressed.connect(func():section_compare_requested.emit())
+ root.add_child(section_compare_button)
  confirmation=ConfirmationDialog.new()
  confirmation.title="보관 대안 삭제"
  confirmation.confirmed.connect(func():
@@ -127,6 +133,7 @@ func refresh():
 func update_apply_button():
  apply_button.disabled=selected<0 or selected>=library.entries.size()
  if profile_compare_button!=null:profile_compare_button.disabled=apply_button.disabled
+ if section_compare_button!=null:section_compare_button.disabled=apply_button.disabled
  if not apply_button.disabled:apply_button.disabled=library.entries[selected].design==current_provider.call()
 
 func request_delete():

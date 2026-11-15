@@ -12,6 +12,8 @@ var alternatives_window
 const AlternativeComparison=preload("res://scripts/alternative_comparison.gd")
 const ProfileComparisonWindow=preload("res://scripts/profile_comparison_window.gd")
 var profile_comparison
+const SectionComparisonWindow=preload("res://scripts/section_comparison_window.gd")
+var section_comparison
 var comparison_selection=-1
 var alternative_comparison
 var alternatives_revision=0
@@ -106,7 +108,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--section-overlay-smoke" in OS.get_cmdline_user_args():
+ if "--section-table-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_section_table_smoke")
+ elif "--section-overlay-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_section_overlay_smoke")
  elif "--profile-comparison-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_profile_comparison_smoke")
@@ -521,9 +525,16 @@ func build_ui():
  alternatives_window.selection_changed.connect(func(index):
   if comparison_selection!=index:
    comparison_selection=index
-   profile_comparison.invalidate())
+   profile_comparison.invalidate()
+   if section_comparison!=null:section_comparison.invalidate())
  alternatives_window.profile_compare_requested.connect(func():profile_comparison.popup_centered(Vector2i(1250,650)))
  add_child(profile_comparison)
+ section_comparison=SectionComparisonWindow.new()
+ section_comparison.visible=false
+ section_comparison.revision_provider=section_comparison_revision
+ section_comparison.snapshot_provider=section_comparison_snapshot
+ alternatives_window.section_compare_requested.connect(func():section_comparison.popup_centered(Vector2i(1250,650)))
+ add_child(section_comparison)
  review_window=ReviewWindow.new()
  review_window.visible=false
  review_window.snapshot_provider=func():return {"design":model.edit_state(),"revision":revision}
@@ -566,6 +577,7 @@ func reset_terrain(preserve_alternatives=false):
  if earthwork_report!=null:earthwork_report.invalidate()
  if alternative_comparison!=null:alternative_comparison.invalidate()
  if profile_comparison!=null:profile_comparison.invalidate()
+ if section_comparison!=null:section_comparison.invalidate()
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
  if review_window!=null:review_window.invalidate()
@@ -674,6 +686,7 @@ func changed(previous, record_history=true, quiet=false):
  if earthwork_report!=null:earthwork_report.invalidate()
  if alternative_comparison!=null:alternative_comparison.invalidate()
  if profile_comparison!=null:profile_comparison.invalidate()
+ if section_comparison!=null:section_comparison.invalidate()
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
  if review_window!=null:review_window.invalidate()
@@ -1374,6 +1387,15 @@ func run_visual_test():
   while profile_comparison.worker!=null:await get_tree().process_frame
   assert(not profile_comparison.result.is_empty())
   print("BENCH PROFILE COMPARISON: %.2fms / %d rows" % [profile_comparison.result.ms,profile_comparison.result.rows.size()])
+ if "--section-table-demo" in arguments:
+  assert(capture_alternative('횡단 "원안", 비교'))
+  offset_input.value+=5
+  apply_parameters()
+  section_comparison.popup_centered(Vector2i(1250,650))
+  section_comparison.start_calculation()
+  while section_comparison.worker!=null:await get_tree().process_frame
+  assert(not section_comparison.result.is_empty())
+  print("BENCH SECTION TABLE: %.2fms / %d samples" % [section_comparison.result.ms,section_comparison.result.rows.size()])
  if "--dxf-demo" in arguments:
   dxf_window.open_export()
   dxf_window.start_calculation()
@@ -2553,7 +2575,9 @@ func run_pi_add_smoke():
 
 func set_station_distance(distance_m):
  if not is_finite(distance_m):return
+ var previous=model.station
  if model.length()>0:model.station=clamp(distance_m/model.length(),0.0,1.0)
+ if previous!=model.station and section_comparison!=null:section_comparison.invalidate()
  refresh_station_controls()
  plan.queue_redraw()
  profile.queue_redraw()
@@ -2965,6 +2989,7 @@ func alternatives_changed():
  alternatives_revision+=1
  if alternative_comparison!=null:alternative_comparison.invalidate()
  if profile_comparison!=null:profile_comparison.invalidate()
+ if section_comparison!=null:section_comparison.invalidate()
 
 
 func run_comparison_smoke():
@@ -3504,4 +3529,101 @@ func run_section_overlay_smoke():
  reset_terrain(true)
  assert(section.reference_section.is_empty() and reference_data.is_empty())
  print("PASS SECTION OVERLAY UI: same current section line, full-fit/zoom/pan physical 1:1, cached corridor on station move, no model/history/revision/terrain changes, rename/clear/delete/reset")
+ get_tree().quit(0)
+
+
+func section_comparison_revision():
+ return profile_comparison_revision()+":"+str(model.length()*model.station)
+
+func section_comparison_snapshot():
+ var state=profile_comparison_snapshot()
+ if not state.ok:return state
+ state.revision=section_comparison_revision()
+ state.station=model.length()*model.station
+ state.terrain=model.terrain.duplicate()
+ state.source=model.source.duplicate()
+ return state
+
+
+func run_section_table_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ assert(capture_alternative('A, "횡단"'))
+ offset_input.value=5
+ apply_parameters()
+ set_station_distance(432.123)
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var revision_before=revision
+ var library=alternatives.serialize()
+ var window=section_comparison
+ window.reach.value=300
+ window.interval.value=1
+ window.start_calculation()
+ while window.worker!=null:await get_tree().process_frame
+ assert(not window.result.is_empty() and window.result.rows.size()>400 and window.table.get_line_count()<=201)
+ assert(abs(window.result.station-432.123)<1e-6)
+ window.next_button.pressed.emit()
+ window.table.set_caret_line(1)
+ window.select_row()
+ assert(abs(model.length()*model.station-432.123)<1e-6)
+ assert(model.edit_state()==before and undo_stack.size()==history and revision==revision_before and alternatives.serialize()==library)
+ assert(window.export_csv("user://section-table.csv"))
+ var csv=FileAccess.open("user://section-table.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ assert(csv.get_csv_line().size()==32)
+ var count=0
+ while csv.get_position()<csv.get_length():
+  var values=csv.get_csv_line()
+  if values.size()!=32:continue
+  assert(values[0]=='A, "횡단"' and values[1]=="current_section_world_coordinates")
+  count+=1
+ assert(count==window.result.rows.size())
+ set_station_distance(433)
+ assert(window.result.is_empty() and window.csv_button.disabled and not window.export_csv("user://stale-section.csv"))
+ window.start_calculation()
+ set_station_distance(434)
+ set_station_distance(433)
+ while window.worker!=null:await get_tree().process_frame
+ assert(window.result.is_empty())
+ window.start_calculation()
+ while window.worker!=null:await get_tree().process_frame
+ window.reach.value+=1
+ assert(window.result.is_empty())
+ window.start_calculation()
+ rename_alternative(0,"횡단 이름 변경")
+ while window.worker!=null:await get_tree().process_frame
+ assert(window.result.is_empty())
+ window.start_calculation()
+ while window.worker!=null:await get_tree().process_frame
+ assert(capture_alternative("B"))
+ assert(window.result.is_empty())
+ window.start_calculation()
+ while window.worker!=null:await get_tree().process_frame
+ alternatives_window.selected=0
+ alternatives_window.refresh()
+ assert(window.result.is_empty())
+ window.start_calculation()
+ while window.worker!=null:await get_tree().process_frame
+ var values=model.source.Heights.duplicate()
+ values.fill(NAN)
+ var source_before=model.source
+ var hole=model.source.duplicate()
+ hole.Heights=values
+ model.source=hole
+ window.invalidate()
+ window.start_calculation()
+ while window.worker!=null:await get_tree().process_frame
+ assert(window.result.missing==window.result.rows.size() and window.export_csv("user://section-table-missing.csv"))
+ csv=FileAccess.open("user://section-table-missing.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ csv.get_csv_line()
+ var missing=csv.get_csv_line()
+ assert(missing[24]=="" and missing[25]=="" and missing[26]=="" and missing[29]=="" and missing[30]=="nodata")
+ model.source=source_before
+ offset_input.value=6
+ apply_parameters()
+ assert(window.result.is_empty())
+ print("PASS SECTION TABLE UI: fixed current station, readonly rows, async 200-row paging/full quoted 32-column CSV, null cells, station A-B-A/settings/selection/library/design invalidation")
  get_tree().quit(0)
