@@ -7,14 +7,17 @@ static func readable_rotation(heading):
  elif rotation< -90:rotation+=180
  return rotation
 
-static func build(alignment,length,width,offset,step,ox,oy,text_height=0.0):
+static func build(alignment,length,width,offset,step,ox,oy,text_height=0.0,begin=0.0,finish=-1.0):
  if not is_finite(width) or width<=0 or not is_finite(offset):return {"ok":false,"error":"측점 주석의 도로 폭/보정고가 유효하지 않습니다."}
- var count=ceili(length/float(step))
- if count>MAX_ANNOTATIONS:return {"ok":false,"error":"측점 주석이 2000개를 넘습니다. 주석 간격을 늘리세요."}
- var stations=[0.0]
- for i in range(1,count):
-  if length-i*step>=0.001:stations.append(i*step)
- stations.append(length)
+ if finish<0:finish=length
+ var first=ceili(begin/float(step))
+ var last=floori(finish/float(step))
+ if last-first+1>MAX_ANNOTATIONS:return {"ok":false,"error":"측점 주석이 2000개를 넘습니다. 주석 간격을 늘리세요."}
+ var stations=[begin]
+ for i in range(first,last+1):
+  var station=i*step
+  if station-begin>=0.001 and finish-station>=0.001:stations.append(station)
+ stations.append(finish)
  if stations.size()>MAX_ANNOTATIONS:return {"ok":false,"error":"측점 주석이 2000개를 넘습니다. 주석 간격을 늘리세요."}
  var annotations=[]
  var half=max(5.0,width*0.75)

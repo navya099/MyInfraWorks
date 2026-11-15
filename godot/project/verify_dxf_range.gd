@@ -1,0 +1,56 @@
+extends SceneTree
+const Model=preload("res://scripts/road_model.gd")
+const Dxf=preload("res://scripts/dxf_geometry.gd")
+func save(name,result):
+ assert(result.ok,str(result))
+ var file=FileAccess.open("user://"+name,FileAccess.WRITE)
+ assert(file!=null)
+ file.store_string(result.text)
+ file.close()
+func _initialize():
+ var model=Model.new()
+ model.demo()
+ model.route=PackedVector3Array([Vector3(100,100,200),Vector3(1100,200,200)])
+ model.offset=3
+ model.left_fall=2
+ model.right_fall=4
+ assert(model.rebuild_alignment()=="")
+ var before=model.edit_state()
+ var bounds={"begin":125.25,"end":875.75}
+ var result=Dxf.calculate_job(model.snapshot(),10,0,200,5,bounds)
+ assert(result.ok and result.annotation_count==6 and result.begin==125.25 and result.end==875.75)
+ assert(model.edit_state()==before)
+ save("dxf-range-local.dxf",result)
+ model.source.OriginX=1000000.0
+ model.source.OriginY=2000000.0
+ save("dxf-range-projected.dxf",Dxf.calculate_job(model.snapshot(),10,1,200,5,bounds))
+ save("dxf-range-full.dxf",Dxf.calculate_job(model.snapshot(),10,0))
+ save("dxf-range-explicit-full.dxf",Dxf.calculate_job(model.snapshot(),10,0,0,0,{"begin":0,"end":1000}))
+ for invalid in [{"begin":-1,"end":100},{"begin":0,"end":1001},{"begin":100,"end":100},{"begin":100,"end":100.5},{"begin":NAN,"end":200},{"begin":0,"end":INF}]:
+  assert(not Dxf.calculate_job(model.snapshot(),10,0,0,0,invalid).ok)
+ model.route=PackedVector3Array([Vector3(100,100,900),Vector3(900,100,900),Vector3(900,100,100)])
+ model.radii=PackedFloat64Array([0,300,0])
+ model.spirals=PackedFloat64Array([0,0,0])
+ model.pvi_stations=PackedFloat64Array()
+ assert(model.rebuild_alignment()=="")
+ save("dxf-range-curve.dxf",Dxf.calculate_job(model.snapshot(),25,0,100,5,{"begin":450,"end":650}))
+ model.route=PackedVector3Array([Vector3(100,100,200),Vector3(1100,100,200)])
+ model.radii=PackedFloat64Array([0,0])
+ model.spirals=PackedFloat64Array([0,0])
+ model.pvi_stations=PackedFloat64Array([0,500,1000])
+ model.pvi_heights=PackedFloat64Array([100,150,100])
+ model.pvi_lengths=PackedFloat64Array([0,200,0])
+ assert(model.rebuild_alignment()=="")
+ save("dxf-range-parabola.dxf",Dxf.calculate_job(model.snapshot(),25,0,100,5,{"begin":425,"end":575}))
+ model.pvi_stations=PackedFloat64Array()
+ model.route=PackedVector3Array([Vector3(0,100,0),Vector3(100000,100,0)])
+ assert(model.rebuild_alignment()=="")
+ assert(not Dxf.calculate_job(model.snapshot(),1,0).ok)
+ result=Dxf.calculate_job(model.snapshot(),1,0,10,0,{"begin":50000,"end":50100})
+ assert(result.ok and result.stations==101 and result.annotation_count==11)
+ save("dxf-range-long-subset.dxf",result)
+ assert(Dxf.calculate_job(model.snapshot(),1,0,0,0,{"begin":0,"end":29999}).stations==30000)
+ assert(Dxf.calculate_job(model.snapshot(),1,0,0,0,{"begin":50000,"end":50001}).ok)
+ print("DXF RANGE FIXTURES "+ProjectSettings.globalize_path("user://"))
+ print("PASS PLAN DXF RANGE CORE: exact endpoints, global station grid, local/projected, full compatibility, curve/parabola, invalid ranges and subset budgets")
+ quit(0)

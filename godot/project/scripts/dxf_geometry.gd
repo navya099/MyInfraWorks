@@ -9,7 +9,7 @@ static func pair(lines,code,value):
  lines.append(str(code))
  lines.append(str(value))
 
-static func calculate_job(snapshot,spacing,coordinate_mode,annotation_step=0.0,annotation_text_height=0.0):
+static func calculate_job(snapshot,spacing,coordinate_mode,annotation_step=0.0,annotation_text_height=0.0,station_range={}):
  var started=Time.get_ticks_usec()
  if not is_finite(spacing) or spacing<1 or spacing>25:return {"ok":false,"error":"최대 측점 간격은 1~25m입니다."}
  if coordinate_mode not in [0,1]:return {"ok":false,"error":"지원하지 않는 좌표 모드입니다."}
@@ -21,17 +21,27 @@ static func calculate_job(snapshot,spacing,coordinate_mode,annotation_step=0.0,a
  var info=alignment.configure_independent(snapshot.pi_route,snapshot.radii,snapshot.spirals,snapshot.pvi_stations,snapshot.pvi_heights,snapshot.pvi_lengths)
  if not info.ok:return info
  if info.length<=0:return {"ok":false,"error":"두 점 이상의 노선이 필요합니다."}
- var count=ceili(info.length/spacing)
- if count+1>MAX_STATIONS:return {"ok":false,"error":"점 수가 너무 많습니다. 간격을 늘리세요."}
- var stations=Array(alignment.sampling_stations())
- for i in range(1,count):stations.append(i*spacing)
+ var begin=float(station_range.get("begin",0.0))
+ var finish=float(station_range.get("end",info.length))
+ if not is_finite(begin) or not is_finite(finish) or begin<0 or finish>info.length or finish-begin<1:
+  return {"ok":false,"error":"노선 안에서 길이 1m 이상의 시작·끝 STA를 지정하세요."}
+ var first=ceili(begin/spacing)
+ var last=floori(finish/spacing)
+ if last-first+1>MAX_STATIONS:return {"ok":false,"error":"점 수가 너무 많습니다. 간격을 늘리거나 출력 구간을 줄이세요."}
+ var stations=[begin,finish]
+ for station in alignment.sampling_stations():
+  if station>begin and station<finish:stations.append(station)
+ for i in range(first,last+1):
+  var station=i*spacing
+  if station>begin and station<finish:stations.append(station)
  stations.sort()
  var unique=PackedFloat64Array()
  for station in stations:
   if unique.is_empty() or abs(station-unique[-1])>=1e-7:unique.append(station)
- # Retain the exact terminal station even if a regular sample nearly coincides.
- unique[-1]=info.length
- if unique.size()>MAX_STATIONS:return {"ok":false,"error":"선형 분할을 포함해 30000측점을 넘습니다. 간격을 늘리거나 노선을 줄여 주세요."}
+ # Retain exact requested endpoints, including nearly coincident regular samples.
+ unique[0]=begin
+ unique[-1]=finish
+ if unique.size()>MAX_STATIONS:return {"ok":false,"error":"선형 분할을 포함해 30000측점을 넘습니다. 간격을 늘리거나 구간을 줄여 주세요."}
  var ox=float(snapshot.source.OriginX) if projected else 0.0
  var oy=float(snapshot.source.OriginY) if projected else 0.0
  var layers=[{"name":"KROAD_CENTER","color":2,"vertices":[]},{"name":"KROAD_LEFT","color":4,"vertices":[]},{"name":"KROAD_RIGHT","color":3,"vertices":[]}]
@@ -52,7 +62,7 @@ static func calculate_job(snapshot,spacing,coordinate_mode,annotation_step=0.0,a
  var annotations=[]
  var extra_layers=[]
  if annotation_step>0:
-  var built=StationLabels.build(alignment,info.length,snapshot.width,snapshot.offset,annotation_step,ox,oy,annotation_text_height)
+  var built=StationLabels.build(alignment,info.length,snapshot.width,snapshot.offset,annotation_step,ox,oy,annotation_text_height,begin,finish)
   if not built.ok:return built
   annotations=built.annotations
   extra_layers=[{"name":"KROAD_STA_TICK","color":6},{"name":"KROAD_STA_TEXT","color":7}]
@@ -62,6 +72,7 @@ static func calculate_job(snapshot,spacing,coordinate_mode,annotation_step=0.0,a
      minimum[axis]=min(minimum[axis],point[axis])
      maximum[axis]=max(maximum[axis],point[axis])
  var lines=PackedStringArray()
+ if not station_range.is_empty():pair(lines,999,"STA_RANGE=%.9f,%.9f; ORIGINAL_STATIONING; NO_COORDINATE_REBASE" % [begin,finish])
  if not annotations.is_empty():pair(lines,999,"STA_LABELS; STEP=%.9f; END_TOLERANCE=0.001m; LABEL=STA_METERS; TICK_ELEVATION=CENTER_DESIGN; ROTATION=-90_TO_90" % annotation_step)
  pair(lines,999,"MYINFRAWORKS; UNITS=METERS; CRS="+("EPSG:5179" if projected else "LOCAL_EAST_NORTH")+"; DESIGN_ELEVATIONS; NO_DISPLAY_LIFT")
  pair(lines,0,"SECTION");pair(lines,2,"HEADER")
@@ -104,4 +115,4 @@ static func calculate_job(snapshot,spacing,coordinate_mode,annotation_step=0.0,a
   pair(lines,10,"%.9f" % annotation.x);pair(lines,20,"%.9f" % annotation.y);pair(lines,30,"%.9f" % annotation.z)
   pair(lines,40,"%.9f" % annotation.height);pair(lines,1,annotation.label);pair(lines,50,"%.9f" % annotation.rotation)
  pair(lines,0,"ENDSEC");pair(lines,0,"EOF")
- return {"ok":true,"text":"\n".join(lines)+"\n","annotation_count":annotations.size(),"annotation_step":annotation_step,"annotation_text_height":annotation_text_height,"stations":unique.size(),"vertices":unique.size()*3,"length":info.length,"spacing":spacing,"crs":"EPSG:5179" if projected else "LOCAL_EAST_NORTH","ms":(Time.get_ticks_usec()-started)/1000.0}
+ return {"ok":true,"text":"\n".join(lines)+"\n","annotation_count":annotations.size(),"annotation_step":annotation_step,"annotation_text_height":annotation_text_height,"stations":unique.size(),"vertices":unique.size()*3,"length":info.length,"begin":begin,"end":finish,"spacing":spacing,"crs":"EPSG:5179" if projected else "LOCAL_EAST_NORTH","ms":(Time.get_ticks_usec()-started)/1000.0}

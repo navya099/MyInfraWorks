@@ -112,6 +112,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
+ if "--dxf-range-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_dxf_range_smoke")
+  return
  if "--dxf-labels-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_dxf_labels_smoke")
  elif "--profile-dxf-smoke" in OS.get_cmdline_user_args():
@@ -505,7 +508,7 @@ func build_ui():
  add_child(station_table)
  dxf_window=DxfWindow.new()
  dxf_window.visible=false
- dxf_window.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision}
+ dxf_window.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision,"length":model.length()}
  dxf_window.revision_provider=func():return revision
  add_child(dxf_window)
  section_dxf=SectionDxfWindow.new()
@@ -1422,9 +1425,14 @@ func run_visual_test():
   while section_comparison.worker!=null:await get_tree().process_frame
   assert(not section_comparison.result.is_empty())
   print("BENCH SECTION TABLE: %.2fms / %d samples" % [section_comparison.result.ms,section_comparison.result.rows.size()])
- if "--dxf-demo" in arguments or "--dxf-labels-demo" in arguments:
+ if "--dxf-demo" in arguments or "--dxf-labels-demo" in arguments or "--dxf-range-demo" in arguments:
   if "--dxf-labels-demo" in arguments:dxf_window.annotation_enabled.button_pressed=true
   dxf_window.open_export()
+  if "--dxf-range-demo" in arguments:
+   dxf_window.plan_begin.text=str(model.length()*0.2)
+   dxf_window.plan_end.text=str(model.length()*0.8)
+   dxf_window.annotation_enabled.button_pressed=true
+   dxf_window.annotation_interval.value=100
   dxf_window.start_calculation()
   while dxf_window.worker!=null:await get_tree().process_frame
   assert(not dxf_window.result.is_empty())
@@ -3777,4 +3785,43 @@ func run_dxf_labels_smoke():
  apply_parameters()
  assert(not dxf_window.export_csv("user://stale-dxf-labels.dxf"))
  print("PASS DXF LABEL UI: optional/default-off controls, async annotations, actual save signal, immutable design/history, setting/design invalidation and stale result discard")
+ get_tree().quit(0)
+
+
+func run_dxf_range_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var rev=revision
+ dxf_window.open_export()
+ assert(dxf_window.plan_begin.text=="0")
+ dxf_window.plan_begin.text="125"
+ dxf_window.plan_end.text="975"
+ dxf_window.annotation_enabled.button_pressed=true
+ dxf_window.annotation_interval.value=400
+ dxf_window.start_calculation()
+ while dxf_window.worker!=null:await get_tree().process_frame
+ assert(dxf_window.result.begin==125 and dxf_window.result.end==975 and dxf_window.result.annotation_count==4)
+ assert(model.edit_state()==before and undo_stack.size()==history and revision==rev)
+ dxf_window.csv_dialog.file_selected.emit("user://dxf-range-ui.dxf")
+ assert(FileAccess.file_exists("user://dxf-range-ui.dxf"))
+ # Programmatic edits do not emit text_changed: signature still rejects stale saves/results.
+ dxf_window.plan_end.text="900"
+ assert(not dxf_window.export_csv("user://dxf-range-stale.dxf"))
+ dxf_window.start_calculation()
+ dxf_window.plan_begin.text="150"
+ while dxf_window.worker!=null:await get_tree().process_frame
+ assert(dxf_window.result.is_empty())
+ dxf_window.plan_begin.text="bad"
+ dxf_window.start_calculation()
+ assert(dxf_window.worker==null)
+ dxf_window.plan_full_range()
+ dxf_window.start_calculation()
+ while dxf_window.worker!=null:await get_tree().process_frame
+ assert(dxf_window.result.begin==0 and abs(dxf_window.result.end-1200)<0.001)
+ dxf_window.plan_end.text_changed.emit("900")
+ assert(dxf_window.result.is_empty() and dxf_window.csv_button.disabled)
+ print("PASS PLAN DXF RANGE UI: exact range, real save, immutable design/history, full reset, invalid input, stale signature and async discard")
  get_tree().quit(0)
