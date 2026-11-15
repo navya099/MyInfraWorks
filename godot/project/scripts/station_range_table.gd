@@ -11,6 +11,8 @@ var next_button: Button
 var page_label: Label
 var find_input: LineEdit
 var find_button: Button
+var events_only: CheckBox
+var visible_rows=[]
 
 func _ready():
  super._ready()
@@ -33,6 +35,10 @@ func _ready():
  full_button.text="전체 범위"
  full_button.pressed.connect(full_range)
  row.add_child(full_button)
+ events_only=CheckBox.new()
+ events_only.text="주요 경계만 보기"
+ events_only.toggled.connect(func(_enabled):refresh_filter())
+ row.add_child(events_only)
  var paging=HBoxContainer.new()
  root.add_child(paging)
  root.move_child(paging,root.get_child_count()-2)
@@ -48,7 +54,7 @@ func _ready():
  paging.add_child(find_input)
  find_button=page_button(paging,"STA 찾기",find_station)
  invalidate()
- hint.text="200행씩 표시 · STA 찾기: 가장 가까운 산출 측점으로 이동 · CSV 전체 저장 · 구간 양 끝·STA 0 기준 정규 측점·PI/PVI/곡선 경계 포함 · 행 선택: 원래 STA 이동 · CSV 전체 산출 행 저장"
+ hint.text="200행씩 표시 · STA 찾기: 가장 가까운 표시 측점으로 이동 · 주요 경계: 양 끝/PI/PVI/곡선 경계 · CSV는 필터와 관계없이 전체 저장"
 
 func full_range():
  var state=snapshot_provider.call()
@@ -99,6 +105,7 @@ func page_button(parent,text,action):
 
 func invalidate():
  super.invalidate()
+ visible_rows=[]
  page=0
  if previous_button!=null:previous_button.disabled=true
  if next_button!=null:next_button.disabled=true
@@ -113,19 +120,29 @@ func valid_result():
  return true
 
 func render_rows():
+ refresh_filter()
+
+static func is_boundary(row):
+ for tag in row.events.split("|"):
+  if tag in ["start","end","range_start","range_end","PI","PVI","geometry_boundary","vertical_curve_start","vertical_curve_end"]:return true
+ return false
+
+func refresh_filter():
+ if not valid_result():return
+ visible_rows=result.rows.filter(is_boundary) if events_only.button_pressed else result.rows
  page=0
  show_page()
 
 func show_page():
  if not valid_result():return
- page=clampi(page,0,(result.rows.size()-1)/PAGE_SIZE)
+ page=clampi(page,0,(visible_rows.size()-1)/PAGE_SIZE)
  var first=page*PAGE_SIZE
- var end=min(first+PAGE_SIZE,result.rows.size())
+ var end=min(first+PAGE_SIZE,visible_rows.size())
  previous_button.disabled=page==0
- next_button.disabled=end==result.rows.size()
+ next_button.disabled=end==visible_rows.size()
  find_button.disabled=false
- page_label.text="%d~%d / %d행 · CSV는 전체 저장" % [first+1,end,result.rows.size()]
- render_slice(first,end)
+ page_label.text="%d~%d / 표시 %d행 · CSV 전체 %d행" % [first+1,end,visible_rows.size(),result.rows.size()]
+ render_slice(first,end,visible_rows)
 
 static func nearest_index(rows,station):
  var low=0
@@ -146,7 +163,7 @@ func find_station():
  if not is_finite(station) or station<result.begin or station>result.end:
   status.text="산출 구간 안의 STA를 입력하세요."
   return
- var index=nearest_index(result.rows,station)
+ var index=nearest_index(visible_rows,station)
  page=index/PAGE_SIZE
  show_page()
  setting_table=true
@@ -154,13 +171,13 @@ func find_station():
  table.center_viewport_to_caret()
  setting_table=false
  select_row()
- status.text="요청 STA %.3f → 산출 STA %.3fm · CSV는 전체 %d행 저장" % [station,result.rows[index].station,result.rows.size()]
+ status.text="요청 STA %.3f → 표시 STA %.3fm · CSV는 전체 %d행 저장" % [station,visible_rows[index].station,result.rows.size()]
 
 func select_row():
  if setting_table or not valid_result():return
  var line=table.get_caret_line()
  var index=page*PAGE_SIZE+line-1
- if line>0 and index<result.rows.size():station_selected.emit(result.rows[index].station)
+ if line>0 and index<visible_rows.size():station_selected.emit(visible_rows[index].station)
 
 func export_csv(path):
  if result.is_empty() or requested_inputs!=input_signature():

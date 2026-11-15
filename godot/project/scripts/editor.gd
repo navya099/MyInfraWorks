@@ -112,6 +112,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
+ if "--station-events-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_station_events_smoke")
+  return
  if "--station-paging-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_station_paging_smoke")
   return
@@ -1462,7 +1465,7 @@ func run_visual_test():
   while profile_dxf.worker!=null:await get_tree().process_frame
   assert(not profile_dxf.result.is_empty())
   print("BENCH PROFILE DXF: %.2fms / %d samples / %d bytes" % [profile_dxf.result.ms,profile_dxf.result.stations.size(),profile_dxf.result.text.length()])
- if "--station-table-demo" in arguments or "--station-range-demo" in arguments or "--station-paging-demo" in arguments:
+ if "--station-table-demo" in arguments or "--station-range-demo" in arguments or "--station-paging-demo" in arguments or "--station-events-demo" in arguments:
   station_table.open_export()
   if "--station-range-demo" in arguments:
    station_table.begin_input.text="%.3f" % (model.length()*0.2)
@@ -1475,6 +1478,7 @@ func run_visual_test():
   if "--station-paging-demo" in arguments:
    station_table.find_input.text="400"
    station_table.find_station()
+  if "--station-events-demo" in arguments:station_table.events_only.button_pressed=true
   print("BENCH STATION TABLE: %.1f ms / %d rows / %d missing" % [station_table.result.ms,station_table.result.rows.size(),station_table.result.missing])
  if "--review-demo" in arguments:
   review_window.popup_centered(Vector2i(1250,650))
@@ -3976,4 +3980,66 @@ func run_station_paging_smoke():
  while station_table.worker!=null:await get_tree().process_frame
  assert(station_table.page==0 and station_table.previous_button.disabled)
  print("PASS STATION PAGING UI: 200-row slices, page-offset selection, exact/tie/last STA search, invalid search, full CSV, immutable history and stale paging reset")
+ get_tree().quit(0)
+
+
+func run_station_events_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var rev=revision
+ station_table.open_export()
+ station_table.interval.value=1
+ station_table.start_calculation()
+ while station_table.worker!=null:await get_tree().process_frame
+ assert(not station_table.events_only.button_pressed and station_table.visible_rows.size()==1201)
+ var rows=station_table.result.rows.duplicate(true)
+ var original_generation=station_table.generation
+ var current=model.station
+ station_table.events_only.button_pressed=true
+ assert(station_table.visible_rows.size()==2 and station_table.table.get_line_count()==3)
+ assert(station_table.result.rows==rows and station_table.generation==original_generation and model.station==current)
+ assert(station_table.previous_button.disabled and station_table.next_button.disabled)
+ station_table.find_input.text="600"
+ station_table.find_station()
+ assert(abs(model.station*model.length())<0.00001)
+ station_table.find_input.text="601"
+ station_table.find_station()
+ assert(abs(model.station*model.length()-1200)<0.00001)
+ station_table.table.set_caret_line(1)
+ station_table.select_row()
+ assert(abs(model.station*model.length())<0.00001)
+ station_table.csv_dialog.file_selected.emit("user://station-events-ui.csv")
+ assert(FileAccess.file_exists("user://station-events-ui.csv"))
+ station_table.events_only.button_pressed=false
+ assert(station_table.visible_rows.size()==1201 and station_table.page==0 and station_table.table.get_line_count()==201)
+ station_table.events_only.button_pressed=true
+ assert(model.edit_state()==before and undo_stack.size()==history and revision==rev)
+ station_table.begin_input.text="100"
+ station_table.refresh_filter()
+ assert(station_table.result.is_empty() and station_table.visible_rows.is_empty() and station_table.find_button.disabled)
+ station_table.full_range()
+ station_table.start_calculation()
+ while station_table.worker!=null:await get_tree().process_frame
+ assert(station_table.events_only.button_pressed and station_table.visible_rows.size()==2)
+ # A filtered list spanning two pages must use visible-row offsets.
+ var actual_result=station_table.result
+ var synthetic=[]
+ for i in range(451):synthetic.append({"station":float(i),"events":"PVI" if i%2==0 else "regular","x":float(i),"y":0.0,"planned":0.0,"ground":0.0,"delta":0.0,"grade":0.0,"radius":null,"left_edge":0.0,"right_edge":0.0})
+ station_table.result={"rows":synthetic,"begin":0.0,"end":450.0}
+ station_table.refresh_filter()
+ assert(station_table.visible_rows.size()==226)
+ station_table.next_button.pressed.emit()
+ assert(station_table.page==1 and station_table.table.get_line_count()==27)
+ station_table.table.set_caret_line(1)
+ station_table.select_row()
+ assert(abs(model.station*model.length()-400)<0.00001)
+ station_table.find_input.text="401"
+ station_table.find_station()
+ assert(station_table.page==1 and abs(model.station*model.length()-400)<0.00001)
+ station_table.result=actual_result
+ station_table.refresh_filter()
+ print("PASS STATION EVENTS UI: default all, boundary filter, immutable rows/history, no recalculation, filtered search/tie/navigation, two-page offsets, full CSV and stale invalidation")
  get_tree().quit(0)
