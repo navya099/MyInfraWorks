@@ -1,4 +1,5 @@
 extends "res://scripts/station_table.gd"
+signal section_export_requested
 const Geometry=preload("res://scripts/dxf_geometry.gd")
 var coordinate_mode: OptionButton
 
@@ -17,6 +18,11 @@ func _ready():
  coordinate_mode.add_item("DEM 좌표 EPSG:5179")
  coordinate_mode.item_selected.connect(func(_index):invalidate())
  settings.add_child(coordinate_mode)
+ if get_script()==load("res://scripts/dxf_window.gd"):
+  var section_button=Button.new()
+  section_button.text="횡단 DXF..."
+  section_button.pressed.connect(func():section_export_requested.emit())
+  settings.add_child(section_button)
  hint.text="중심선·좌/우 가장자리 3D 폴리라인 · 1 도면 단위=1m(CAD 가져오기 단위 m) · 곡선은 선분 근사"
  status.text="좌표와 간격을 지정하고 산출하세요."
 

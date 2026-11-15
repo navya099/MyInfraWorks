@@ -5,6 +5,8 @@ const StationTable=preload("res://scripts/station_table.gd")
 var station_table
 const DxfWindow=preload("res://scripts/dxf_window.gd")
 var dxf_window
+const SectionDxfWindow=preload("res://scripts/section_dxf_window.gd")
+var section_dxf
 const Alternatives=preload("res://scripts/design_alternatives.gd")
 const AlternativesWindow=preload("res://scripts/alternatives_window.gd")
 var alternatives=Alternatives.new()
@@ -108,7 +110,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--section-table-smoke" in OS.get_cmdline_user_args():
+ if "--section-dxf-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_section_dxf_smoke")
+ elif "--section-table-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_section_table_smoke")
  elif "--section-overlay-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_section_overlay_smoke")
@@ -498,6 +502,12 @@ func build_ui():
  dxf_window.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision}
  dxf_window.revision_provider=func():return revision
  add_child(dxf_window)
+ section_dxf=SectionDxfWindow.new()
+ section_dxf.visible=false
+ section_dxf.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision}
+ section_dxf.revision_provider=func():return revision
+ dxf_window.section_export_requested.connect(func():section_dxf.open_export())
+ add_child(section_dxf)
  alternatives_window=AlternativesWindow.new()
  alternatives_window.visible=false
  alternatives_window.library=alternatives
@@ -580,6 +590,7 @@ func reset_terrain(preserve_alternatives=false):
  if section_comparison!=null:section_comparison.invalidate()
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
+ if section_dxf!=null:section_dxf.invalidate()
  if review_window!=null:review_window.invalidate()
  if alternatives_window!=null and alternatives_window.visible:alternatives_window.refresh()
  clear_history()
@@ -689,6 +700,7 @@ func changed(previous, record_history=true, quiet=false):
  if section_comparison!=null:section_comparison.invalidate()
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
+ if section_dxf!=null:section_dxf.invalidate()
  if review_window!=null:review_window.invalidate()
  if alternatives_window!=null and alternatives_window.visible:alternatives_window.refresh()
  apply_queue.clear()
@@ -1402,6 +1414,12 @@ func run_visual_test():
   while dxf_window.worker!=null:await get_tree().process_frame
   assert(not dxf_window.result.is_empty())
   print("BENCH DXF: %.1f ms / %d vertices" % [dxf_window.result.ms,dxf_window.result.vertices])
+ if "--section-dxf-demo" in arguments:
+  section_dxf.open_export()
+  section_dxf.start_calculation()
+  while section_dxf.worker!=null:await get_tree().process_frame
+  assert(not section_dxf.result.is_empty())
+  print("BENCH SECTION DXF: %.2fms / %d sections / %d samples / %d bytes" % [section_dxf.result.ms,section_dxf.result.sections.size(),section_dxf.result.samples,section_dxf.result.text.length()])
  if "--station-table-demo" in arguments:
   station_table.popup_centered(Vector2i(1250,650))
   station_table.start_calculation()
@@ -3626,4 +3644,37 @@ func run_section_table_smoke():
  apply_parameters()
  assert(window.result.is_empty())
  print("PASS SECTION TABLE UI: fixed current station, readonly rows, async 200-row paging/full quoted 32-column CSV, null cells, station A-B-A/settings/selection/library/design invalidation")
+ get_tree().quit(0)
+
+
+func run_section_dxf_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var rev=revision
+ section_dxf.open_export()
+ section_dxf.start_calculation()
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(not section_dxf.result.is_empty() and section_dxf.result.sections.size()==3)
+ assert(section_dxf.result.sections[-1].station==1200)
+ assert(model.edit_state()==before and undo_stack.size()==history and revision==rev)
+ section_dxf.csv_dialog.file_selected.emit("user://section-dxf-ui.dxf")
+ var file=FileAccess.open("user://section-dxf-ui.dxf",FileAccess.READ)
+ assert(file!=null and "KROAD_SEC_GROUND" in file.get_as_text())
+ set_station_distance(123.456)
+ assert(not section_dxf.result.is_empty())
+ section_dxf.columns.value=2
+ assert(section_dxf.result.is_empty() and section_dxf.csv_button.disabled)
+ section_dxf.start_calculation()
+ section_dxf.reach.value+=1
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(section_dxf.result.is_empty())
+ section_dxf.start_calculation()
+ while section_dxf.worker!=null:await get_tree().process_frame
+ offset_input.value=5
+ apply_parameters()
+ assert(section_dxf.result.is_empty() and not section_dxf.export_csv("user://stale-section-dxf.dxf"))
+ print("PASS SECTION DXF UI: async output, actual save dialog signal, read-only model/history, current STA independent, conditions/design invalidation and stale discard")
  get_tree().quit(0)
