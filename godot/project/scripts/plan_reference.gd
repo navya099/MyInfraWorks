@@ -6,14 +6,15 @@ static func build(design):
  var info=alignment.configure_independent(design.pi_route,design.radii,design.spirals,design.pvi_stations,design.pvi_heights,design.pvi_lengths)
  if not info.ok:return info
  var points=PackedVector2Array()
- for point in alignment.polyline():points.append(Vector2(point.x,point.z))
+ var route=alignment.polyline()
+ for point in route:points.append(Vector2(point.x,point.z))
  var low=INF
  var high=-INF
  for height in info.pvi_heights:
   low=min(low,height+design.offset)
   high=max(high,height+design.offset)
  var segments=profile_segments(info)
- return {"ok":true,"segments":segments,"points":points,"alignment":alignment,"info":info,"offset":design.offset,"low":low,"high":high,"length":info.length,"ms":(Time.get_ticks_usec()-started)/1000.0}
+ return {"ok":true,"segments":segments,"route":route,"points":points,"alignment":alignment,"info":info,"offset":design.offset,"low":low,"high":high,"length":info.length,"ms":(Time.get_ticks_usec()-started)/1000.0}
 
 
 static func profile_segments(info):

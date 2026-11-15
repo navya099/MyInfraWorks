@@ -81,7 +81,7 @@ func _ready():
  hint.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  root.add_child(hint)
  reference_toggle=CheckBox.new()
- reference_toggle.text="선택 대안 평면·종단 중첩 (중심선·계획고 · 현재 설계 유지)"
+ reference_toggle.text="선택 대안 평면·종단·횡단 중첩 (현재 설계 유지)"
  reference_toggle.toggled.connect(func(_pressed):update_reference())
  root.add_child(reference_toggle)
  var compare=Button.new()

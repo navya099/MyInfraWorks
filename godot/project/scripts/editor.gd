@@ -15,6 +15,7 @@ var profile_comparison
 var comparison_selection=-1
 var alternative_comparison
 var alternatives_revision=0
+const SectionReference=preload("res://scripts/section_reference.gd")
 const PlanReference=preload("res://scripts/plan_reference.gd")
 var reference_design={}
 var reference_data={}
@@ -105,7 +106,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--profile-comparison-smoke" in OS.get_cmdline_user_args():
+ if "--section-overlay-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_section_overlay_smoke")
+ elif "--profile-comparison-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_profile_comparison_smoke")
  elif "--profile-overlay-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_profile_overlay_smoke")
@@ -186,10 +189,10 @@ func make_canvas(parent,title,mode):
  canvas.custom_minimum_size=Vector2(280,180)
  canvas.size_flags_vertical=Control.SIZE_EXPAND_FILL
  box.add_child(canvas)
+ canvas.reference_clear_requested.connect(clear_plan_reference)
  if mode in ["plan","profile"]:
   var tools_row=HBoxContainer.new()
   box.add_child(tools_row)
-  canvas.reference_clear_requested.connect(clear_plan_reference)
   if mode=="plan":
    pi_add_button=Button.new()
    pi_add_button.text="PI 추가"
@@ -458,6 +461,7 @@ func build_ui():
  section.custom_minimum_size=Vector2(300,160)
  section.size_flags_vertical=Control.SIZE_EXPAND_FILL
  section_box.add_child(section)
+ section.reference_clear_requested.connect(clear_plan_reference)
  var section_tools=HBoxContainer.new()
  section_box.add_child(section_tools)
  button(section_tools,"도로 확대",func():section.fit_section(true))
@@ -1313,14 +1317,14 @@ func run_visual_test():
   print("BENCH ALTERNATIVES: edit, two captures and apply %.2f ms / design library %d bytes" % [(Time.get_ticks_usec()-begin)/1000.0,var_to_bytes(alternatives.serialize()).size()])
   while worker!=null or not dirty.is_empty():await get_tree().process_frame
   alternatives_window.open_library()
- if "--overlay-demo" in arguments or "--profile-overlay-demo" in arguments:
+ if "--overlay-demo" in arguments or "--profile-overlay-demo" in arguments or "--section-overlay-demo" in arguments:
   assert(capture_alternative("보관 원안"))
   var start=Time.get_ticks_usec()
   alternatives_window.selected=0
   alternatives_window.reference_toggle.button_pressed=true
   var build_ms=(Time.get_ticks_usec()-start)/1000.0
   var state=model.edit_state()
-  if "--profile-overlay-demo" in arguments:
+  if "--profile-overlay-demo" in arguments or "--section-overlay-demo" in arguments:
    for i in range(state.pvi_heights.size()):state.pvi_heights[i]+=30
   for i in range(1,state.pi_route.size()-1):state.pi_route[i].z+=300
   if state.pi_route.size()==2:state.pi_route[-1].z+=200
@@ -1336,7 +1340,7 @@ func run_visual_test():
   var builds=reference_builds
   for i in range(30):
    plan.zoom_navigation(plan.size/2,0.995)
-   if "--profile-overlay-demo" in arguments:profile.zoom_navigation(profile.plot_rect().get_center(),0.995)
+   if "--profile-overlay-demo" in arguments or "--section-overlay-demo" in arguments:profile.zoom_navigation(profile.plot_rect().get_center(),0.995)
    yaw+=0.001
    update_camera()
    await get_tree().process_frame
@@ -1345,6 +1349,21 @@ func run_visual_test():
    overlay_previous_frame=overlay_now
   overlay_times.sort()
   assert(total_mesh_updates==uploads and reference_builds==builds)
+  if "--section-overlay-demo" in arguments:
+   section.fit_section(false)
+   var section_times=[]
+   var section_previous=Time.get_ticks_usec()
+   for i in range(60):
+    set_station_distance(model.length()*(0.43+sin(i*0.15)*0.01))
+    yaw+=0.001
+    update_camera()
+    await get_tree().process_frame
+    var section_now=Time.get_ticks_usec()
+    section_times.append((section_now-section_previous)/1000.0)
+    section_previous=section_now
+   section_times.sort()
+   assert(total_mesh_updates==uploads and reference_builds==builds)
+   print("BENCH SECTION OVERLAY: station+orbit median %.2f ms / p95 %.2f ms / zero corridor rebuilds and terrain uploads" % [section_times[30],section_times[56]])
   print("BENCH PLAN OVERLAY: %.2f ms / %d points / zoom+orbit: p95 %.2fms / zero native rebuilds and terrain uploads" % [build_ms,plan.reference_points.size(),overlay_times[28]])
  if "--profile-comparison-demo" in arguments:
   assert(capture_alternative('보관 "원안", 비교'))
@@ -3195,6 +3214,7 @@ func clear_plan_reference():
  reference_design={}
  reference_data={}
  if profile!=null:profile.set_profile_reference({},"")
+ if section!=null:section.set_section_reference({},"")
  if plan!=null:plan.set_reference(PackedVector2Array(),"")
  if alternatives_window!=null and alternatives_window.reference_toggle!=null:
   alternatives_window.reference_toggle.set_pressed_no_signal(false)
@@ -3210,12 +3230,19 @@ func set_plan_reference(index,enabled):
    clear_plan_reference()
    alternatives_window.status.text="평면 중첩 실패: "+str(built.get("error","unknown"))
    return false
+  var saved_section=SectionReference.build(built,entry.design,model.terrain,model.source)
+  if not saved_section.ok:
+   clear_plan_reference()
+   alternatives_window.status.text="횡단 중첩 실패: "+str(saved_section.get("error","unknown"))
+   return false
+  built.section=saved_section
   reference_builds+=1
   reference_data=built
   reference_design=entry.design.duplicate(true)
   plan.set_reference(built.points,entry.name)
  else:plan.set_reference(plan.reference_points,entry.name)
  profile.set_profile_reference(reference_data,entry.name)
+ section.set_section_reference(reference_data.section,entry.name)
  return true
 
 
@@ -3411,4 +3438,70 @@ func run_profile_comparison_smoke():
  profile_comparison.start_calculation()
  assert(profile_comparison.worker==null and profile_comparison.result.is_empty())
  print("PASS PROFILE COMPARISON UI: async native table, 200-row paging and full quoted CSV, exact station navigation, immutable design/library/history, selection/settings/design/library invalidation and stale discard")
+ get_tree().quit(0)
+
+
+func run_section_overlay_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ assert(capture_alternative("횡단 원안"))
+ offset_input.value=5
+ apply_parameters()
+ while worker!=null or not dirty.is_empty() or not apply_queue.is_empty():await get_tree().process_frame
+ alternatives_window.open_library()
+ alternatives_window.reference_toggle.button_pressed=true
+ assert(not section.reference_section.is_empty() and section.reference_button.visible)
+ var core=section.reference_section.core
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var rev=revision
+ var builds=reference_builds
+ var uploads=total_mesh_updates
+ var at=model.sample(model.length()*model.station)
+ var samples=section.section_samples(Rect2(-20,-10,40,20),at)
+ for p in samples:
+  var x=at.point.x+at.normal.x*p.x
+  var y=at.point.z+at.normal.y*p.x
+  assert(abs(p.w-SectionReference.height(reference_data.section,x,y))<0.0001)
+  if abs(p.x)<9:assert(abs(p.z-p.w-5)<0.0001)
+ section.fit_section(false)
+ await get_tree().process_frame
+ await get_tree().process_frame
+ section_equal_check()
+ var wheel=InputEventMouseButton.new()
+ wheel.button_index=MOUSE_BUTTON_WHEEL_UP
+ wheel.pressed=true
+ wheel.position=section.plot_rect().get_center()
+ section._gui_input(wheel)
+ section_equal_check()
+ var press=InputEventMouseButton.new()
+ press.button_index=MOUSE_BUTTON_MIDDLE
+ press.pressed=true
+ press.position=section.plot_rect().get_center()
+ section._gui_input(press)
+ var motion=InputEventMouseMotion.new()
+ motion.button_mask=MOUSE_BUTTON_MASK_MIDDLE
+ motion.relative=Vector2(10,5)
+ section._gui_input(motion)
+ press.pressed=false
+ section._gui_input(press)
+ section_equal_check()
+ for i in range(5):
+  set_station_distance(500+i*20)
+  await get_tree().process_frame
+ assert(reference_builds==builds and total_mesh_updates==uploads and section.reference_section.core==core)
+ assert(model.edit_state()==before and history==undo_stack.size() and revision==rev)
+ rename_alternative(0,"횡단 원안 이름 변경")
+ assert(section.reference_name=="횡단 원안 이름 변경" and section.reference_section.core==core)
+ section.reference_button.pressed.emit()
+ assert(section.reference_section.is_empty() and profile.reference_profile.is_empty() and plan.reference_points.is_empty())
+ alternatives_window.reference_toggle.button_pressed=true
+ delete_alternative(0)
+ assert(section.reference_section.is_empty())
+ assert(capture_alternative("다시 보관"))
+ alternatives_window.reference_toggle.button_pressed=true
+ reset_terrain(true)
+ assert(section.reference_section.is_empty() and reference_data.is_empty())
+ print("PASS SECTION OVERLAY UI: same current section line, full-fit/zoom/pan physical 1:1, cached corridor on station move, no model/history/revision/terrain changes, rename/clear/delete/reset")
  get_tree().quit(0)

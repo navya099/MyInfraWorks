@@ -1,4 +1,6 @@
 extends Control
+const ReferenceSection=preload("res://scripts/section_reference.gd")
+var reference_section={}
 const ReferenceProfile=preload("res://scripts/plan_reference.gd")
 signal reference_clear_requested
 var reference_points=PackedVector2Array()
@@ -47,7 +49,7 @@ func _ready():
  clip_contents = true
  resized.connect(queue_redraw)
  get_window().focus_exited.connect(stop_navigation)
- if mode in ["plan","profile"]:
+ if mode in ["plan","profile","section"]:
   reference_button=Button.new()
   reference_button.text="중첩 해제"
   reference_button.visible=false
@@ -57,7 +59,7 @@ func _ready():
   place_reference_button()
 
 func plot_rect():
- var top=46 if mode=="profile" and not reference_profile.is_empty() else 20
+ var top=46 if (mode=="profile" and not reference_profile.is_empty()) or (mode=="section" and not reference_section.is_empty()) else 20
  return Rect2(Vector2(48,top),Vector2(max(1,size.x-68),max(1,size.y-top-36)))
 
 func map_rect():
@@ -186,7 +188,8 @@ func section_samples(view,at):
  for d in distances:
   var x=at.point.x+at.normal.x*d
   var y=at.point.z+at.normal.y*d
-  samples.append(Vector3(d,model.ground(x,y),model.design(x,y)))
+  var saved=ReferenceSection.height(reference_section,x,y) if not reference_section.is_empty() else NAN
+  samples.append(Vector4(d,model.ground(x,y),model.design(x,y),saved))
  return samples
 
 func section_pixels(r):
@@ -210,6 +213,9 @@ func section_screen(d,height,centre,r):
  return Vector2(r.position.x+(d-section_view.position.x)/section_view.size.x*r.size.x,r.end.y-(height-centre-section_view.position.y)/section_view.size.y*r.size.y)
 
 func draw_section(r,length):
+ if not reference_section.is_empty():
+  draw_string(ThemeDB.fallback_font,Vector2(14,18),"보라 보관 설계면: "+reference_name,HORIZONTAL_ALIGNMENT_LEFT,max(1,size.x-130),12,Color("d987ed"))
+  label("현재 횡단선에서 비교 · 보관 영향 없으면 원지반 · STA 대응 아님",Vector2(14,36))
  var at=model.sample(length*model.station)
  var centre=at.elevation+model.offset
  if section_mode=="road":
@@ -229,7 +235,7 @@ func draw_section(r,length):
   var low=centre
   var high=centre
   for p in samples:
-   for h in [p.y,p.z]:
+   for h in [p.y,p.z,p.w]:
     if is_finite(h):
      low=min(low,h)
      high=max(high,h)
@@ -240,6 +246,15 @@ func draw_section(r,length):
   fit_equal_section(section_view,r)
   # Equal scales can reveal extra horizontal context beyond the fitted span.
   if not is_equal_approx(old_width,section_view.size.x):samples=section_samples(section_view,at)
+ var reference_valid=false
+ var previous_reference=Vector2.ZERO
+ for p in samples:
+  if is_finite(p.w):
+   var point=section_screen(p.x,p.w,centre,r)
+   if reference_valid:section_line(previous_reference,point,r,Color("d987ed"),4)
+   previous_reference=point
+   reference_valid=true
+  else:reference_valid=false
  var previous_valid=false
  var previous_g=Vector2.ZERO
  var previous_d=Vector2.ZERO
@@ -586,7 +601,7 @@ func focus_navigation():
 
 func place_reference_button():
  if reference_button!=null:
-  reference_button.position=Vector2(max(0,size.x-104),5 if mode=="profile" else 27)
+  reference_button.position=Vector2(max(0,size.x-104),5 if mode in ["profile","section"] else 27)
   reference_button.size=Vector2(96,24)
 
 func set_reference(points,name):
@@ -629,3 +644,10 @@ func draw_profile_reference(r):
   if valid:section_line(previous,point,r,Color("d987ed"),4)
   previous=point
   valid=true
+
+
+func set_section_reference(data,name):
+ reference_section=data
+ reference_name=name
+ if reference_button!=null:reference_button.visible=not data.is_empty()
+ queue_redraw()
