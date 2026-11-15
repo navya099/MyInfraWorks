@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/section-dxf-extra-stations` (0.37). 확인된 0.36은 `main`에 반영했습니다.
+개발 브랜치: `feature/section-dxf-boundaries` (0.38). 확인된 0.37은 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.37. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.38. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/section-dxf-extra-stations --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/section-dxf-boundaries --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.37 실행
+## Godot 편집기 0.38 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -848,7 +848,7 @@ python tests/verify_station_events_export.py "<Godot user:// 데이터 경로>"
 실제 포물선의 BVC/PVI/EVC·구간 양 끝·완화곡선/PI 경계·정규 태그 병합·원본 행 보존을 확인했습니다. UI에서는 필터 전환/재계산 없음·필터 기준 페이지/행 이동·동률 STA 찾기·무효화를 검사했고, 주요 경계 2행만 표시한 상태에서 실제 저장한 CSV의 전체 1,201행을 독립 Python으로 확인했습니다. 기존 측점표/페이지/구간/평면·횡단·종단 DXF 회귀 검사도 통과했습니다.
 
 
-## 0.37 횡단 DXF 지정 측점 추가 (개발 브랜치)
+## 0.37 횡단 DXF 지정 측점 추가 (main 반영 완료)
 
 상단 `DXF` → `횡단 DXF...`에서 `추가 STA(m)`에 `123.45, 567.89`처럼 쉼표로 구분해 입력한 뒤 `산출` → `DXF 저장`을 누릅니다. `현재 STA 추가`로 현재 횡단 위치를 입력 목록에 넣을 수 있으며 `비우기`로 추가 목록을 지웁니다.
 
@@ -866,3 +866,23 @@ python tests/verify_section_extra_export.py "<SECTION EXTRA FIXTURES 출력 경�
 ```
 
 독립 ezdxf 판독에서 오류·자동 수정 0건, 정렬된 정확한 STA·중복 우선순위·구간 출력·라벨·횡단 1:1·2%/4% 횡단구배를 확인했습니다. 실제 저장 신호·현재 STA 추가·설계/이력 불변·잘못된 입력·오래된 산출/저장 거부 및 기존 횡단/구간/종단/평면 DXF·측점표 경계 필터 회귀 검사도 통과했습니다.
+
+
+## 0.38 횡단 DXF 주요 선형 경계 포함 (개발 브랜치)
+
+상단 `DXF` → `횡단 DXF...`에서 `주요 선형 경계 포함`을 체크하고 `산출` → `DXF 저장`을 누릅니다. 기본은 꺼짐으로 기존 출력과 같습니다.
+
+- 출력 구간 안 PI·PVI·평면 요소 시작/끝·종단곡선 시작(BVC)/끝(EVC)을 정규 측점·구간 양 끝·추가 STA와 합칩니다. 완화곡선/원곡선 전환 경계도 포함합니다.
+- 가까운 측점은 기존 0.0000001m 미만 기준으로 병합합니다. 구간 양 끝 > 선형 경계 > 사용자 추가 STA > 정규 측점 순으로 정확한 STA를 보존합니다.
+- 경계와 중복되는 최종 횡단 수를 표시합니다. 정규 측점이나 구간 양 끝과 겹친 경계도 이 수에 포함하므로 증가한 횡단 수와 다를 수 있습니다.
+- 경계 포함 후에도 최대 500횡단·전체 100,000표본을 적용합니다. 옵션 변경은 결과/저장을 무효화합니다. 설계·이력·횡단 1:1·프로젝트 v7·DLL v018은 유지합니다.
+
+[경계 수집·병합·검증](docs/section-dxf-boundaries.md)을 참조하세요.
+
+```powershell
+godot --headless --path godot/project --script verify_section_boundaries.gd
+godot --headless --path godot/project -- --section-boundaries-smoke
+python tests/verify_section_boundaries_export.py "<SECTION BOUNDARY FIXTURES 출력 경로>"
+```
+
+독립 ezdxf에서 오류·자동 수정 0건과 정확한 BVC/PVI/EVC·PI/원곡선/완화곡선 경계·구간/중복 우선순위·실제 포물선 계획고/횡단구배를 확인했습니다. 실제 저장 신호·설계/이력 불변·기본 꺼짐·옵션 무효화·오래된 결과/저장 거부 및 기존 추가 STA/횡단 구간/횡단/종단/평면 DXF 회귀 검사도 통과했습니다.

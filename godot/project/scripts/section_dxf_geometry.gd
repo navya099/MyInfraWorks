@@ -51,7 +51,20 @@ static func parse_extra(text):
   stations.append(token.to_float())
  return {"ok":true,"stations":stations}
 
-static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text=""):
+static func alignment_boundaries(info,begin,finish):
+ var candidates=[]
+ for element in info.elements:
+  candidates.append(float(element.station))
+  candidates.append(float(element.station+element.length))
+ for station in info.pi_stations:candidates.append(float(station))
+ for i in range(info.pvi_stations.size()):
+  candidates.append(float(info.pvi_stations[i]))
+  if info.pvi_lengths[i]>0:
+   candidates.append(float(info.pvi_stations[i]-info.pvi_lengths[i]/2.0))
+   candidates.append(float(info.pvi_stations[i]+info.pvi_lengths[i]/2.0))
+ return candidates.filter(func(station):return station>=begin and station<=finish)
+
+static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text="",include_boundaries=false):
  var started=Time.get_ticks_usec()
  if typeof(columns)!=TYPE_INT:return fail("배치 열 수는 정수여야 합니다.")
  if not is_finite(station_step) or station_step<1 or station_step>10000 or not is_finite(half) or half<5 or half>10000 or not is_finite(lateral_step) or lateral_step<0.1 or lateral_step>50 or columns<1 or columns>8:return fail("측점 간격 1~10000m / 반폭 5~10000m / 횡단 간격 0.1~50m / 배치 1~8열 범위입니다.")
@@ -74,20 +87,25 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
  var parsed=parse_extra(extra_text)
  if not parsed.ok:return parsed
  var events=[]
- for station in stations:events.append({"s":station,"priority":3 if station==begin or station==finish else 1})
+ for station in stations:events.append({"s":station,"priority":4 if station==begin or station==finish else 1,"boundary":false})
  for station in parsed.stations:
   if station<begin or station>finish:return fail("추가 STA는 출력 구간 안에 있어야 합니다.")
-  events.append({"s":station,"priority":2})
+  events.append({"s":station,"priority":2,"boundary":false})
+ if include_boundaries:
+  for station in alignment_boundaries(reference.info,begin,finish):events.append({"s":station,"priority":3,"boundary":true})
  events.sort_custom(func(a,b):return a.s<b.s)
  stations=[]
  var priorities=[]
+ var boundary_flags=[]
  for event in events:
   if not stations.is_empty() and abs(stations[-1]-event.s)<0.0000001:
+   boundary_flags[-1]=boundary_flags[-1] or event.boundary
    if event.priority>priorities[-1]:stations[-1]=event.s;priorities[-1]=event.priority
   else:
    stations.append(event.s)
    priorities.append(event.priority)
- if stations.size()>MAX_SECTIONS:return fail("추가 STA를 포함해 500횡단을 넘습니다. 간격을 늘리거나 추가 측점을 줄이세요.")
+   boundary_flags.append(event.boundary)
+ if stations.size()>MAX_SECTIONS:return fail("추가 STA/선형 경계를 포함해 500횡단을 넘습니다. 간격을 늘리거나 추가 측점을 줄이세요.")
  var lateral_count=ceili(2.0*half/lateral_step)
  if lateral_count+1>20000:return fail("한 횡단의 표본이 20000개를 넘습니다.")
  var offsets=[-half,0.0,half]
@@ -131,6 +149,7 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
  var cell_width=2.0*half+2.0*margin
  var cell_height=max_height+2.0*margin+text_height*8
  var lines=PackedStringArray()
+ if include_boundaries:pair(lines,999,"AUTO_ALIGNMENT_BOUNDARIES=1; PI_PVI_PLAN_ELEMENTS_BVC_EVC; ENDPOINT_PRIORITY")
  for station in parsed.stations:pair(lines,999,"EXTRA_STA=%.9f; MERGE_TOLERANCE=0.0000001m" % station)
  if not station_range.is_empty():pair(lines,999,"STA_RANGE=%.9f,%.9f; ORIGINAL_STATIONING; H_V=1" % [begin,finish])
  pair(lines,999,"MYINFRAWORKS; UNITS=METERS; SECTION_LAYOUT; H_V=1; ALL_ENTITY_Z=0; NO_EPSG_COORDINATES")
@@ -169,4 +188,4 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
   for d in [-half,0.0,half]:text(lines,ox+d,oy-text_height*2,text_height,"%.3f" % d)
   summaries.append({"station":section.station,"datum":section.datum,"ground_missing":section.ground_missing,"design_missing":section.design_missing,"ground_runs":ground_runs,"design_runs":design_runs})
  pair(lines,0,"ENDSEC");pair(lines,0,"EOF")
- return {"ok":true,"text":"\n".join(lines)+"\n","sections":summaries,"samples":stations.size()*unique.size(),"lateral_count":unique.size(),"missing":missing_total,"length":reference.length,"begin":begin,"end":finish,"station_step":station_step,"half":half,"lateral_step":lateral_step,"columns":columns,"extra_requested":parsed.stations.size(),"ms":(Time.get_ticks_usec()-started)/1000.0}
+ return {"ok":true,"text":"\n".join(lines)+"\n","sections":summaries,"samples":stations.size()*unique.size(),"lateral_count":unique.size(),"missing":missing_total,"length":reference.length,"begin":begin,"end":finish,"station_step":station_step,"half":half,"lateral_step":lateral_step,"columns":columns,"extra_requested":parsed.stations.size(),"include_boundaries":include_boundaries,"boundary_sections":boundary_flags.count(true),"ms":(Time.get_ticks_usec()-started)/1000.0}

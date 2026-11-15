@@ -8,6 +8,7 @@ var end_input: LineEdit
 var range_length=-1.0
 var requested_inputs=PackedStringArray()
 var extra_input: LineEdit
+var include_boundaries: CheckBox
 
 func _ready():
  super._ready()
@@ -42,6 +43,10 @@ func _ready():
  full_button.text="전체 범위"
  full_button.pressed.connect(full_range)
  range_row.add_child(full_button)
+ include_boundaries=CheckBox.new()
+ include_boundaries.text="주요 선형 경계 포함"
+ include_boundaries.toggled.connect(func(_enabled):invalidate())
+ range_row.add_child(include_boundaries)
  var extra_row=HBoxContainer.new()
  root.add_child(extra_row)
  root.move_child(extra_row,3)
@@ -111,7 +116,7 @@ func add_current_station():
  invalidate()
 
 func input_signature():
- return PackedStringArray([begin_input.text,end_input.text,str(interval.value),str(reach.value),str(lateral_step.value),str(columns.value),extra_input.text])
+ return PackedStringArray([begin_input.text,end_input.text,str(interval.value),str(reach.value),str(lateral_step.value),str(columns.value),extra_input.text,str(include_boundaries.button_pressed)])
 
 func open_export():
  if range_length!=snapshot_provider.call().length:full_range()
@@ -132,7 +137,7 @@ func start_calculation():
  requested_generation=generation
  status.text="횡단 DXF 산출 중 · 최대 500횡단 / 전체 100000표본"
  worker=Thread.new()
- if worker.start(CrossDxf.calculate_job.bind(state.snapshot,interval.value,reach.value,lateral_step.value,int(columns.value),bounds,extra_input.text))!=OK:
+ if worker.start(CrossDxf.calculate_job.bind(state.snapshot,interval.value,reach.value,lateral_step.value,int(columns.value),bounds,extra_input.text,include_boundaries.button_pressed))!=OK:
   worker=null
   status.text="작업 스레드를 시작하지 못했습니다."
 
@@ -150,7 +155,7 @@ func _process(_delta):
  result_revision=requested_revision
  csv_button.disabled=false
  status.text="%d횡단 / %d표본 · 원지반 결측 %d · %.1fms" % [result.sections.size(),result.samples,result.missing,result.ms]
- var lines=PackedStringArray(["추가 STA 입력 %d개 · 중복 병합 후 총 %d횡단" % [result.extra_requested,result.sections.size()],"출력 STA %.3f~%.3fm · 구간 길이 %.3fm · 원래 STA 유지" % [result.begin,result.end,result.end-result.begin],"DXF R12 ASCII / H:V 1:1 / Z=0 배치 / CAD 단위 m", "녹색 KROAD_SEC_GROUND / 노랑 KROAD_SEC_DESIGN", "회색 KROAD_SEC_AXIS / 흰색 KROAD_SEC_TEXT", "DATUM: 각 횡단 기준표고 · Y좌표=배치기준+표고−DATUM", "결측은 선을 끊고 단독 유효 표본은 POINT · 사면 폐합/수량 계산 없음", "", "STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각"])
+ var lines=PackedStringArray(["주요 경계 %s · 경계 포함 횡단 %d개" % ["포함" if result.include_boundaries else "제외",result.boundary_sections],"추가 STA 입력 %d개 · 중복 병합 후 총 %d횡단" % [result.extra_requested,result.sections.size()],"출력 STA %.3f~%.3fm · 구간 길이 %.3fm · 원래 STA 유지" % [result.begin,result.end,result.end-result.begin],"DXF R12 ASCII / H:V 1:1 / Z=0 배치 / CAD 단위 m", "녹색 KROAD_SEC_GROUND / 노랑 KROAD_SEC_DESIGN", "회색 KROAD_SEC_AXIS / 흰색 KROAD_SEC_TEXT", "DATUM: 각 횡단 기준표고 · Y좌표=배치기준+표고−DATUM", "결측은 선을 끊고 단독 유효 표본은 POINT · 사면 폐합/수량 계산 없음", "", "STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각"])
  for section in result.sections:lines.append("%.3f | %.3f | %d / %d | %d / %d" % [section.station,section.datum,section.ground_missing,section.design_missing,section.ground_runs,section.design_runs])
  table.text="\n".join(lines)
 
