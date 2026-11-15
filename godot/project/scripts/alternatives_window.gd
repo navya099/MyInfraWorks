@@ -77,7 +77,7 @@ func _ready():
  hint.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  root.add_child(hint)
  reference_toggle=CheckBox.new()
- reference_toggle.text="선택 대안을 평면에 중첩 표시 (중심선만 · 현재 설계 유지)"
+ reference_toggle.text="선택 대안 평면·종단 중첩 (중심선·계획고 · 현재 설계 유지)"
  reference_toggle.toggled.connect(func(_pressed):update_reference())
  root.add_child(reference_toggle)
  var compare=Button.new()

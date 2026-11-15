@@ -14,6 +14,7 @@ var alternative_comparison
 var alternatives_revision=0
 const PlanReference=preload("res://scripts/plan_reference.gd")
 var reference_design={}
+var reference_data={}
 var reference_builds=0
 const ReviewWindow=preload("res://scripts/review_window.gd")
 var review_window
@@ -101,7 +102,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--overlay-smoke" in OS.get_cmdline_user_args():
+ if "--profile-overlay-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_profile_overlay_smoke")
+ elif "--overlay-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_overlay_smoke")
  elif "--blocks-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_blocks_smoke")
@@ -181,8 +184,8 @@ func make_canvas(parent,title,mode):
  if mode in ["plan","profile"]:
   var tools_row=HBoxContainer.new()
   box.add_child(tools_row)
+  canvas.reference_clear_requested.connect(clear_plan_reference)
   if mode=="plan":
-   canvas.reference_clear_requested.connect(clear_plan_reference)
    pi_add_button=Button.new()
    pi_add_button.text="PI 추가"
    pi_add_button.toggle_mode=true
@@ -1292,13 +1295,15 @@ func run_visual_test():
   print("BENCH ALTERNATIVES: edit, two captures and apply %.2f ms / design library %d bytes" % [(Time.get_ticks_usec()-begin)/1000.0,var_to_bytes(alternatives.serialize()).size()])
   while worker!=null or not dirty.is_empty():await get_tree().process_frame
   alternatives_window.open_library()
- if "--overlay-demo" in arguments:
+ if "--overlay-demo" in arguments or "--profile-overlay-demo" in arguments:
   assert(capture_alternative("보관 원안"))
   var start=Time.get_ticks_usec()
   alternatives_window.selected=0
   alternatives_window.reference_toggle.button_pressed=true
   var build_ms=(Time.get_ticks_usec()-start)/1000.0
   var state=model.edit_state()
+  if "--profile-overlay-demo" in arguments:
+   for i in range(state.pvi_heights.size()):state.pvi_heights[i]+=30
   for i in range(1,state.pi_route.size()-1):state.pi_route[i].z+=300
   if state.pi_route.size()==2:state.pi_route[-1].z+=200
   var previous=model.snapshot()
@@ -1313,6 +1318,7 @@ func run_visual_test():
   var builds=reference_builds
   for i in range(30):
    plan.zoom_navigation(plan.size/2,0.995)
+   if "--profile-overlay-demo" in arguments:profile.zoom_navigation(profile.plot_rect().get_center(),0.995)
    yaw+=0.001
    update_camera()
    await get_tree().process_frame
@@ -3159,6 +3165,8 @@ func run_blocks_smoke():
 
 func clear_plan_reference():
  reference_design={}
+ reference_data={}
+ if profile!=null:profile.set_profile_reference({},"")
  if plan!=null:plan.set_reference(PackedVector2Array(),"")
  if alternatives_window!=null and alternatives_window.reference_toggle!=null:
   alternatives_window.reference_toggle.set_pressed_no_signal(false)
@@ -3175,9 +3183,11 @@ func set_plan_reference(index,enabled):
    alternatives_window.status.text="평면 중첩 실패: "+str(built.get("error","unknown"))
    return false
   reference_builds+=1
+  reference_data=built
   reference_design=entry.design.duplicate(true)
   plan.set_reference(built.points,entry.name)
  else:plan.set_reference(plan.reference_points,entry.name)
+ profile.set_profile_reference(reference_data,entry.name)
  return true
 
 
@@ -3236,4 +3246,68 @@ func run_overlay_smoke():
  reset_terrain(true)
  assert(plan.reference_points.is_empty() and reference_design.is_empty() and not alternatives_window.reference_toggle.button_pressed)
  print("PASS PLAN OVERLAY UI: selected saved reference, shared navigation, cached native geometry, no design/history/revision/terrain changes, rename/edit/switch/clear/delete/DEM-reset lifecycle")
+ get_tree().quit(0)
+
+
+func run_profile_overlay_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ assert(capture_alternative("종단 원안"))
+ while worker!=null or not dirty.is_empty() or not apply_queue.is_empty():await get_tree().process_frame
+ alternatives_window.open_library()
+ alternatives_window.reference_toggle.button_pressed=true
+ var before=model.edit_state()
+ var rev=revision
+ var history=undo_stack.size()
+ var uploads=total_mesh_updates
+ var builds=reference_builds
+ var native=profile.reference_profile.alignment
+ assert(not profile.reference_profile.is_empty() and profile.reference_button.visible)
+ var bounds=profile.chart_bounds()
+ assert(bounds.x<reference_data.low and bounds.y>reference_data.high)
+ var full=profile.station_range()
+ profile.zoom_navigation(profile.plot_rect().get_center(),0.5)
+ assert(profile.profile_manual and profile.station_range().y-profile.station_range().x<full.y-full.x)
+ var press=InputEventMouseButton.new()
+ press.button_index=MOUSE_BUTTON_MIDDLE
+ press.pressed=true
+ press.position=profile.plot_rect().get_center()
+ profile._gui_input(press)
+ var motion=InputEventMouseMotion.new()
+ motion.button_mask=MOUSE_BUTTON_MASK_MIDDLE
+ motion.relative=Vector2(20,10)
+ profile._gui_input(motion)
+ press.pressed=false
+ profile._gui_input(press)
+ for i in range(5):await get_tree().process_frame
+ assert(model.edit_state()==before and revision==rev and undo_stack.size()==history and total_mesh_updates==uploads and reference_builds==builds)
+ profile.fit_navigation()
+ rename_alternative(0,"종단 원안 이름 변경")
+ assert(profile.reference_name=="종단 원안 이름 변경" and profile.reference_profile.alignment==native and reference_builds==builds)
+ var saved=native.sample(600).elevation+profile.reference_profile.offset
+ offset_input.value=30
+ apply_parameters()
+ assert(profile.reference_profile.offset==0 and abs(native.sample(600).elevation-saved)<1e-6)
+ assert(move_pi(1,Vector2(1200,1000)))
+ profile.fit_navigation()
+ assert(model.length()<reference_data.length and abs(profile.station_range().y-reference_data.length)<1e-6)
+ clear_route()
+ assert(model.length()==0 and not profile.reference_profile.is_empty())
+ profile.zoom_navigation(profile.plot_rect().get_center(),0.8)
+ await get_tree().process_frame
+ assert(profile.profile_manual)
+ undo_edit()
+ assert(model.length()>0 and profile.reference_profile.alignment==native)
+ profile.reference_button.pressed.emit()
+ assert(profile.reference_profile.is_empty() and plan.reference_points.is_empty() and not alternatives_window.reference_toggle.button_pressed)
+ alternatives_window.reference_toggle.button_pressed=true
+ assert(not profile.reference_profile.is_empty())
+ delete_alternative(0)
+ assert(profile.reference_profile.is_empty() and plan.reference_points.is_empty())
+ assert(capture_alternative("재보관"))
+ alternatives_window.reference_toggle.button_pressed=true
+ reset_terrain(true)
+ assert(reference_data.is_empty() and profile.reference_profile.is_empty())
+ print("PASS PROFILE OVERLAY UI: common selection, reference bounds/length, zoom/pan, native cache, immutable model/history/revision/terrain, current edits and empty-route view, both clear, delete and reset")
  get_tree().quit(0)

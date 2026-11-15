@@ -1,7 +1,9 @@
 extends Control
+const ReferenceProfile=preload("res://scripts/plan_reference.gd")
 signal reference_clear_requested
 var reference_points=PackedVector2Array()
 var reference_name=""
+var reference_profile={}
 var reference_button: Button
 signal point_added(point)
 signal point_inserted(after_index,point)
@@ -45,7 +47,7 @@ func _ready():
  clip_contents = true
  resized.connect(queue_redraw)
  get_window().focus_exited.connect(stop_navigation)
- if mode=="plan":
+ if mode in ["plan","profile"]:
   reference_button=Button.new()
   reference_button.text="중첩 해제"
   reference_button.visible=false
@@ -55,7 +57,8 @@ func _ready():
   place_reference_button()
 
 func plot_rect():
- return Rect2(Vector2(48,20),Vector2(max(1,size.x-68),max(1,size.y-56)))
+ var top=46 if mode=="profile" and not reference_profile.is_empty() else 20
+ return Rect2(Vector2(48,top),Vector2(max(1,size.x-68),max(1,size.y-top-36)))
 
 func map_rect():
  var available = size-Vector2(32,32)
@@ -74,6 +77,9 @@ func chart_bounds():
  for height in model.pvi_heights:
   low = min(low,height+model.offset)
   high = max(high,height+model.offset)
+ if mode=="profile" and not reference_profile.is_empty():
+  low=min(low,reference_profile.low)
+  high=max(high,reference_profile.high)
  var pad = max(10.0,(high-low)*0.15)
  return Vector2(low-pad,high+pad)
 
@@ -151,7 +157,7 @@ func _draw():
   var hint="PI %d 뒤 삽입: 클릭 지정 / Esc·우클릭 취소" % (insert_after+1) if insert_after>=0 else "PI 추가 중: 클릭으로 노선 끝에 추가 / Esc·우클릭: 종료" if append_mode else "선택 모드: PI 클릭·드래그 / 새 점은 아래 PI 추가 버튼 선택"
   label(hint,Vector2(14,size.y-10),ORANGE if append_mode else MUTED)
   return
- if model.route.size()<2:
+ if model.route.size()<2 and (mode!="profile" or reference_profile.is_empty()):
   label("평면에 노선 점을 두 개 이상 추가하세요.",Vector2(24,38))
   return
  var r = plot_rect()
@@ -436,7 +442,7 @@ func plan_area():
  return Rect2(Vector2(12,top),Vector2(max(1,size.x-24),max(1,size.y-top-26)))
 
 func station_range():
- return Vector2(profile_view.position.x,profile_view.end.x) if profile_manual else Vector2(0,max(1.0,model.length()))
+ return Vector2(profile_view.position.x,profile_view.end.x) if profile_manual else Vector2(0,max(1.0,profile_length()))
 
 func profile_screen(station,height):
  var r=plot_rect()
@@ -469,14 +475,14 @@ func zoom_navigation(position,factor,horizontal_only=false,vertical_only=false):
   plan_zoom=clamp(plan_zoom/factor,0.25,1024.0)
   var current=map_rect()
   plan_shift+=(position-current.position-anchor*current.size)/size
- elif mode=="profile" and model.length()>0:
+ elif mode=="profile" and profile_length()>0:
   var r=plot_rect()
   var world=profile_world(position)
   var anchor=Vector2((position.x-r.position.x)/r.size.x,(r.end.y-position.y)/r.size.y)
   var stations=station_range()
   var heights=chart_bounds()
   var span=profile_view.size if profile_manual else Vector2(stations.y-stations.x,heights.y-heights.x)
-  span.x=clamp(span.x*(1.0 if vertical_only else factor),1.0,max(100.0,model.length()*8))
+  span.x=clamp(span.x*(1.0 if vertical_only else factor),1.0,max(100.0,profile_length()*8))
   span.y=clamp(span.y*(1.0 if horizontal_only else factor),0.02,1000000.0)
   profile_view=Rect2(world-anchor*span,span)
   profile_manual=true
@@ -499,7 +505,7 @@ func navigation_input(event):
    navigation_panning=false
    return true
   if mode=="plan":plan_shift+=event.relative/size
-  elif model.length()>0:
+  elif profile_length()>0:
    var stations=station_range()
    var heights=chart_bounds()
    var span=profile_view.size if profile_manual else Vector2(stations.y-stations.x,heights.y-heights.x)
@@ -515,12 +521,13 @@ func project_profile(station,height,r,stations,heights):
  return Vector2(r.position.x+(station-stations.x)/(stations.y-stations.x)*r.size.x,r.end.y-(height-heights.x)/(heights.y-heights.x)*r.size.y)
 
 func draw_profile(r,length):
+ draw_profile_reference(r)
  var stations=station_range()
  var bounds=chart_bounds()
  var start=max(0.0,stations.x)
  var end=min(length,stations.y)
  var samples=[]
- if end>=start:
+ if length>0 and end>=start:
   for i in range(241):samples.append(lerp(start,end,i/240.0))
   for i in range(model.pvi_stations.size()):
    for station in [model.pvi_stations[i],model.pvi_stations[i]-model.pvi_lengths[i]/2,model.pvi_stations[i]+model.pvi_lengths[i]/2]:
@@ -555,7 +562,7 @@ func draw_profile(r,length):
     if r.grow(0.01).has_point(marker):draw_circle(marker,3,Color("a8d4ef"))
  if edit_index>=0 and drag_rejected and r.has_point(drag_target):draw_circle(drag_target,9,Color("ff7777"),false,2)
  var sx=project_profile(length*model.station,bounds.x,r,stations,bounds).x
- if sx>=r.position.x and sx<=r.end.x:draw_line(Vector2(sx,r.position.y),Vector2(sx,r.end.y),Color("d1e6ef"),1)
+ if length>0 and sx>=r.position.x and sx<=r.end.x:draw_line(Vector2(sx,r.position.y),Vector2(sx,r.end.y),Color("d1e6ef"),1)
  label("%.2f" % bounds.y,Vector2(1,r.position.y+5))
  label("%.2f" % bounds.x,Vector2(1,r.end.y))
  label("STA %.2f → %.2f | 녹색: 원지반 / 주황: 계획" % [stations.x,stations.y],Vector2(r.position.x,size.y-10))
@@ -579,7 +586,7 @@ func focus_navigation():
 
 func place_reference_button():
  if reference_button!=null:
-  reference_button.position=Vector2(max(0,size.x-104),27)
+  reference_button.position=Vector2(max(0,size.x-104),5 if mode=="profile" else 27)
   reference_button.size=Vector2(96,24)
 
 func set_reference(points,name):
@@ -587,3 +594,38 @@ func set_reference(points,name):
  reference_name=name
  if reference_button!=null:reference_button.visible=not points.is_empty()
  queue_redraw()
+
+
+func set_profile_reference(data,name):
+ reference_profile=data
+ reference_name=name
+ if reference_button!=null:reference_button.visible=not data.is_empty()
+ queue_redraw()
+
+func profile_length():
+ return max(model.length(),reference_profile.get("length",0.0))
+
+func draw_profile_reference(r):
+ if reference_profile.is_empty():return
+ var stations=station_range()
+ var bounds=chart_bounds()
+ var start=max(0.0,stations.x)
+ var end=min(reference_profile.length,stations.y)
+ draw_string(ThemeDB.fallback_font,Vector2(14,18),"보라 보관 계획고: "+reference_name,HORIZONTAL_ALIGNMENT_LEFT,max(1,size.x-130),12,Color("d987ed"))
+ label("같은 STA 기준 · 경로가 다르면 같은 지점 아님 · 녹색 지반: 현재 노선",Vector2(14,36))
+ if end<=start:return
+ var samples=[]
+ for i in range(241):samples.append(lerpf(start,end,i/240.0))
+ var info=reference_profile.info
+ for i in range(info.pvi_stations.size()):
+  for station in [info.pvi_stations[i],info.pvi_stations[i]-info.pvi_lengths[i]/2,info.pvi_stations[i]+info.pvi_lengths[i]/2]:
+   if station>=start and station<=end:samples.append(station)
+ samples.sort()
+ var previous=Vector2.ZERO
+ var valid=false
+ for station in samples:
+  var height=ReferenceProfile.profile_height(reference_profile,station)
+  var point=project_profile(station,height,r,stations,bounds)
+  if valid:section_line(previous,point,r,Color("d987ed"),4)
+  previous=point
+  valid=true
