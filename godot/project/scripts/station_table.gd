@@ -94,17 +94,24 @@ func start_calculation():
   worker=null
   status.text="작업 스레드를 시작하지 못했습니다."
 
-static func calculate_job(snapshot,step):
+static func calculate_job(snapshot,step,station_range={}):
  var started=Time.get_ticks_usec()
  if not is_finite(step) or step<0.1 or step>10000:return {"ok":false,"error":"측점 간격은 0.1~10000m입니다."}
  var alignment=ClassDB.instantiate("KRoadAlignment")
  var info=alignment.configure_independent(snapshot.pi_route,snapshot.radii,snapshot.spirals,snapshot.pvi_stations,snapshot.pvi_heights,snapshot.pvi_lengths)
  if not info.ok:return info
  if info.length<=0:return {"ok":false,"error":"두 점 이상의 유효한 노선이 필요합니다."}
- var count=ceili(info.length/step)
- if count+1>20000:return {"ok":false,"error":"측점 수가 20000개를 넘습니다. 간격을 늘리세요."}
- var events=[{"s":0.0,"tag":"start","priority":3},{"s":float(info.length),"tag":"end","priority":3}]
- for i in range(1,count):events.append({"s":i*step,"tag":"regular","priority":1})
+ var begin=float(station_range.get("begin",0.0))
+ var finish=float(station_range.get("end",info.length))
+ if not station_range.is_empty() and (not is_finite(begin) or not is_finite(finish) or begin<0 or finish>info.length or finish-begin<1):
+  return {"ok":false,"error":"노선 안에서 길이 1m 이상의 시작·끝 STA를 지정하세요."}
+ var first=ceili(begin/step)
+ var last=floori(finish/step)
+ if last-first+1>20000:return {"ok":false,"error":"측점 수가 20000개를 넘습니다. 간격을 늘리거나 구간을 줄이세요."}
+ var events=[{"s":begin,"tag":"start" if begin==0 else "range_start","priority":3},{"s":finish,"tag":"end" if finish==info.length else "range_end","priority":3}]
+ for i in range(first,last+1):
+  var station=i*step
+  if station>begin and station<finish:events.append({"s":station,"tag":"regular","priority":1})
  for element in info.elements:
   events.append({"s":float(element.station),"tag":"geometry_boundary","priority":2})
   events.append({"s":float(element.station+element.length),"tag":"geometry_boundary","priority":2})
@@ -114,6 +121,7 @@ static func calculate_job(snapshot,step):
   if info.pvi_lengths[i]>0:
    events.append({"s":float(info.pvi_stations[i]-info.pvi_lengths[i]/2),"tag":"vertical_curve_start","priority":2})
    events.append({"s":float(info.pvi_stations[i]+info.pvi_lengths[i]/2),"tag":"vertical_curve_end","priority":2})
+ events=events.filter(func(event):return event.s>=begin and event.s<=finish)
  events.sort_custom(func(a,b):return a.s<b.s)
  var unique=[]
  for event in events:
@@ -137,7 +145,7 @@ static func calculate_job(snapshot,step):
   var planned=at.elevation+snapshot.offset
   if not is_finite(ground):missing+=1
   rows.append({"station":event.s,"x":at.x,"y":at.y,"easting":float(source.OriginX)+at.x if geo else null,"northing":float(source.OriginY)-at.y if geo else null,"planned":planned,"ground":ground if is_finite(ground) else null,"delta":planned-ground if is_finite(ground) else null,"grade":at.grade*100.0,"curvature":at.curvature,"radius":abs(1.0/at.curvature) if abs(at.curvature)>=1e-12 else null,"left_edge":planned-snapshot.width/2.0*left/100.0,"right_edge":planned-snapshot.width/2.0*right/100.0,"events":"|".join(event.tags)})
- return {"ok":true,"rows":rows,"missing":missing,"crs":"EPSG:5179" if geo else "LOCAL","step":step,"width":snapshot.width,"offset":snapshot.offset,"left_fall":left,"right_fall":right,"length":info.length,"ms":(Time.get_ticks_usec()-started)/1000.0}
+ return {"ok":true,"rows":rows,"missing":missing,"crs":"EPSG:5179" if geo else "LOCAL","step":step,"width":snapshot.width,"offset":snapshot.offset,"left_fall":left,"right_fall":right,"length":info.length,"begin":begin,"end":finish,"ms":(Time.get_ticks_usec()-started)/1000.0}
 
 func _process(_delta):
  if worker==null or worker.is_alive():return
@@ -160,7 +168,7 @@ func _process(_delta):
  setting_table=false
 
 static func event_text(raw):
- var titles={"start":"시점","end":"종점","regular":"정규","PI":"PI","PVI":"PVI","geometry_boundary":"평면 경계","vertical_curve_start":"종단곡선 시작","vertical_curve_end":"종단곡선 끝"}
+ var titles={"range_start":"구간 시작","range_end":"구간 끝","start":"시점","end":"종점","regular":"정규","PI":"PI","PVI":"PVI","geometry_boundary":"평면 경계","vertical_curve_start":"종단곡선 시작","vertical_curve_end":"종단곡선 끝"}
  var labels=PackedStringArray()
  for tag in raw.split("|"):labels.append(titles.get(tag,tag))
  return "/".join(labels)

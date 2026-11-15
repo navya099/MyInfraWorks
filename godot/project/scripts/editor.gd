@@ -1,7 +1,7 @@
 extends Control
 const EarthworkReport=preload("res://scripts/earthwork_report.gd")
 var earthwork_report
-const StationTable=preload("res://scripts/station_table.gd")
+const StationTable=preload("res://scripts/station_range_table.gd")
 var station_table
 const DxfWindow=preload("res://scripts/dxf_window.gd")
 var dxf_window
@@ -112,6 +112,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
+ if "--station-range-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_station_range_smoke")
+  return
  if "--section-dxf-range-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_section_dxf_range_smoke")
   return
@@ -276,7 +279,7 @@ func build_ui():
  button(toolbar,"화면 맞춤",fit_camera)
  button(toolbar,"측점 보기",focus_station)
  button(toolbar,"토공량",func():earthwork_report.popup_centered(Vector2i(1200,720)))
- button(toolbar,"측점표",func():station_table.popup_centered(Vector2i(1250,650)))
+ button(toolbar,"측점표",func():station_table.open_export())
  button(toolbar,"DXF",func():dxf_window.open_export())
  button(toolbar,"대안",func():alternatives_window.open_library())
  button(toolbar,"설계 검토",func():review_window.popup_centered(Vector2i(1250,650)))
@@ -505,7 +508,7 @@ func build_ui():
  add_child(earthwork_report)
  station_table=StationTable.new()
  station_table.visible=false
- station_table.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision}
+ station_table.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision,"length":model.length()}
  station_table.revision_provider=func():return revision
  station_table.station_selected.connect(set_station_distance)
  add_child(station_table)
@@ -1456,8 +1459,12 @@ func run_visual_test():
   while profile_dxf.worker!=null:await get_tree().process_frame
   assert(not profile_dxf.result.is_empty())
   print("BENCH PROFILE DXF: %.2fms / %d samples / %d bytes" % [profile_dxf.result.ms,profile_dxf.result.stations.size(),profile_dxf.result.text.length()])
- if "--station-table-demo" in arguments:
-  station_table.popup_centered(Vector2i(1250,650))
+ if "--station-table-demo" in arguments or "--station-range-demo" in arguments:
+  station_table.open_export()
+  if "--station-range-demo" in arguments:
+   station_table.begin_input.text="%.3f" % (model.length()*0.2)
+   station_table.end_input.text="%.3f" % (model.length()*0.8)
+   station_table.interval.value=100
   station_table.start_calculation()
   while station_table.worker!=null:await get_tree().process_frame
   assert(not station_table.result.is_empty())
@@ -3871,4 +3878,43 @@ func run_section_dxf_range_smoke():
  section_dxf.begin_input.text_changed.emit("100")
  assert(section_dxf.result.is_empty() and section_dxf.csv_button.disabled)
  print("PASS SECTION RANGE UI: exact range/global stations, actual save, immutable design/history, current STA independent, full reset and stale result/save rejection")
+ get_tree().quit(0)
+
+
+func run_station_range_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var rev=revision
+ station_table.open_export()
+ station_table.begin_input.text="125.25"
+ station_table.end_input.text="975.75"
+ station_table.interval.value=400
+ station_table.start_calculation()
+ while station_table.worker!=null:await get_tree().process_frame
+ assert(station_table.result.begin==125.25 and station_table.result.end==975.75 and station_table.result.rows.size()==4)
+ station_table.table.set_caret_line(3)
+ station_table.select_row()
+ assert(abs(model.station*model.length()-800)<0.00001)
+ assert(model.edit_state()==before and undo_stack.size()==history and revision==rev)
+ station_table.csv_dialog.file_selected.emit("user://station-range-ui.csv")
+ assert(FileAccess.file_exists("user://station-range-ui.csv"))
+ station_table.end_input.text="900"
+ assert(not station_table.export_csv("user://station-range-stale.csv"))
+ station_table.start_calculation()
+ station_table.begin_input.text="150"
+ while station_table.worker!=null:await get_tree().process_frame
+ assert(station_table.result.is_empty())
+ station_table.begin_input.text="bad"
+ station_table.start_calculation()
+ assert(station_table.worker==null)
+ station_table.full_range()
+ station_table.start_calculation()
+ while station_table.worker!=null:await get_tree().process_frame
+ assert(station_table.result.begin==0 and station_table.result.end==1200)
+ station_table.begin_input.text_changed.emit("100")
+ assert(station_table.result.is_empty() and station_table.csv_button.disabled)
+ print("PASS STATION RANGE UI: exact/global stations, row navigation, actual CSV signal, immutable design/history, full reset, bad input and stale result/export rejection")
  get_tree().quit(0)
