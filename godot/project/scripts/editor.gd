@@ -112,6 +112,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
+ if "--section-grid-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_section_grid_smoke")
+  return
  if "--section-boundaries-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_section_boundaries_smoke")
   return
@@ -1455,12 +1458,13 @@ func run_visual_test():
   while dxf_window.worker!=null:await get_tree().process_frame
   assert(not dxf_window.result.is_empty())
   print("BENCH DXF: %.1f ms / %d vertices" % [dxf_window.result.ms,dxf_window.result.vertices])
- if "--section-dxf-demo" in arguments or "--section-dxf-range-demo" in arguments or "--section-extra-demo" in arguments or "--section-boundaries-demo" in arguments:
+ if "--section-dxf-demo" in arguments or "--section-dxf-range-demo" in arguments or "--section-extra-demo" in arguments or "--section-boundaries-demo" in arguments or "--section-grid-demo" in arguments:
   section_dxf.open_export()
   if "--section-dxf-range-demo" in arguments:
    section_dxf.begin_input.text="%.3f" % (model.length()*0.2)
    section_dxf.end_input.text="%.3f" % (model.length()*0.8)
    section_dxf.interval.value=100
+  if "--section-grid-demo" in arguments:section_dxf.grid_enabled.button_pressed=true
   if "--section-boundaries-demo" in arguments:section_dxf.include_boundaries.button_pressed=true
   if "--section-extra-demo" in arguments:section_dxf.extra_input.text="123.45, 456.78"
   section_dxf.start_calculation()
@@ -4126,4 +4130,36 @@ func run_section_boundaries_smoke():
  section_dxf.include_boundaries.set_pressed_no_signal(false)
  assert(not section_dxf.export_csv("user://section-boundaries-stale.dxf"))
  print("PASS SECTION BOUNDARIES UI: default off, async boundary output with extras, actual save, immutable design/history, toggle invalidation and signature/stale discard")
+ get_tree().quit(0)
+
+
+func run_section_grid_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var rev=revision
+ section_dxf.open_export()
+ assert(not section_dxf.grid_enabled.button_pressed and not section_dxf.grid_interval.editable)
+ section_dxf.grid_enabled.button_pressed=true
+ section_dxf.grid_interval.value=10
+ section_dxf.start_calculation()
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(section_dxf.result.grid_step==10 and section_dxf.result.grid_lines>0)
+ assert(model.edit_state()==before and undo_stack.size()==history and revision==rev)
+ section_dxf.csv_dialog.file_selected.emit("user://section-grid-ui.dxf")
+ assert(FileAccess.file_exists("user://section-grid-ui.dxf"))
+ section_dxf.grid_interval.value=20
+ assert(section_dxf.result.is_empty() and section_dxf.csv_button.disabled)
+ section_dxf.start_calculation()
+ section_dxf.grid_enabled.button_pressed=false
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(section_dxf.result.is_empty())
+ section_dxf.start_calculation()
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(section_dxf.result.grid_step==0 and "KROAD_SEC_GRID" not in section_dxf.result.text)
+ section_dxf.grid_enabled.set_pressed_no_signal(true)
+ assert(not section_dxf.export_csv("user://section-grid-stale.dxf"))
+ print("PASS SECTION GRID UI: default off, actual save, editable spacing, immutable design/history, settings invalidation and stale result/export rejection")
  get_tree().quit(0)

@@ -64,8 +64,9 @@ static func alignment_boundaries(info,begin,finish):
    candidates.append(float(info.pvi_stations[i]+info.pvi_lengths[i]/2.0))
  return candidates.filter(func(station):return station>=begin and station<=finish)
 
-static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text="",include_boundaries=false):
+static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text="",include_boundaries=false,grid_step=0.0):
  var started=Time.get_ticks_usec()
+ if not is_finite(grid_step) or (grid_step!=0 and (grid_step<0.5 or grid_step>1000)):return fail("격자 간격은 0(끄기) 또는 0.5~1000m입니다.")
  if typeof(columns)!=TYPE_INT:return fail("배치 열 수는 정수여야 합니다.")
  if not is_finite(station_step) or station_step<1 or station_step>10000 or not is_finite(half) or half<5 or half>10000 or not is_finite(lateral_step) or lateral_step<0.1 or lateral_step>50 or columns<1 or columns>8:return fail("측점 간격 1~10000m / 반폭 5~10000m / 횡단 간격 0.1~50m / 배치 1~8열 범위입니다.")
  if snapshot.pi_route.size()<2:return fail("두 점 이상의 현재 노선이 필요합니다.")
@@ -148,7 +149,19 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
  var margin=max(10.0,text_height*10)
  var cell_width=2.0*half+2.0*margin
  var cell_height=max_height+2.0*margin+text_height*8
+ var grid_offsets=[]
+ var grid_levels=[]
+ if grid_step>0:
+  var grid_first=ceili(-half/grid_step)
+  var grid_last=floori(half/grid_step)
+  var levels=floori(max_height/grid_step)
+  if grid_last-grid_first+1+levels>500 or (grid_last-grid_first+1+levels)*sections.size()>20000:return fail("격자가 너무 많습니다. 격자 간격을 늘리거나 출력 구간/반폭을 줄이세요.")
+  for k in range(grid_first,grid_last+1):
+   var d=k*grid_step
+   if abs(d)>0.0000001 and abs(d)<half-0.0000001:grid_offsets.append(d)
+  for k in range(1,levels+1):grid_levels.append(k*grid_step)
  var lines=PackedStringArray()
+ if grid_step>0:pair(lines,999,"SECTION_GRID_STEP=%.9f; H_V=1; ELEVATION_LABELS=DATUM_PLUS_LOCAL_Y" % grid_step)
  if include_boundaries:pair(lines,999,"AUTO_ALIGNMENT_BOUNDARIES=1; PI_PVI_PLAN_ELEMENTS_BVC_EVC; ENDPOINT_PRIORITY")
  for station in parsed.stations:pair(lines,999,"EXTRA_STA=%.9f; MERGE_TOLERANCE=0.0000001m" % station)
  if not station_range.is_empty():pair(lines,999,"STA_RANGE=%.9f,%.9f; ORIGINAL_STATIONING; H_V=1" % [begin,finish])
@@ -165,9 +178,12 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
  pair(lines,0,"SECTION");pair(lines,2,"TABLES")
  pair(lines,0,"TABLE");pair(lines,2,"LTYPE");pair(lines,70,1)
  pair(lines,0,"LTYPE");pair(lines,2,"CONTINUOUS");pair(lines,70,0);pair(lines,3,"Solid line");pair(lines,72,65);pair(lines,73,0);pair(lines,40,0);pair(lines,0,"ENDTAB")
- pair(lines,0,"TABLE");pair(lines,2,"LAYER");pair(lines,70,5)
+ pair(lines,0,"TABLE");pair(lines,2,"LAYER");pair(lines,70,7 if grid_step>0 else 5)
  for layer in [{"name":"0","color":7},{"name":"KROAD_SEC_GROUND","color":3},{"name":"KROAD_SEC_DESIGN","color":2},{"name":"KROAD_SEC_AXIS","color":8},{"name":"KROAD_SEC_TEXT","color":7}]:
   pair(lines,0,"LAYER");pair(lines,2,layer.name);pair(lines,70,0);pair(lines,62,layer.color);pair(lines,6,"CONTINUOUS")
+ if grid_step>0:
+  for layer in [{"name":"KROAD_SEC_GRID","color":8},{"name":"KROAD_SEC_GRID_TEXT","color":7}]:
+   pair(lines,0,"LAYER");pair(lines,2,layer.name);pair(lines,70,0);pair(lines,62,layer.color);pair(lines,6,"CONTINUOUS")
  pair(lines,0,"ENDTAB");pair(lines,0,"ENDSEC")
  pair(lines,0,"SECTION");pair(lines,2,"BLOCKS");pair(lines,0,"ENDSEC")
  pair(lines,0,"SECTION");pair(lines,2,"ENTITIES")
@@ -177,6 +193,14 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
   var ox=(i%columns)*cell_width+margin+half
   var oy=-(i/columns)*cell_height+margin
   pair(lines,999,"SECTION_META "+JSON.stringify({"index":i+1,"station":section.station,"datum":section.datum,"origin_x":ox,"origin_y":oy,"half":half}))
+  if grid_step>0:
+   for d in grid_offsets:polyline(lines,"KROAD_SEC_GRID",[[ox+d,oy],[ox+d,oy+max_height]])
+   for level in grid_levels:polyline(lines,"KROAD_SEC_GRID",[[ox-half,oy+level],[ox+half,oy+level]])
+   var label_stride=maxi(1,ceili(3.0*text_height/grid_step))
+   text(lines,ox-half-margin+text_height,oy,text_height,"%.2f" % section.datum,"KROAD_SEC_GRID_TEXT")
+   for k in range(label_stride,grid_levels.size()+1,label_stride):
+    var level=k*grid_step
+    text(lines,ox-half-margin+text_height,oy+level,text_height,"%.2f" % (section.datum+level),"KROAD_SEC_GRID_TEXT")
   polyline(lines,"KROAD_SEC_AXIS",[[ox-half,oy],[ox+half,oy]])
   polyline(lines,"KROAD_SEC_AXIS",[[ox,oy],[ox,oy+max_height]])
   var ground_runs=trace(lines,"KROAD_SEC_GROUND",section.values,1,ox,oy,section.datum)
@@ -188,4 +212,4 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
   for d in [-half,0.0,half]:text(lines,ox+d,oy-text_height*2,text_height,"%.3f" % d)
   summaries.append({"station":section.station,"datum":section.datum,"ground_missing":section.ground_missing,"design_missing":section.design_missing,"ground_runs":ground_runs,"design_runs":design_runs})
  pair(lines,0,"ENDSEC");pair(lines,0,"EOF")
- return {"ok":true,"text":"\n".join(lines)+"\n","sections":summaries,"samples":stations.size()*unique.size(),"lateral_count":unique.size(),"missing":missing_total,"length":reference.length,"begin":begin,"end":finish,"station_step":station_step,"half":half,"lateral_step":lateral_step,"columns":columns,"extra_requested":parsed.stations.size(),"include_boundaries":include_boundaries,"boundary_sections":boundary_flags.count(true),"ms":(Time.get_ticks_usec()-started)/1000.0}
+ return {"ok":true,"text":"\n".join(lines)+"\n","sections":summaries,"samples":stations.size()*unique.size(),"lateral_count":unique.size(),"missing":missing_total,"length":reference.length,"begin":begin,"end":finish,"station_step":station_step,"half":half,"lateral_step":lateral_step,"columns":columns,"extra_requested":parsed.stations.size(),"include_boundaries":include_boundaries,"boundary_sections":boundary_flags.count(true),"grid_step":grid_step,"grid_lines":(grid_offsets.size()+grid_levels.size())*sections.size(),"ms":(Time.get_ticks_usec()-started)/1000.0}

@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/section-dxf-boundaries` (0.38). 확인된 0.37은 `main`에 반영했습니다.
+개발 브랜치: `feature/section-dxf-grid` (0.39). 확인된 0.38은 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.38. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.39. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/section-dxf-boundaries --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/section-dxf-grid --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.38 실행
+## Godot 편집기 0.39 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -868,7 +868,7 @@ python tests/verify_section_extra_export.py "<SECTION EXTRA FIXTURES 출력 경�
 독립 ezdxf 판독에서 오류·자동 수정 0건, 정렬된 정확한 STA·중복 우선순위·구간 출력·라벨·횡단 1:1·2%/4% 횡단구배를 확인했습니다. 실제 저장 신호·현재 STA 추가·설계/이력 불변·잘못된 입력·오래된 산출/저장 거부 및 기존 횡단/구간/종단/평면 DXF·측점표 경계 필터 회귀 검사도 통과했습니다.
 
 
-## 0.38 횡단 DXF 주요 선형 경계 포함 (개발 브랜치)
+## 0.38 횡단 DXF 주요 선형 경계 포함 (main 반영 완료)
 
 상단 `DXF` → `횡단 DXF...`에서 `주요 선형 경계 포함`을 체크하고 `산출` → `DXF 저장`을 누릅니다. 기본은 꺼짐으로 기존 출력과 같습니다.
 
@@ -886,3 +886,23 @@ python tests/verify_section_boundaries_export.py "<SECTION BOUNDARY FIXTURES 출
 ```
 
 독립 ezdxf에서 오류·자동 수정 0건과 정확한 BVC/PVI/EVC·PI/원곡선/완화곡선 경계·구간/중복 우선순위·실제 포물선 계획고/횡단구배를 확인했습니다. 실제 저장 신호·설계/이력 불변·기본 꺼짐·옵션 무효화·오래된 결과/저장 거부 및 기존 추가 STA/횡단 구간/횡단/종단/평면 DXF 회귀 검사도 통과했습니다.
+
+
+## 0.39 횡단 DXF 격자·표고 눈금 (개발 브랜치)
+
+상단 `DXF` → `횡단 DXF...`에서 `격자·표고 눈금`을 체크하고 격자 간격을 지정한 뒤 `산출` → `DXF 저장`을 누릅니다. 기본은 꺼짐이며 켰을 때 초기 간격은 10m입니다.
+
+- 가로·세로 같은 m 간격의 격자를 별도 `KROAD_SEC_GRID` 레이어로 출력합니다. `KROAD_SEC_GRID_TEXT`에는 DATUM을 반영한 실제 표고를 표시합니다. 횡단 H:V=1:1을 유지합니다.
+- 간격은 0.5~1,000m입니다. 표고 문자가 겹치지 않도록 촘촘한 격자에서는 문자 눈금 일부를 생략합니다. 격자가 너무 많으면 간격/출력 구간/반폭을 조절하도록 안내합니다.
+- 기존 지표·설계선·축 좌표와 DATUM/배치를 유지합니다. 추가 STA·주요 선형 경계·구간 출력과 함께 사용할 수 있습니다.
+- 격자 설정 변경은 결과/저장을 무효화합니다. 설계·이력·프로젝트 v7·DLL v018은 유지합니다.
+
+[격자 좌표·표고·검증](docs/section-dxf-grid.md)을 참조하세요.
+
+```powershell
+godot --headless --path godot/project --script verify_section_grid.gd
+godot --headless --path godot/project -- --section-grid-smoke
+python tests/verify_section_grid_export.py "<SECTION GRID FIXTURES 출력 경로>"
+```
+
+독립 ezdxf 검사에서 오류·자동 수정 0건, 정확한 격자 간격/1:1 좌표·양수/음수 실제 표고·문자 간격·기존 형상 보존을 확인했습니다. 실제 저장 신호·기본 꺼짐·설계/이력 불변·설정 무효화·오래된 결과/저장 거부와 기존 주요 경계/추가 STA/횡단 구간/종단/평면 DXF 회귀 검사도 통과했습니다. UI 및 CAD 도면을 렌더링해 확인했습니다.
