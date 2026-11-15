@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/plan-dxf-range` (0.32). 확인된 0.31는 `main`에 반영했습니다.
+개발 브랜치: `feature/section-dxf-range` (0.33). 확인된 0.32는 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.32. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.33. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/plan-dxf-range --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/section-dxf-range --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.32 실행
+## Godot 편집기 0.33 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -749,7 +749,7 @@ python tests/verify_dxf_labels_export.py "<DXF LABEL FIXTURES 출력 경로>"
 합성 3601×3601 DEM / 약 98.235km 노선에서 도로 41,265정점과 1km 간격 주석 100개 생성은 작업 스레드에서 약 645ms였습니다. 화면 표시·파일 저장 시간은 별도입니다.
 
 
-## 0.32 평면 DXF 구간 출력 (개발 브랜치)
+## 0.32 평면 DXF 구간 출력 (main 반영 완료)
 
 상단 `DXF`에서 `시작 STA(m)`와 `끝 STA(m)`를 입력하고 `산출` → `DXF 저장`을 누릅니다. 기본은 전체 노선이고 `전체 범위`로 복원합니다. 길이가 바뀐 노선을 다시 열면 전체 범위를 갱신합니다.
 
@@ -767,3 +767,23 @@ python tests/verify_dxf_range_export.py "<DXF RANGE FIXTURES 출력 경로>"
 ```
 
 독립 ezdxf 판독에서 오류·자동 수정 0건, 정확한 구간 양 끝·원래 STA/지도 좌표·비대칭 횡단구배·원곡선 경계·포물선 표고·전체 범위 호환을 확인했습니다. 실제 저장 신호·설계/이력 불변·전체 범위 복원·잘못된 입력·오래된 결과/저장 거부 및 기존 평면/주석/종단/횡단 DXF 회귀 검사도 통과했습니다.
+
+
+## 0.33 횡단 DXF 구간 출력 (개발 브랜치)
+
+상단 `DXF` → `횡단 DXF...`에서 `시작 STA(m)`·`끝 STA(m)`와 횡단 측점 간격을 입력하고 `산출` → `DXF 저장`을 누릅니다. 기본은 전체 노선이며 `전체 범위`로 복원합니다. 길이가 바뀐 노선을 다시 열면 전체 범위를 갱신합니다.
+
+- 구간 양 끝과 원래 STA 0 기준 정규 횡단을 포함합니다. 예: 125.25~975.75m, 간격 400m → 125.25, 400, 800, 975.75m. 구간 시작을 STA 0으로 바꾸지 않습니다.
+- 범위는 노선 안 길이 1m 이상입니다. 최대 500횡단·전체 100,000표본 제한은 선택 구간에 적용합니다. 긴 노선 전체가 한도를 넘더라도 짧은 구간은 출력할 수 있습니다.
+- 횡단 도면 H:V=1:1, 원지반/설계 레이어·결측 선 끊기·DATUM·열 배치를 유지합니다. 지도 좌표 출력이 아니며 모든 요소의 Z=0입니다.
+- 범위·조건·설계 변경은 산출물을 무효화합니다. 비동기 완료와 저장 직전 입력 서명을 검사합니다. 현재 STA 선택은 독립적이며 설계·이력·프로젝트 v7·DLL v018은 유지합니다.
+
+[횡단 DXF 구간과 검증](docs/section-dxf-range.md)을 참조하세요.
+
+```powershell
+godot --headless --path godot/project --script verify_section_dxf_range.gd
+godot --headless --path godot/project -- --section-dxf-range-smoke
+python tests/verify_section_dxf_range_export.py "<SECTION RANGE FIXTURES 출력 경로>"
+```
+
+독립 ezdxf 검사에서 오류·자동 수정 0건, 원래 STA·정확한 구간 양 끝·횡단 1:1/2%·4% 횡단구배·레이어/배치·결측/전체 결측·전체 범위 호환을 확인했습니다. 실제 저장 신호·설계/이력 불변·전체 범위 복원·입력/조건 무효화·오래된 결과/저장 거부 및 기존 횡단/종단/평면 구간/측점 주석 DXF 회귀 검사도 통과했습니다.

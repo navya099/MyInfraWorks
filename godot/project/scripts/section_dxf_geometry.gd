@@ -40,19 +40,26 @@ static func trace(lines,layer,values,component,ox,oy,datum):
  if not points.is_empty():polyline(lines,layer,points);runs+=1
  return runs
 
-static func calculate_job(snapshot,station_step,half,lateral_step,columns):
+static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={}):
  var started=Time.get_ticks_usec()
  if typeof(columns)!=TYPE_INT:return fail("배치 열 수는 정수여야 합니다.")
  if not is_finite(station_step) or station_step<1 or station_step>10000 or not is_finite(half) or half<5 or half>10000 or not is_finite(lateral_step) or lateral_step<0.1 or lateral_step>50 or columns<1 or columns>8:return fail("측점 간격 1~10000m / 반폭 5~10000m / 횡단 간격 0.1~50m / 배치 1~8열 범위입니다.")
  if snapshot.pi_route.size()<2:return fail("두 점 이상의 현재 노선이 필요합니다.")
  var reference=Reference.build(snapshot)
  if not reference.ok:return reference
- var count=ceili(reference.length/station_step)
- if count+1>MAX_SECTIONS:return fail("횡단 수가 500개를 넘습니다. 측점 간격을 늘리세요.")
- var stations=[0.0]
- for i in range(1,count):
-  if reference.length-i*station_step>=0.0000001:stations.append(i*station_step)
- stations.append(reference.length)
+ var begin=float(station_range.get("begin",0.0))
+ var finish=float(station_range.get("end",reference.length))
+ if not is_finite(begin) or not is_finite(finish) or begin<0 or finish>reference.length or finish-begin<1:
+  return fail("노선 안에서 길이 1m 이상의 시작·끝 STA를 지정하세요.")
+ var first=ceili(begin/station_step)
+ var last=floori(finish/station_step)
+ if last-first+1>MAX_SECTIONS:return fail("횡단 수가 500개를 넘습니다. 간격을 늘리거나 구간을 줄이세요.")
+ var stations=[begin]
+ for i in range(first,last+1):
+  var station=i*station_step
+  if station-begin>=0.0000001 and finish-station>=0.0000001:stations.append(station)
+ stations.append(finish)
+ if stations.size()>MAX_SECTIONS:return fail("구간 양 끝을 포함해 500횡단을 넘습니다. 간격을 늘리거나 구간을 줄이세요.")
  var lateral_count=ceili(2.0*half/lateral_step)
  if lateral_count+1>20000:return fail("한 횡단의 표본이 20000개를 넘습니다.")
  var offsets=[-half,0.0,half]
@@ -96,6 +103,7 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns):
  var cell_width=2.0*half+2.0*margin
  var cell_height=max_height+2.0*margin+text_height*8
  var lines=PackedStringArray()
+ if not station_range.is_empty():pair(lines,999,"STA_RANGE=%.9f,%.9f; ORIGINAL_STATIONING; H_V=1" % [begin,finish])
  pair(lines,999,"MYINFRAWORKS; UNITS=METERS; SECTION_LAYOUT; H_V=1; ALL_ENTITY_Z=0; NO_EPSG_COORDINATES")
  pair(lines,999,"SAMPLING STA_STEP=%.9f HALF=%.9f LATERAL_STEP=%.9f" % [station_step,half,lateral_step])
  pair(lines,999,"DESIGN WIDTH=%.9f OFFSET=%.9f LEFT=%.9f RIGHT=%.9f FILL=%.9f CUT=%.9f" % [snapshot.width,snapshot.offset,snapshot.left_fall,snapshot.right_fall,snapshot.slope,snapshot.cut_slope])
@@ -132,4 +140,4 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns):
   for d in [-half,0.0,half]:text(lines,ox+d,oy-text_height*2,text_height,"%.3f" % d)
   summaries.append({"station":section.station,"datum":section.datum,"ground_missing":section.ground_missing,"design_missing":section.design_missing,"ground_runs":ground_runs,"design_runs":design_runs})
  pair(lines,0,"ENDSEC");pair(lines,0,"EOF")
- return {"ok":true,"text":"\n".join(lines)+"\n","sections":summaries,"samples":stations.size()*unique.size(),"lateral_count":unique.size(),"missing":missing_total,"length":reference.length,"station_step":station_step,"half":half,"lateral_step":lateral_step,"columns":columns,"ms":(Time.get_ticks_usec()-started)/1000.0}
+ return {"ok":true,"text":"\n".join(lines)+"\n","sections":summaries,"samples":stations.size()*unique.size(),"lateral_count":unique.size(),"missing":missing_total,"length":reference.length,"begin":begin,"end":finish,"station_step":station_step,"half":half,"lateral_step":lateral_step,"columns":columns,"ms":(Time.get_ticks_usec()-started)/1000.0}

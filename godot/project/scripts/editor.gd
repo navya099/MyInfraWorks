@@ -112,6 +112,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
+ if "--section-dxf-range-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_section_dxf_range_smoke")
+  return
  if "--dxf-range-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_dxf_range_smoke")
   return
@@ -513,7 +516,7 @@ func build_ui():
  add_child(dxf_window)
  section_dxf=SectionDxfWindow.new()
  section_dxf.visible=false
- section_dxf.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision}
+ section_dxf.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision,"length":model.length()}
  section_dxf.revision_provider=func():return revision
  dxf_window.section_export_requested.connect(func():section_dxf.open_export())
  add_child(section_dxf)
@@ -1437,8 +1440,12 @@ func run_visual_test():
   while dxf_window.worker!=null:await get_tree().process_frame
   assert(not dxf_window.result.is_empty())
   print("BENCH DXF: %.1f ms / %d vertices" % [dxf_window.result.ms,dxf_window.result.vertices])
- if "--section-dxf-demo" in arguments:
+ if "--section-dxf-demo" in arguments or "--section-dxf-range-demo" in arguments:
   section_dxf.open_export()
+  if "--section-dxf-range-demo" in arguments:
+   section_dxf.begin_input.text="%.3f" % (model.length()*0.2)
+   section_dxf.end_input.text="%.3f" % (model.length()*0.8)
+   section_dxf.interval.value=100
   section_dxf.start_calculation()
   while section_dxf.worker!=null:await get_tree().process_frame
   assert(not section_dxf.result.is_empty())
@@ -3824,4 +3831,44 @@ func run_dxf_range_smoke():
  dxf_window.plan_end.text_changed.emit("900")
  assert(dxf_window.result.is_empty() and dxf_window.csv_button.disabled)
  print("PASS PLAN DXF RANGE UI: exact range, real save, immutable design/history, full reset, invalid input, stale signature and async discard")
+ get_tree().quit(0)
+
+
+func run_section_dxf_range_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var rev=revision
+ section_dxf.open_export()
+ assert(section_dxf.begin_input.text=="0")
+ section_dxf.begin_input.text="125.25"
+ section_dxf.end_input.text="975.75"
+ section_dxf.interval.value=400
+ section_dxf.start_calculation()
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(section_dxf.result.begin==125.25 and section_dxf.result.end==975.75)
+ assert(section_dxf.result.sections.size()==4 and section_dxf.result.sections[1].station==400)
+ assert(model.edit_state()==before and undo_stack.size()==history and revision==rev)
+ section_dxf.csv_dialog.file_selected.emit("user://section-dxf-range-ui.dxf")
+ assert(FileAccess.file_exists("user://section-dxf-range-ui.dxf"))
+ set_station_distance(200)
+ assert(not section_dxf.result.is_empty())
+ section_dxf.end_input.text="900"
+ assert(not section_dxf.export_csv("user://section-dxf-range-stale.dxf"))
+ section_dxf.start_calculation()
+ section_dxf.begin_input.text="150"
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(section_dxf.result.is_empty())
+ section_dxf.begin_input.text="bad"
+ section_dxf.start_calculation()
+ assert(section_dxf.worker==null)
+ section_dxf.full_range()
+ section_dxf.start_calculation()
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(section_dxf.result.begin==0 and section_dxf.result.end==1200)
+ section_dxf.begin_input.text_changed.emit("100")
+ assert(section_dxf.result.is_empty() and section_dxf.csv_button.disabled)
+ print("PASS SECTION RANGE UI: exact range/global stations, actual save, immutable design/history, current STA independent, full reset and stale result/save rejection")
  get_tree().quit(0)
