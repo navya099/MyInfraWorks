@@ -112,6 +112,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
+ if "--section-extra-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_section_extra_smoke")
+  return
  if "--station-events-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_station_events_smoke")
   return
@@ -525,7 +528,7 @@ func build_ui():
  add_child(dxf_window)
  section_dxf=SectionDxfWindow.new()
  section_dxf.visible=false
- section_dxf.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision,"length":model.length()}
+ section_dxf.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision,"length":model.length(),"station":model.station*model.length()}
  section_dxf.revision_provider=func():return revision
  dxf_window.section_export_requested.connect(func():section_dxf.open_export())
  add_child(section_dxf)
@@ -1449,12 +1452,13 @@ func run_visual_test():
   while dxf_window.worker!=null:await get_tree().process_frame
   assert(not dxf_window.result.is_empty())
   print("BENCH DXF: %.1f ms / %d vertices" % [dxf_window.result.ms,dxf_window.result.vertices])
- if "--section-dxf-demo" in arguments or "--section-dxf-range-demo" in arguments:
+ if "--section-dxf-demo" in arguments or "--section-dxf-range-demo" in arguments or "--section-extra-demo" in arguments:
   section_dxf.open_export()
   if "--section-dxf-range-demo" in arguments:
    section_dxf.begin_input.text="%.3f" % (model.length()*0.2)
    section_dxf.end_input.text="%.3f" % (model.length()*0.8)
    section_dxf.interval.value=100
+  if "--section-extra-demo" in arguments:section_dxf.extra_input.text="123.45, 456.78"
   section_dxf.start_calculation()
   while section_dxf.worker!=null:await get_tree().process_frame
   assert(not section_dxf.result.is_empty())
@@ -4042,4 +4046,49 @@ func run_station_events_smoke():
  station_table.result=actual_result
  station_table.refresh_filter()
  print("PASS STATION EVENTS UI: default all, boundary filter, immutable rows/history, no recalculation, filtered search/tie/navigation, two-page offsets, full CSV and stale invalidation")
+ get_tree().quit(0)
+
+
+func run_section_extra_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var rev=revision
+ section_dxf.open_export()
+ assert(section_dxf.extra_input.text.is_empty())
+ set_station_distance(123.456)
+ section_dxf.add_current_station()
+ assert(abs(section_dxf.extra_input.text.to_float()-123.456)<0.00001)
+ section_dxf.extra_input.text=section_dxf.extra_input.text+", 500, 1000, 500"
+ section_dxf.start_calculation()
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(section_dxf.result.sections.size()==5 and section_dxf.result.extra_requested==4)
+ assert(abs(section_dxf.result.sections[1].station-123.456)<0.00001 and section_dxf.result.sections[2].station==500)
+ assert(model.edit_state()==before and undo_stack.size()==history and revision==rev)
+ section_dxf.csv_dialog.file_selected.emit("user://section-extra-ui.dxf")
+ assert(FileAccess.file_exists("user://section-extra-ui.dxf"))
+ section_dxf.extra_input.text="250"
+ assert(not section_dxf.export_csv("user://section-extra-stale.dxf"))
+ section_dxf.start_calculation()
+ section_dxf.extra_input.text="300"
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(section_dxf.result.is_empty())
+ section_dxf.extra_input.text="bad"
+ section_dxf.start_calculation()
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(section_dxf.result.is_empty() and section_dxf.csv_button.disabled)
+ section_dxf.extra_input.text=""
+ section_dxf.begin_input.text="200"
+ set_station_distance(100)
+ section_dxf.add_current_station()
+ assert(section_dxf.extra_input.text.is_empty())
+ section_dxf.full_range()
+ section_dxf.start_calculation()
+ while section_dxf.worker!=null:await get_tree().process_frame
+ assert(section_dxf.result.sections.size()==3 and section_dxf.result.extra_requested==0)
+ section_dxf.extra_input.text_changed.emit("400")
+ assert(section_dxf.result.is_empty())
+ print("PASS EXTRA SECTION UI: empty default, current STA insertion, duplicates, actual save, immutable design/history, out-of-range current, invalid input and stale export/result rejection")
  get_tree().quit(0)
