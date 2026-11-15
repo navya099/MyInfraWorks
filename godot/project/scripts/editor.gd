@@ -10,6 +10,9 @@ const AlternativesWindow=preload("res://scripts/alternatives_window.gd")
 var alternatives=Alternatives.new()
 var alternatives_window
 const AlternativeComparison=preload("res://scripts/alternative_comparison.gd")
+const ProfileComparisonWindow=preload("res://scripts/profile_comparison_window.gd")
+var profile_comparison
+var comparison_selection=-1
 var alternative_comparison
 var alternatives_revision=0
 const PlanReference=preload("res://scripts/plan_reference.gd")
@@ -102,7 +105,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--profile-overlay-smoke" in OS.get_cmdline_user_args():
+ if "--profile-comparison-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_profile_comparison_smoke")
+ elif "--profile-overlay-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_profile_overlay_smoke")
  elif "--overlay-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_overlay_smoke")
@@ -504,6 +509,17 @@ func build_ui():
  alternative_comparison.revision_provider=comparison_revision
  alternatives_window.compare_requested.connect(func():alternative_comparison.popup_centered(Vector2i(1250,650)))
  add_child(alternative_comparison)
+ profile_comparison=ProfileComparisonWindow.new()
+ profile_comparison.visible=false
+ profile_comparison.revision_provider=profile_comparison_revision
+ profile_comparison.snapshot_provider=profile_comparison_snapshot
+ profile_comparison.station_selected.connect(set_station_distance)
+ alternatives_window.selection_changed.connect(func(index):
+  if comparison_selection!=index:
+   comparison_selection=index
+   profile_comparison.invalidate())
+ alternatives_window.profile_compare_requested.connect(func():profile_comparison.popup_centered(Vector2i(1250,650)))
+ add_child(profile_comparison)
  review_window=ReviewWindow.new()
  review_window.visible=false
  review_window.snapshot_provider=func():return {"design":model.edit_state(),"revision":revision}
@@ -545,6 +561,7 @@ func reset_terrain(preserve_alternatives=false):
  insert_dialog.hide()
  if earthwork_report!=null:earthwork_report.invalidate()
  if alternative_comparison!=null:alternative_comparison.invalidate()
+ if profile_comparison!=null:profile_comparison.invalidate()
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
  if review_window!=null:review_window.invalidate()
@@ -652,6 +669,7 @@ func changed(previous, record_history=true, quiet=false):
  revision+=1
  if earthwork_report!=null:earthwork_report.invalidate()
  if alternative_comparison!=null:alternative_comparison.invalidate()
+ if profile_comparison!=null:profile_comparison.invalidate()
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
  if review_window!=null:review_window.invalidate()
@@ -1328,6 +1346,15 @@ func run_visual_test():
   overlay_times.sort()
   assert(total_mesh_updates==uploads and reference_builds==builds)
   print("BENCH PLAN OVERLAY: %.2f ms / %d points / zoom+orbit: p95 %.2fms / zero native rebuilds and terrain uploads" % [build_ms,plan.reference_points.size(),overlay_times[28]])
+ if "--profile-comparison-demo" in arguments:
+  assert(capture_alternative('보관 "원안", 비교'))
+  offset_input.value+=5
+  apply_parameters()
+  profile_comparison.popup_centered(Vector2i(1250,650))
+  profile_comparison.start_calculation()
+  while profile_comparison.worker!=null:await get_tree().process_frame
+  assert(not profile_comparison.result.is_empty())
+  print("BENCH PROFILE COMPARISON: %.2fms / %d rows" % [profile_comparison.result.ms,profile_comparison.result.rows.size()])
  if "--dxf-demo" in arguments:
   dxf_window.open_export()
   dxf_window.start_calculation()
@@ -2918,6 +2945,7 @@ func comparison_revision():
 func alternatives_changed():
  alternatives_revision+=1
  if alternative_comparison!=null:alternative_comparison.invalidate()
+ if profile_comparison!=null:profile_comparison.invalidate()
 
 
 func run_comparison_smoke():
@@ -3310,4 +3338,77 @@ func run_profile_overlay_smoke():
  reset_terrain(true)
  assert(reference_data.is_empty() and profile.reference_profile.is_empty())
  print("PASS PROFILE OVERLAY UI: common selection, reference bounds/length, zoom/pan, native cache, immutable model/history/revision/terrain, current edits and empty-route view, both clear, delete and reset")
+ get_tree().quit(0)
+
+
+func profile_comparison_revision():
+ return "%s:%d" % [comparison_revision(),alternatives_window.selected]
+
+func profile_comparison_snapshot():
+ var index=alternatives_window.selected
+ if index<0 or index>=alternatives.entries.size():return {"ok":false,"error":"보관 대안을 선택하세요."}
+ return {"ok":true,"current":model.edit_state(),"saved":alternatives.entries[index].design.duplicate(true),"name":alternatives.entries[index].name,"revision":profile_comparison_revision()}
+
+
+func run_profile_comparison_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ assert(capture_alternative('A, "보관"'))
+ offset_input.value=5
+ apply_parameters()
+ var before=model.edit_state()
+ var rev=revision
+ var history=undo_stack.size()
+ var library=alternatives.serialize()
+ profile_comparison.interval.value=2
+ profile_comparison.start_calculation()
+ while profile_comparison.worker!=null:await get_tree().process_frame
+ assert(not profile_comparison.result.is_empty() and profile_comparison.result.rows.size()>400)
+ for row in profile_comparison.result.rows:assert(abs(row.delta-5)<1e-6 and row.separation<1e-6)
+ assert(profile_comparison.table.get_line_count()<=201)
+ profile_comparison.next_button.pressed.emit()
+ profile_comparison.table.set_caret_line(1)
+ profile_comparison.select_row()
+ assert(abs(model.station*model.length()-profile_comparison.result.rows[200].station)<1e-6)
+ assert(model.edit_state()==before and revision==rev and undo_stack.size()==history and alternatives.serialize()==library)
+ assert(profile_comparison.export_csv("user://profile-comparison.csv"))
+ var csv=FileAccess.open("user://profile-comparison.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ assert(csv.get_csv_line().size()==20)
+ var row_count=0
+ while csv.get_position()<csv.get_length():
+  var values=csv.get_csv_line()
+  if values.size()!=20:continue
+  assert(values[0]=='A, "보관"' and values[1]=="same_absolute_station")
+  row_count+=1
+ assert(row_count==profile_comparison.result.rows.size())
+ profile_comparison.interval.value=10
+ assert(profile_comparison.result.is_empty() and profile_comparison.csv_button.disabled)
+ profile_comparison.start_calculation()
+ rename_alternative(0,"이름 변경")
+ while profile_comparison.worker!=null:await get_tree().process_frame
+ assert(profile_comparison.result.is_empty())
+ profile_comparison.start_calculation()
+ while profile_comparison.worker!=null:await get_tree().process_frame
+ assert(not profile_comparison.result.is_empty())
+ assert(capture_alternative("B"))
+ assert(profile_comparison.result.is_empty())
+ profile_comparison.start_calculation()
+ while profile_comparison.worker!=null:await get_tree().process_frame
+ alternatives_window.selected=0
+ alternatives_window.refresh()
+ assert(profile_comparison.result.is_empty() and not profile_comparison.export_csv("user://stale-profile.csv"))
+ profile_comparison.start_calculation()
+ while profile_comparison.worker!=null:await get_tree().process_frame
+ offset_input.value=6
+ apply_parameters()
+ assert(profile_comparison.result.is_empty())
+ profile_comparison.start_calculation()
+ while profile_comparison.worker!=null:await get_tree().process_frame
+ delete_alternative(0)
+ assert(profile_comparison.result.is_empty())
+ profile_comparison.start_calculation()
+ assert(profile_comparison.worker==null and profile_comparison.result.is_empty())
+ print("PASS PROFILE COMPARISON UI: async native table, 200-row paging and full quoted CSV, exact station navigation, immutable design/library/history, selection/settings/design/library invalidation and stale discard")
  get_tree().quit(0)

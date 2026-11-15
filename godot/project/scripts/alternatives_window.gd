@@ -5,6 +5,9 @@ signal rename_requested(index,name)
 signal delete_requested(index)
 signal save_requested
 signal compare_requested
+signal profile_compare_requested
+signal selection_changed(index)
+var profile_compare_button: Button
 signal reference_requested(index,enabled)
 var reference_toggle: CheckBox
 var library
@@ -70,7 +73,8 @@ func _ready():
   selected=int(item.get_metadata(0))
   name_input.text=library.entries[selected].name
   update_apply_button()
-  update_reference())
+  update_reference()
+  selection_changed.emit(selected))
  root.add_child(table)
  var hint=Label.new()
  hint.text="보관 후 프로젝트 저장 · 적용은 실행 취소 1단계 · DEM 중복 저장 없음 · 최대 20개"
@@ -84,6 +88,10 @@ func _ready():
  compare.text="보관 대안 토공량 비교"
  compare.pressed.connect(func():compare_requested.emit())
  root.add_child(compare)
+ profile_compare_button=Button.new()
+ profile_compare_button.text="현재·선택 대안 계획고 비교표"
+ profile_compare_button.pressed.connect(func():profile_compare_requested.emit())
+ root.add_child(profile_compare_button)
  confirmation=ConfirmationDialog.new()
  confirmation.title="보관 대안 삭제"
  confirmation.confirmed.connect(func():
@@ -114,9 +122,11 @@ func refresh():
  table.set_block_signals(false)
  update_apply_button()
  update_reference()
+ selection_changed.emit(selected)
 
 func update_apply_button():
  apply_button.disabled=selected<0 or selected>=library.entries.size()
+ if profile_compare_button!=null:profile_compare_button.disabled=apply_button.disabled
  if not apply_button.disabled:apply_button.disabled=library.entries[selected].design==current_provider.call()
 
 func request_delete():

@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/alternative-profile-overlay` (0.25). 확인된 0.24는 `main`에 반영했습니다.
+개발 브랜치: `feature/alternative-profile-comparison` (0.26). 확인된 0.25는 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.25. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.26. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/alternative-profile-overlay --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/alternative-profile-comparison --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.25 실행
+## Godot 편집기 0.26 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -593,7 +593,7 @@ godot --headless --path godot/project -- --overlay-smoke
 합성 3601×3601 DEM / 약 98.235km 보관 노선의 3,932개 표시점 생성·중첩 설정은 1.17ms였습니다. 중첩 표시 상태의 확대+Orbit 30프레임 p95는 13.40ms였고 추가 네이티브 선형 생성과 지형 업로드는 없었습니다. 합성 사례 측정이며 실제 데이터 성능을 보장하지 않습니다.
 
 
-## 0.25 보관 대안 종단 중첩 (개발 브랜치)
+## 0.25 보관 대안 종단 중첩 (main 반영 완료)
 
 `대안` → 보관본 선택 → `선택 대안 평면·종단 중첩`을 켜면 같은 보관본을 두 뷰에 표시합니다. 보관 계획고는 보라색, 현재 계획고는 주황색이며 녹색 원지반은 현재 노선 기준입니다. 어느 뷰의 `중첩 해제`를 눌러도 함께 해제합니다.
 
@@ -613,3 +613,25 @@ godot --headless --path godot/project -- --profile-overlay-smoke
 포물선 정점/BVC/EVC/끝점·보정고·여러 볼록/오목곡선과 무곡선 종단의 네이티브 값 일치·범위 밖 외삽 거절을 검사했습니다. UI의 범위/축척·확대/이동·캐시·길이가 다른 노선·현재 노선 초기화/undo·표시 해제·삭제/DEM 초기화도 확인했고 기존 평면 중첩·확대/이동·PVI 편집·대안 관리/수량 비교 검사도 통과했습니다.
 
 합성 3601×3601 DEM / 약 98.235km 보관 노선의 평면·종단 중첩 준비는 1.39ms였습니다. 두 뷰 확대와 Orbit을 함께 조작한 30프레임 p95는 16.73ms였고 추가 선형 생성·지형 업로드는 없었습니다. 합성 사례 측정이며 실제 데이터 성능을 보장하지 않습니다.
+
+
+## 0.26 현재·보관 대안 계획고 비교표 (개발 브랜치)
+
+`대안` → 보관본 선택 → `현재·선택 대안 계획고 비교표` → `산출`을 누릅니다. 중첩 표시를 켤 필요 없이 현재 설계와 선택 보관본을 같은 절대 STA에서 비교합니다.
+
+- 공통 범위 0~두 노선 중 짧은 길이에서 현재/보관 계획고, Δ현재−보관, 각 로컬 동/남 좌표, 수평 이격, 종단구배를 표시합니다. 보정고와 실제 종단곡선을 포함합니다.
+- 정규 간격과 양쪽 PI/PVI·평면 경계·BVC/EVC를 합쳐 최대 20,000측점을 산출합니다. 공통 끝을 정확히 포함하고 긴 노선의 남는 부분을 외삽하지 않습니다.
+- 같은 STA 두 점의 수평 이격이며 최단 이격이나 동일 지점의 표고 차이가 아닙니다. DEM을 조회하지 않고 원지반·토공량 비교를 수행하지 않습니다.
+- 별도 스레드에서 계산하고 200행씩 표시합니다. CSV 20열은 현재 페이지와 관계없이 전체 결과와 보관명·조건·길이를 저장합니다. 행 선택은 현재 노선의 해당 측점으로 이동합니다.
+- 선택·이름/목록·설계/DEM·간격 변경은 결과와 CSV를 무효화하고 이전 작업 결과도 버립니다. 설계·undo·보관본·중첩 선택을 변경하지 않습니다. 프로젝트 v7·DLL v018을 유지하며 결과는 저장하지 않습니다.
+
+[측점별 대안 비교와 CSV](docs/profile-comparison.md)를 참조하세요.
+
+```powershell
+godot --headless --path godot/project --script verify_profile_comparison.gd
+godot --headless --path godot/project -- --profile-comparison-smoke
+```
+
+네이티브 포물선/보정고·차이 부호·수평 이동 노선·양쪽 경계 합집합·서로 다른 길이의 공통 끝·유효 0·입력/예산 오류를 검사했습니다. UI의 페이지별 표시/전체 CSV·한글/쉼표/따옴표 이름·측점 이동·설계/이력 불변·선택/조건/목록/설계 변경 무효화와 기존 종단/평면 중첩·대안 관리·측점표·대안 수량 비교 검사도 통과했습니다.
+
+합성 3601×3601 DEM / 약 98.235km 노선의 4,921개 비교 측점 계산은 작업 스레드에서 140.04ms였습니다. 화면 표시/파일 저장 시간은 별도이며 실제 데이터 성능을 보장하지 않습니다.
