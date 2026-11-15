@@ -3,6 +3,9 @@ signal profile_export_requested
 signal section_export_requested
 const Geometry=preload("res://scripts/dxf_geometry.gd")
 var coordinate_mode: OptionButton
+var annotation_enabled: CheckBox
+var annotation_interval: SpinBox
+var annotation_height: SpinBox
 
 func _ready():
  super._ready()
@@ -28,6 +31,38 @@ func _ready():
   profile_button.text="종단 DXF..."
   profile_button.pressed.connect(func():profile_export_requested.emit())
   settings.add_child(profile_button)
+  var annotation_row=HBoxContainer.new()
+  var root=table.get_parent()
+  root.add_child(annotation_row)
+  root.move_child(annotation_row,1)
+  annotation_enabled=CheckBox.new()
+  annotation_enabled.text="STA 주석 추가"
+  annotation_row.add_child(annotation_enabled)
+  var label=Label.new()
+  label.text="주석 간격(m)"
+  annotation_row.add_child(label)
+  annotation_interval=SpinBox.new()
+  annotation_interval.min_value=10
+  annotation_interval.max_value=10000
+  annotation_interval.step=10
+  annotation_interval.value=1000
+  annotation_interval.editable=false
+  annotation_interval.value_changed.connect(func(_value):invalidate())
+  annotation_row.add_child(annotation_interval)
+  var height_label=Label.new()
+  height_label.text="문자 높이(m)"
+  annotation_row.add_child(height_label)
+  annotation_height=SpinBox.new()
+  annotation_height.min_value=0
+  annotation_height.max_value=100
+  annotation_height.step=0.1
+  annotation_height.editable=false
+  annotation_height.value_changed.connect(func(_value):invalidate())
+  annotation_row.add_child(annotation_height)
+  annotation_enabled.toggled.connect(func(enabled):annotation_interval.editable=enabled;annotation_height.editable=enabled;invalidate())
+  var note=Label.new()
+  note.text="높이 0=폭 기준 자동 · 시점/종점 포함"
+  annotation_row.add_child(note)
  hint.text="중심선·좌/우 가장자리 3D 폴리라인 · 1 도면 단위=1m(CAD 가져오기 단위 m) · 곡선은 선분 근사"
  status.text="좌표와 간격을 지정하고 산출하세요."
 
@@ -49,7 +84,9 @@ func start_calculation():
  requested_generation=generation
  status.text="DXF 산출 중"
  worker=Thread.new()
- if worker.start(Geometry.calculate_job.bind(state.snapshot,interval.value,coordinate_mode.selected))!=OK:
+ var annotation_step=annotation_interval.value if annotation_enabled!=null and annotation_enabled.button_pressed else 0.0
+ var height=annotation_height.value if annotation_enabled!=null and annotation_enabled.button_pressed else 0.0
+ if worker.start(Geometry.calculate_job.bind(state.snapshot,interval.value,coordinate_mode.selected,annotation_step,height))!=OK:
   worker=null
   status.text="작업 스레드를 시작하지 못했습니다."
 
@@ -66,8 +103,10 @@ func _process(_delta):
  result=completed
  result_revision=requested_revision
  csv_button.disabled=false
- status.text="%d개 정점 / %d개 측점 · %s · %.1fms" % [result.vertices,result.stations,"로컬 동/북" if result.crs=="LOCAL_EAST_NORTH" else result.crs,result.ms]
+ status.text="%d개 노선 정점 / %d개 측점 / 주석 %d개 · %s · %.1fms" % [result.vertices,result.stations,result.annotation_count,"로컬 동/북" if result.crs=="LOCAL_EAST_NORTH" else result.crs,result.ms]
  table.text="DXF R12 ASCII / 3D POLYLINE\nKROAD_CENTER: 중심선\nKROAD_LEFT: 진행 방향 좌측 도로 가장자리\nKROAD_RIGHT: 진행 방향 우측 도로 가장자리\n\n노선 %.3fm / 최대 측점 간격 %.1fm\n단위 m · X 동쪽 / Y 북쪽 / Z 설계 표고\n3D 화면의 표시용 높이 보정은 제외합니다.\n지형·사면·Civil 3D 선형 객체는 포함하지 않습니다." % [result.length,result.spacing]
+
+ if result.annotation_count>0:table.text+="\n\nKROAD_STA_TICK: 측점 표식 / KROAD_STA_TEXT: STA 문자\n주석 간격 %.1fm · 회전 -90~90도 · 문자/표식 Z는 중심 계획고\n중첩 문자 자동 회피는 하지 않습니다. 간격이나 CAD 문자 위치를 조정하세요." % result.annotation_step
 
 func select_row():
  pass

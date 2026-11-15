@@ -112,7 +112,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--profile-dxf-smoke" in OS.get_cmdline_user_args():
+ if "--dxf-labels-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_dxf_labels_smoke")
+ elif "--profile-dxf-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_profile_dxf_smoke")
  elif "--section-dxf-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_section_dxf_smoke")
@@ -1420,7 +1422,8 @@ func run_visual_test():
   while section_comparison.worker!=null:await get_tree().process_frame
   assert(not section_comparison.result.is_empty())
   print("BENCH SECTION TABLE: %.2fms / %d samples" % [section_comparison.result.ms,section_comparison.result.rows.size()])
- if "--dxf-demo" in arguments:
+ if "--dxf-demo" in arguments or "--dxf-labels-demo" in arguments:
+  if "--dxf-labels-demo" in arguments:dxf_window.annotation_enabled.button_pressed=true
   dxf_window.open_export()
   dxf_window.start_calculation()
   while dxf_window.worker!=null:await get_tree().process_frame
@@ -3737,4 +3740,41 @@ func run_profile_dxf_smoke():
  apply_parameters()
  assert(profile_dxf.result.is_empty() and not profile_dxf.export_csv("user://profile-dxf-stale.dxf"))
  print("PASS PROFILE DXF UI: range/factor controls, real save signal, immutable model/history, current STA independent, input signature and stale result/export rejection")
+ get_tree().quit(0)
+
+
+func run_dxf_labels_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var rev=revision
+ dxf_window.open_export()
+ assert(not dxf_window.annotation_enabled.button_pressed and not dxf_window.annotation_interval.editable)
+ dxf_window.annotation_enabled.button_pressed=true
+ assert(dxf_window.annotation_interval.editable)
+ dxf_window.annotation_interval.value=400
+ dxf_window.start_calculation()
+ while dxf_window.worker!=null:await get_tree().process_frame
+ assert(dxf_window.result.annotation_count==4)
+ assert(model.edit_state()==before and history==undo_stack.size() and revision==rev)
+ dxf_window.csv_dialog.file_selected.emit("user://dxf-labels-ui.dxf")
+ var file=FileAccess.open("user://dxf-labels-ui.dxf",FileAccess.READ)
+ assert(file!=null and "KROAD_STA_TEXT" in file.get_as_text())
+ dxf_window.annotation_height.value=10
+ assert(dxf_window.result.is_empty() and dxf_window.csv_button.disabled)
+ dxf_window.annotation_interval.value=500
+ assert(dxf_window.result.is_empty() and dxf_window.csv_button.disabled)
+ dxf_window.start_calculation()
+ dxf_window.annotation_enabled.button_pressed=false
+ while dxf_window.worker!=null:await get_tree().process_frame
+ assert(dxf_window.result.is_empty())
+ dxf_window.start_calculation()
+ while dxf_window.worker!=null:await get_tree().process_frame
+ assert(dxf_window.result.annotation_count==0 and "KROAD_STA_TEXT" not in dxf_window.result.text)
+ offset_input.value=5
+ apply_parameters()
+ assert(not dxf_window.export_csv("user://stale-dxf-labels.dxf"))
+ print("PASS DXF LABEL UI: optional/default-off controls, async annotations, actual save signal, immutable design/history, setting/design invalidation and stale result discard")
  get_tree().quit(0)

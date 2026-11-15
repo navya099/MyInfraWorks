@@ -1,4 +1,5 @@
 extends RefCounted
+const StationLabels=preload("res://scripts/dxf_station_labels.gd")
 const MAX_STATIONS=30000
 
 static func has_origin(source):
@@ -8,10 +9,12 @@ static func pair(lines,code,value):
  lines.append(str(code))
  lines.append(str(value))
 
-static func calculate_job(snapshot,spacing,coordinate_mode):
+static func calculate_job(snapshot,spacing,coordinate_mode,annotation_step=0.0,annotation_text_height=0.0):
  var started=Time.get_ticks_usec()
  if not is_finite(spacing) or spacing<1 or spacing>25:return {"ok":false,"error":"최대 측점 간격은 1~25m입니다."}
  if coordinate_mode not in [0,1]:return {"ok":false,"error":"지원하지 않는 좌표 모드입니다."}
+ if not is_finite(annotation_step) or (annotation_step!=0 and (annotation_step<10 or annotation_step>10000)):return {"ok":false,"error":"주석 간격은 0(끄기) 또는 10~10000m입니다."}
+ if not is_finite(annotation_text_height) or (annotation_text_height!=0 and (annotation_text_height<0.1 or annotation_text_height>100)):return {"ok":false,"error":"문자 높이는 0(폭 기준 자동) 또는 0.1~100m입니다."}
  var projected=coordinate_mode==1
  if projected and not has_origin(snapshot.source):return {"ok":false,"error":"DEM 원점 정보가 없어 EPSG:5179로 내보낼 수 없습니다."}
  var alignment=ClassDB.instantiate("KRoadAlignment")
@@ -46,7 +49,20 @@ static func calculate_job(snapshot,spacing,coordinate_mode):
     minimum[axis]=min(minimum[axis],point[axis])
     maximum[axis]=max(maximum[axis],point[axis])
     layers[index].vertices.append(point[axis])
+ var annotations=[]
+ var extra_layers=[]
+ if annotation_step>0:
+  var built=StationLabels.build(alignment,info.length,snapshot.width,snapshot.offset,annotation_step,ox,oy,annotation_text_height)
+  if not built.ok:return built
+  annotations=built.annotations
+  extra_layers=[{"name":"KROAD_STA_TICK","color":6},{"name":"KROAD_STA_TEXT","color":7}]
+  for annotation in annotations:
+   for point in annotation.bounds:
+    for axis in range(3):
+     minimum[axis]=min(minimum[axis],point[axis])
+     maximum[axis]=max(maximum[axis],point[axis])
  var lines=PackedStringArray()
+ if not annotations.is_empty():pair(lines,999,"STA_LABELS; STEP=%.9f; END_TOLERANCE=0.001m; LABEL=STA_METERS; TICK_ELEVATION=CENTER_DESIGN; ROTATION=-90_TO_90" % annotation_step)
  pair(lines,999,"MYINFRAWORKS; UNITS=METERS; CRS="+("EPSG:5179" if projected else "LOCAL_EAST_NORTH")+"; DESIGN_ELEVATIONS; NO_DISPLAY_LIFT")
  pair(lines,0,"SECTION");pair(lines,2,"HEADER")
  pair(lines,9,"$ACADVER");pair(lines,1,"AC1009")
@@ -62,8 +78,8 @@ static func calculate_job(snapshot,spacing,coordinate_mode):
  pair(lines,0,"TABLE");pair(lines,2,"LTYPE");pair(lines,70,1)
  pair(lines,0,"LTYPE");pair(lines,2,"CONTINUOUS");pair(lines,70,0);pair(lines,3,"Solid line");pair(lines,72,65);pair(lines,73,0);pair(lines,40,0)
  pair(lines,0,"ENDTAB")
- pair(lines,0,"TABLE");pair(lines,2,"LAYER");pair(lines,70,4)
- for layer in [{"name":"0","color":7}]+layers:
+ pair(lines,0,"TABLE");pair(lines,2,"LAYER");pair(lines,70,1+layers.size()+extra_layers.size())
+ for layer in [{"name":"0","color":7}]+layers+extra_layers:
   pair(lines,0,"LAYER");pair(lines,2,layer.name);pair(lines,70,0);pair(lines,62,layer.color);pair(lines,6,"CONTINUOUS")
  pair(lines,0,"ENDTAB");pair(lines,0,"ENDSEC")
  pair(lines,0,"SECTION");pair(lines,2,"BLOCKS");pair(lines,0,"ENDSEC")
@@ -76,5 +92,16 @@ static func calculate_job(snapshot,spacing,coordinate_mode):
    for axis in range(3):pair(lines,10+axis*10,"%.9f" % layer.vertices[i+axis])
    pair(lines,70,32)
   pair(lines,0,"SEQEND");pair(lines,8,layer.name)
+ for annotation in annotations:
+  pair(lines,0,"POLYLINE");pair(lines,8,"KROAD_STA_TICK");pair(lines,66,1)
+  pair(lines,10,0);pair(lines,20,0);pair(lines,30,0);pair(lines,70,8)
+  for point in annotation.tick:
+   pair(lines,0,"VERTEX");pair(lines,8,"KROAD_STA_TICK")
+   for axis in range(3):pair(lines,10+axis*10,"%.9f" % point[axis])
+   pair(lines,70,32)
+  pair(lines,0,"SEQEND");pair(lines,8,"KROAD_STA_TICK")
+  pair(lines,0,"TEXT");pair(lines,8,"KROAD_STA_TEXT")
+  pair(lines,10,"%.9f" % annotation.x);pair(lines,20,"%.9f" % annotation.y);pair(lines,30,"%.9f" % annotation.z)
+  pair(lines,40,"%.9f" % annotation.height);pair(lines,1,annotation.label);pair(lines,50,"%.9f" % annotation.rotation)
  pair(lines,0,"ENDSEC");pair(lines,0,"EOF")
- return {"ok":true,"text":"\n".join(lines)+"\n","stations":unique.size(),"vertices":unique.size()*3,"length":info.length,"spacing":spacing,"crs":"EPSG:5179" if projected else "LOCAL_EAST_NORTH","ms":(Time.get_ticks_usec()-started)/1000.0}
+ return {"ok":true,"text":"\n".join(lines)+"\n","annotation_count":annotations.size(),"annotation_step":annotation_step,"annotation_text_height":annotation_text_height,"stations":unique.size(),"vertices":unique.size()*3,"length":info.length,"spacing":spacing,"crs":"EPSG:5179" if projected else "LOCAL_EAST_NORTH","ms":(Time.get_ticks_usec()-started)/1000.0}
