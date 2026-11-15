@@ -20,6 +20,8 @@ var setting_table=false
 var note: Label
 var mass_window
 var mass_button: Button
+var range_window
+var range_button: Button
 
 func _ready():
  title="절토·성토량 / 평균단면법"
@@ -79,7 +81,20 @@ func _ready():
   mass_button.text="누가토량도"
   mass_button.disabled=true
   mass_button.pressed.connect(func():mass_window.show_report(result,result_revision))
-  settings.add_child(mass_button)
+  var derived=HBoxContainer.new()
+  root.add_child(derived)
+  root.move_child(derived,1)
+  derived.add_child(mass_button)
+  range_window=load("res://scripts/earthwork_range_window.gd").new()
+  range_window.visible=false
+  range_window.revision_provider=func():return revision_provider.call()
+  range_window.station_selected.connect(func(station):station_selected.emit(station))
+  add_child(range_window)
+  range_button=Button.new()
+  range_button.text="측점 범위 집계"
+  range_button.disabled=true
+  range_button.pressed.connect(func():range_window.show_report(result,result_revision))
+  derived.add_child(range_button)
 
 func number(parent,label_text,value,minimum,maximum,step):
  var label=Label.new()
@@ -95,6 +110,8 @@ func number(parent,label_text,value,minimum,maximum,step):
  return input
 
 func invalidate():
+ if range_window!=null:range_window.invalidate()
+ if range_button!=null:range_button.disabled=true
  if mass_window!=null:mass_window.invalidate()
  if mass_button!=null:mass_button.disabled=true
  generation+=1
@@ -174,6 +191,7 @@ func _process(_delta):
   show_result()
 
 func show_result():
+ if range_button!=null:range_button.disabled=false
  if mass_button!=null:mass_button.disabled=false
  csv_button.disabled=false
  var label="전 구간 추정량" if result.complete else "유효 구간 부분합"

@@ -98,7 +98,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--mass-haul-smoke" in OS.get_cmdline_user_args():
+ if "--range-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_range_smoke")
+ elif "--mass-haul-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_mass_haul_smoke")
  elif "--comparison-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_comparison_smoke")
@@ -1188,7 +1190,7 @@ func run_visual_test():
   if "--insert-dialog" in arguments:
    select_pi(0)
    show_pi_insert()
- if "--earthwork-demo" in arguments or "--mass-haul-demo" in arguments:
+ if "--earthwork-demo" in arguments or "--mass-haul-demo" in arguments or "--range-demo" in arguments:
   earthwork_report.popup_centered(Vector2i(1200,720))
   earthwork_report.start_calculation()
   var work_start=Time.get_ticks_usec()
@@ -1204,6 +1206,15 @@ func run_visual_test():
   var graph_started=Time.get_ticks_usec()
   earthwork_report.mass_window.show_report(earthwork_report.result,revision)
   print("BENCH MASS HAUL: %.2f ms / %d segments / %d CSV rows" % [(Time.get_ticks_usec()-graph_started)/1000.0,earthwork_report.mass_window.graph.data.segments.size(),earthwork_report.mass_window.graph.data.rows.size()])
+  await get_tree().process_frame
+ if "--range-demo" in arguments:
+  var range_started=Time.get_ticks_usec()
+  var window=earthwork_report.range_window
+  window.show_report(earthwork_report.result,revision)
+  print("BENCH RANGE FULL: %.2f ms / %d rows" % [(Time.get_ticks_usec()-range_started)/1000.0,window.result.rows.size()])
+  window.begin_input.text=str(model.length()*0.2345)
+  window.end_input.text=str(model.length()*0.7891)
+  assert(window.calculate_range())
   await get_tree().process_frame
  if "--navigation-demo" in arguments:
   var map=plan.map_rect()
@@ -2944,4 +2955,82 @@ func run_mass_haul_smoke():
  assert(not window.export_csv("user://stale-mass-haul.csv"))
  assert(not window.show_report(earthwork_report.result,rev))
  print("PASS MASS HAUL UI: plot, zoom, station navigation, immutable design/history, CSV and invalidation")
+ get_tree().quit(0)
+
+
+func run_range_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ earthwork_report.start_calculation()
+ while earthwork_report.worker!=null:await get_tree().process_frame
+ assert(not earthwork_report.range_button.disabled)
+ var window=earthwork_report.range_window
+ var before=model.edit_state()
+ var undo_before=undo_stack.size()
+ var rev=revision
+ var original=earthwork_report.result.duplicate(true)
+ assert(window.show_report(earthwork_report.result,revision))
+ assert(window.result.status=="complete")
+ assert(abs(window.result.cut-original.cut_volume)<0.000001 and abs(window.result.fill-original.fill_volume)<0.000001)
+ window.begin_input.text="123.456"
+ window.begin_input.text_changed.emit(window.begin_input.text)
+ assert(window.result.is_empty() and window.csv_button.disabled)
+ assert(not window.export_csv("user://uncomputed-range.csv"))
+ window.end_input.text="987.654"
+ assert(window.calculate_range())
+ assert(abs(window.result.length-864.198)<0.000001)
+ var row=window.table.get_root().get_first_child()
+ row.select(0)
+ assert(abs(model.station*model.length()-row.get_metadata(0))<0.000001)
+ assert(model.edit_state()==before and undo_stack.size()==undo_before and revision==rev and earthwork_report.result==original)
+ assert(window.export_csv("user://range.csv"))
+ var csv=FileAccess.open("user://range.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ var header=csv.get_csv_line()
+ var values=csv.get_csv_line()
+ assert(header.size()==21 and values.size()==21 and values[1]=="linear_section_area" and abs(float(values[5])-123.456)<0.000001)
+ var paged=original.duplicate(true)
+ paged.sections=[]
+ for i in range(402):paged.sections.append({"station":float(i),"status":"ok","interval_status":"included","cut_area":0.0,"fill_area":0.0})
+ assert(window.show_report(paged,revision))
+ assert(window.table.get_root().get_child_count()==200)
+ window.next_button.pressed.emit()
+ assert(window.page==1 and window.table.get_root().get_first_child().get_metadata(0)==200.5)
+ window.next_button.pressed.emit()
+ assert(window.table.get_root().get_child_count()==1 and window.next_button.disabled)
+ assert(window.export_csv("user://paged-range.csv"))
+ csv=FileAccess.open("user://paged-range.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ csv.get_csv_line()
+ var row_count=0
+ while csv.get_position()<csv.get_length():
+  var record=csv.get_csv_line()
+  if record.size()==21:row_count+=1
+ assert(row_count==401)
+ window.begin_input.text="1"
+ assert(not window.export_csv("user://uncomputed-programmatic-range.csv"))
+ window.end_input.text="bad"
+ assert(not window.calculate_range() and window.result.is_empty() and window.csv_button.disabled)
+ window.full_range()
+ assert(not window.result.is_empty())
+ earthwork_report.interval.value+=1
+ assert(window.report.is_empty() and window.result.is_empty() and earthwork_report.range_button.disabled)
+ assert(not window.export_csv("user://stale-range.csv"))
+ earthwork_report.start_calculation()
+ while earthwork_report.worker!=null:await get_tree().process_frame
+ assert(window.show_report(earthwork_report.result,revision))
+ var mock=earthwork_report.result.duplicate(true)
+ mock.sections=[{"station":0.0,"status":"nodata"},{"station":10.0,"interval_status":"excluded","status":"nodata"}]
+ assert(window.show_report(mock,revision))
+ assert(window.result.status=="missing" and window.export_csv("user://missing-range.csv"))
+ csv=FileAccess.open("user://missing-range.csv",FileAccess.READ)
+ csv.get_buffer(3)
+ csv.get_csv_line()
+ values=csv.get_csv_line()
+ assert(values[7]=="missing" and values[13]=="excluded" and values[18]=="" and values[19]=="")
+ edit_elevation(1,model.pvi_heights[1]+1)
+ assert(window.report.is_empty() and window.csv_button.disabled)
+ assert(not window.show_report(original,rev))
+ print("PASS EARTHWORK RANGE UI: arbitrary bounds, original result/history preserved, exact station navigation, 21-column CSV, missing quantities, settings/design invalidation and stale report rejection")
  get_tree().quit(0)
