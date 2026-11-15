@@ -1,6 +1,6 @@
 # MyInfraWorks
 
-개발 브랜치: `feature/cross-section-dxf` (0.29). 확인된 0.28은 `main`에 반영했습니다.
+개발 브랜치: `feature/profile-dxf` (0.30). 확인된 0.29는 `main`에 반영했습니다.
 
 MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트입니다.
 
@@ -9,7 +9,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 ## 현재 상태
 
 - `legacy/wpf`: 작동하는 WPF 시제품 0.2. DEM 열기, 직선 노선 작성, 계획고 변경, 종단·횡단·3D 표시, 단순 사면, 프로젝트 저장·복원을 지원합니다.
-- `godot`: Godot + C++ 편집기 시제품 0.29. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
+- `godot`: Godot + C++ 편집기 시제품 0.30. 원본 해상도 수준의 계산용 지형과 화면용 지형을 분리합니다. DEM 지형, Orbit/Pan/Zoom, 평면 노선, 종단 계획고 드래그, 횡단, 단순 절성토, 프로젝트 저장을 지원합니다. 지형은 타일로 나누고 C++ 작업 스레드에서 계산하며, 노선의 영향 구간만 갱신합니다.
 - `tests`: WPF 계산 검사와 두 DEM 변환기 검사입니다. Godot 네이티브·편집기 검사는 아래 명령을 참조하세요.
 
 ## 준비
@@ -21,7 +21,7 @@ MyInfraWorks는 infraworks 대체 프레임워크를 개발하는 프로젝트�
 - WPF 시제품에만 .NET 9 SDK 필요
 
 ```powershell
-git clone --branch feature/cross-section-dxf --recurse-submodules https://github.com/navya099/MyInfraWorks.git
+git clone --branch feature/profile-dxf --recurse-submodules https://github.com/navya099/MyInfraWorks.git
 cd MyInfraWorks
 python -m pip install -r requirements-dev.txt
 ```
@@ -82,7 +82,7 @@ python tests/verify_dem.py
 DEM 원본, 사용자 프로젝트, Godot 실행 파일, 빌드 결과와 캐시는 커밋하지 않습니다. 기능 단위로 빌드·검사 후 커밋합니다. 현재 코드의 동작 여부와 계획 중인 기능을 구분해 기록합니다.
 
 
-## Godot 편집기 0.29 실행
+## Godot 편집기 0.30 실행
 
 C++ 빌드 후 실행합니다.
 
@@ -681,7 +681,7 @@ godot --headless --path godot/project -- --section-table-smoke
 합성 3601×3601 DEM / 약 98.235km 노선에서 반폭 100m·간격 1m의 201표본 산출은 작업 스레드에서 15.63ms였습니다. 화면 표시/파일 저장 시간은 별도이며 실제 데이터 성능을 보장하지 않습니다.
 
 
-## 0.29 횡단 DXF 일괄 출력 (개발 브랜치)
+## 0.29 횡단 DXF 일괄 출력 (main 반영 완료)
 
 상단 `DXF` → `횡단 DXF...`에서 횡단 측점 간격·조사 반폭·횡단 간격·배치 열 수를 지정하고 `산출` → `DXF 저장`을 누릅니다. 기본값은 1,000m / 반폭 100m / 횡단 2m / 3열입니다.
 
@@ -702,3 +702,26 @@ python tests/verify_section_dxf_export.py "<SECTION DXF FIXTURES 출력 경로>"
 독립 판독기 ezdxf 1.3.0에서 오류·자동 수정 0건과 레이어/도면단위·실제 2%/4% 횡단구배·음수 기준표고·정확한 종점·결측 선 끊기·빈 설계면·단독 POINT를 확인했습니다. 도면 렌더링과 UI의 실제 저장 신호·설계/이력 불변·조건/설계 변경 무효화를 검사했고 기존 DXF·횡단 표·수량·대안 관리 검사도 통과했습니다.
 
 합성 3601×3601 DEM / 약 98.235km 노선에서 1km 간격의 100횡단·10,100표본 DXF 생성은 작업 스레드에서 289.18ms, 파일 문자열은 약 1.65MB였습니다. 화면 표시/파일 저장 시간은 별도이며 실제 데이터 성능을 보장하지 않습니다.
+
+
+## 0.30 종단 DXF 출력 (개발 브랜치)
+
+상단 `DXF` → `종단 DXF...`에서 시작·끝 STA, 측점 간격과 세로 확대 배율을 지정하고 `산출` → `DXF 저장`을 누릅니다. 기본은 전체 노선·20m·세로 10배이며 배율 1은 가로/세로 동일 배율입니다. `전체 범위`로 원래 양 끝을 다시 지정합니다.
+
+- X=STA−시작, Y=(실제 표고−DATUM)×세로 배율, Z=0의 종단 도면 배치입니다. 도면의 표고 눈금·기준표고·배율·범위/간격/보정고를 영문 표기합니다. CAD 가져오기 단위는 m입니다.
+- 원지반·실제 계획고·축·문자 레이어를 나눕니다. 원지반 결측은 선을 끊되 계획선은 유지합니다. 단독 원지반 표본은 POINT로 보존합니다.
+- 지정 범위 양 끝·PVI·BVC/EVC·종단곡선 정점·평면 요소 경계를 정규 표본과 합칩니다. PVI 제어점을 직선으로 연결하지 않으며 실제 종단곡선과 계획고 보정을 사용합니다. 경계 포함 최대 20,000표본입니다.
+- 간격 1~10,000m, 길이 1m 이상인 노선 안 STA 범위, 세로 확대 1~100배입니다. 설계/DEM/조건 변경과 입력 서명 불일치는 결과·저장을 무효화하며 현재 STA 이동은 결과를 유지합니다.
+- 별도 스레드에서 산출하고 임시 파일 완성 후 저장합니다. 설계·undo·원본 DEM·메시·프로젝트 v7·DLL v018과 기존 횡단 1:1을 변경하지 않습니다. 지도 좌표/수량 출력이 아니며 곡선은 표본 사이 선분 근사입니다.
+
+[종단 DXF 좌표와 배율](docs/profile-dxf.md)을 참조하세요.
+
+```powershell
+godot --headless --path godot/project --script verify_profile_dxf.gd
+godot --headless --path godot/project -- --profile-dxf-smoke
+python tests/verify_profile_dxf_export.py "<PROFILE DXF FIXTURES 출력 경로>"
+```
+
+독립 ezdxf 검사에서 오류·자동 수정 0건, 범위 원점/끝점·포물선/보정고·비대칭 정점·1배/10배·음수 기준표고·원지반만 끊기/전체 결측 시 계획선 유지를 확인했습니다. 도면 렌더링과 UI의 실제 저장 신호·설계/이력 불변·입력/조건/설계 변경 무효화 및 기존 평면/횡단 DXF·계획고 비교·PVI 편집 검사도 통과했습니다.
+
+합성 3601×3601 DEM / 약 98.235km 노선의 4,921표본 종단 DXF 생성은 작업 스레드에서 195.22ms, 문자열은 약 0.75MB였습니다. 화면 표시/파일 저장 시간은 별도이며 실제 데이터 성능을 보장하지 않습니다.

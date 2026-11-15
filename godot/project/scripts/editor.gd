@@ -7,6 +7,8 @@ const DxfWindow=preload("res://scripts/dxf_window.gd")
 var dxf_window
 const SectionDxfWindow=preload("res://scripts/section_dxf_window.gd")
 var section_dxf
+const ProfileDxfWindow=preload("res://scripts/profile_dxf_window.gd")
+var profile_dxf
 const Alternatives=preload("res://scripts/design_alternatives.gd")
 const AlternativesWindow=preload("res://scripts/alternatives_window.gd")
 var alternatives=Alternatives.new()
@@ -110,7 +112,9 @@ func _ready():
  get_window().focus_exited.connect(cancel_gesture)
  model.demo()
  reset_terrain()
- if "--section-dxf-smoke" in OS.get_cmdline_user_args():
+ if "--profile-dxf-smoke" in OS.get_cmdline_user_args():
+  call_deferred("run_profile_dxf_smoke")
+ elif "--section-dxf-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_section_dxf_smoke")
  elif "--section-table-smoke" in OS.get_cmdline_user_args():
   call_deferred("run_section_table_smoke")
@@ -508,6 +512,12 @@ func build_ui():
  section_dxf.revision_provider=func():return revision
  dxf_window.section_export_requested.connect(func():section_dxf.open_export())
  add_child(section_dxf)
+ profile_dxf=ProfileDxfWindow.new()
+ profile_dxf.visible=false
+ profile_dxf.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision,"length":model.length()}
+ profile_dxf.revision_provider=func():return revision
+ dxf_window.profile_export_requested.connect(func():profile_dxf.open_export())
+ add_child(profile_dxf)
  alternatives_window=AlternativesWindow.new()
  alternatives_window.visible=false
  alternatives_window.library=alternatives
@@ -591,6 +601,7 @@ func reset_terrain(preserve_alternatives=false):
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
  if section_dxf!=null:section_dxf.invalidate()
+ if profile_dxf!=null:profile_dxf.invalidate()
  if review_window!=null:review_window.invalidate()
  if alternatives_window!=null and alternatives_window.visible:alternatives_window.refresh()
  clear_history()
@@ -701,6 +712,7 @@ func changed(previous, record_history=true, quiet=false):
  if station_table!=null:station_table.invalidate()
  if dxf_window!=null:dxf_window.invalidate()
  if section_dxf!=null:section_dxf.invalidate()
+ if profile_dxf!=null:profile_dxf.invalidate()
  if review_window!=null:review_window.invalidate()
  if alternatives_window!=null and alternatives_window.visible:alternatives_window.refresh()
  apply_queue.clear()
@@ -1420,6 +1432,12 @@ func run_visual_test():
   while section_dxf.worker!=null:await get_tree().process_frame
   assert(not section_dxf.result.is_empty())
   print("BENCH SECTION DXF: %.2fms / %d sections / %d samples / %d bytes" % [section_dxf.result.ms,section_dxf.result.sections.size(),section_dxf.result.samples,section_dxf.result.text.length()])
+ if "--profile-dxf-demo" in arguments:
+  profile_dxf.open_export()
+  profile_dxf.start_calculation()
+  while profile_dxf.worker!=null:await get_tree().process_frame
+  assert(not profile_dxf.result.is_empty())
+  print("BENCH PROFILE DXF: %.2fms / %d samples / %d bytes" % [profile_dxf.result.ms,profile_dxf.result.stations.size(),profile_dxf.result.text.length()])
  if "--station-table-demo" in arguments:
   station_table.popup_centered(Vector2i(1250,650))
   station_table.start_calculation()
@@ -3677,4 +3695,46 @@ func run_section_dxf_smoke():
  apply_parameters()
  assert(section_dxf.result.is_empty() and not section_dxf.export_csv("user://stale-section-dxf.dxf"))
  print("PASS SECTION DXF UI: async output, actual save dialog signal, read-only model/history, current STA independent, conditions/design invalidation and stale discard")
+ get_tree().quit(0)
+
+
+func run_profile_dxf_smoke():
+ while worker!=null or not dirty.is_empty():await get_tree().process_frame
+ add_point(Vector2(600,1000))
+ add_point(Vector2(1800,1000))
+ var before=model.edit_state()
+ var history=undo_stack.size()
+ var rev=revision
+ profile_dxf.open_export()
+ profile_dxf.begin_input.text="123.456"
+ profile_dxf.end_input.text="987.654"
+ profile_dxf.start_calculation()
+ while profile_dxf.worker!=null:await get_tree().process_frame
+ assert(not profile_dxf.result.is_empty() and profile_dxf.result.begin==123.456 and profile_dxf.result.end==987.654)
+ assert(model.edit_state()==before and history==undo_stack.size() and rev==revision)
+ profile_dxf.csv_dialog.file_selected.emit("user://profile-dxf-ui.dxf")
+ var file=FileAccess.open("user://profile-dxf-ui.dxf",FileAccess.READ)
+ assert(file!=null and "KROAD_PROF_DESIGN" in file.get_as_text())
+ set_station_distance(250)
+ assert(not profile_dxf.result.is_empty())
+ profile_dxf.end_input.text="900"
+ assert(not profile_dxf.export_csv("user://profile-dxf-uncomputed.dxf"))
+ profile_dxf.start_calculation()
+ profile_dxf.factor.value=5
+ while profile_dxf.worker!=null:await get_tree().process_frame
+ assert(profile_dxf.result.is_empty())
+ profile_dxf.full_range()
+ profile_dxf.start_calculation()
+ while profile_dxf.worker!=null:await get_tree().process_frame
+ assert(profile_dxf.result.end==1200)
+ profile_dxf.begin_input.text="bad"
+ profile_dxf.start_calculation()
+ assert(profile_dxf.worker==null and profile_dxf.result.is_empty())
+ profile_dxf.full_range()
+ profile_dxf.start_calculation()
+ while profile_dxf.worker!=null:await get_tree().process_frame
+ offset_input.value=5
+ apply_parameters()
+ assert(profile_dxf.result.is_empty() and not profile_dxf.export_csv("user://profile-dxf-stale.dxf"))
+ print("PASS PROFILE DXF UI: range/factor controls, real save signal, immutable model/history, current STA independent, input signature and stale result/export rejection")
  get_tree().quit(0)

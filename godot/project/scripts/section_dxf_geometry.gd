@@ -24,8 +24,8 @@ static func polyline(lines,layer,points):
   pair(lines,10,"%.9f" % point[0]);pair(lines,20,"%.9f" % point[1]);pair(lines,30,0);pair(lines,70,32)
  pair(lines,0,"SEQEND");pair(lines,8,layer)
 
-static func text(lines,x,y,height,value):
- pair(lines,0,"TEXT");pair(lines,8,"KROAD_SEC_TEXT")
+static func text(lines,x,y,height,value,layer="KROAD_SEC_TEXT"):
+ pair(lines,0,"TEXT");pair(lines,8,layer)
  pair(lines,10,"%.9f" % x);pair(lines,20,"%.9f" % y);pair(lines,30,0)
  pair(lines,40,"%.9f" % height);pair(lines,1,value);pair(lines,50,0)
 
