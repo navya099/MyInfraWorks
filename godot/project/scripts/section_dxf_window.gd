@@ -11,6 +11,7 @@ var extra_input: LineEdit
 var include_boundaries: CheckBox
 var grid_enabled: CheckBox
 var grid_interval: SpinBox
+var label_decimals: SpinBox
 var chainage_labels: CheckBox
 var extras_only: CheckBox
 
@@ -61,6 +62,7 @@ func _ready():
  chainage_labels.text="STA km+m 표기"
  chainage_labels.toggled.connect(func(_enabled):invalidate())
  range_row.add_child(chainage_labels)
+ label_decimals=number(range_row,"STA 소수",3,0,3,1)
  var extra_row=HBoxContainer.new()
  root.add_child(extra_row)
  root.move_child(extra_row,3)
@@ -137,7 +139,7 @@ func add_current_station():
  invalidate()
 
 func input_signature():
- return PackedStringArray([begin_input.text,end_input.text,str(interval.value),str(reach.value),str(lateral_step.value),str(columns.value),extra_input.text,str(include_boundaries.button_pressed),str(grid_enabled.button_pressed),str(grid_interval.value),str(extras_only.button_pressed),str(chainage_labels.button_pressed)])
+ return PackedStringArray([begin_input.text,end_input.text,str(interval.value),str(reach.value),str(lateral_step.value),str(columns.value),extra_input.text,str(include_boundaries.button_pressed),str(grid_enabled.button_pressed),str(grid_interval.value),str(extras_only.button_pressed),str(chainage_labels.button_pressed),str(label_decimals.value)])
 
 func open_export():
  if range_length!=snapshot_provider.call().length:full_range()
@@ -158,7 +160,7 @@ func start_calculation():
  requested_generation=generation
  status.text="횡단 DXF 산출 중 · 최대 500횡단 / 전체 100000표본"
  worker=Thread.new()
- if worker.start(CrossDxf.calculate_job.bind(state.snapshot,interval.value,reach.value,lateral_step.value,int(columns.value),bounds,extra_input.text,include_boundaries.button_pressed,grid_interval.value if grid_enabled.button_pressed else 0.0,extras_only.button_pressed,chainage_labels.button_pressed))!=OK:
+ if worker.start(CrossDxf.calculate_job.bind(state.snapshot,interval.value,reach.value,lateral_step.value,int(columns.value),bounds,extra_input.text,include_boundaries.button_pressed,grid_interval.value if grid_enabled.button_pressed else 0.0,extras_only.button_pressed,chainage_labels.button_pressed,int(label_decimals.value)))!=OK:
   worker=null
   status.text="작업 스레드를 시작하지 못했습니다."
 

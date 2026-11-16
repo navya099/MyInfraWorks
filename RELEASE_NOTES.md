@@ -1,5 +1,5 @@
-# MyInfraWorks 0.41
+# MyInfraWorks 0.42
 
-횡단 DXF 창에서 **STA km+m 표기**를 켜면 도면 제목에 1234.567m를 1+234.567로 표시합니다. 기본값은 기존 미터 표기입니다. 입력·계산·DXF 메타데이터의 STA는 미터를 유지합니다. 밀리미터 반올림이 km 경계를 넘는 경우도 처리합니다.
+횡단 DXF의 **STA 소수**에서 0~3자리를 선택할 수 있습니다. 기본값은 3자리이며 미터 및 km+m 표기에 모두 적용됩니다. 실제 계산 STA와 메타데이터는 유지합니다.
 
-개발 브랜치: feature/section-station-labels
+개발 브랜치: feature/section-label-precision
