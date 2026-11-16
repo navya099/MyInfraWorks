@@ -89,6 +89,12 @@ func run():
  if DisplayServer.get_name()!="headless":
   assert(app.section_dxf.copy_result())
   assert(DisplayServer.clipboard_get().replace("\r\n","\n")==app.section_dxf.table.text)
+ var original_dxf=app.section_dxf.result.text
+ var original_rows=app.section_dxf.table.text
+ app.section_dxf.missing_only.button_pressed=true
+ assert("목록: 결측만" in app.section_dxf.table.text and app.section_dxf.result.text==original_dxf)
+ app.section_dxf.missing_only.button_pressed=false
+ assert(app.section_dxf.table.text==original_rows)
  var report_path="user://section-result-report.txt"
  app.section_dxf.report_dialog.file_selected.emit(report_path)
  assert(FileAccess.get_file_as_string(report_path)==app.section_dxf.table.text+"\n")
