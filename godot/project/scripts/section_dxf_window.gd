@@ -248,6 +248,7 @@ func _process(_delta):
  lines.insert(1,"STA 표기: %s · 소수 %d자리 · 횡단 번호 %s" % ["km+m" if chainage_labels.button_pressed else "m",int(label_decimals.value),on_off(number_sections.button_pressed)])
  lines.insert(2,"글자 높이: %s · DATUM: %s" % ["자동" if text_height_input.value==0 else "%.2fm" % text_height_input.value,"공통 %.3fm" % common_datum_input.value if common_datum_enabled.button_pressed else "횡단별 자동"])
  lines.insert(3,"반폭 %.2fm · 횡단 간격 %.2fm · 배치 %d열 · 결측 통계는 원지반/설계 전체 기준" % [result.half,result.lateral_step,result.columns])
+ lines.insert(0,missing_summary(result.sections,result.lateral_count))
  table.text="\n".join(lines)
 
 
@@ -326,3 +327,22 @@ func save_report(path):
   return false
  status.text="결과 TXT 저장 완료: "+path
  return true
+
+
+static func missing_summary(sections,lateral_count):
+ var affected=0
+ var ground=0
+ var design=0
+ var ground_empty=0
+ var design_empty=0
+ var stations=[]
+ for section in sections:
+  ground+=section.ground_missing
+  design+=section.design_missing
+  if section.ground_missing>=lateral_count:ground_empty+=1
+  if section.design_missing>=lateral_count:design_empty+=1
+  if section.ground_missing>0 or section.design_missing>0:
+   affected+=1
+   if stations.size()<10:stations.append("%.3f" % section.station)
+ if affected==0:return "결측 검사: 모든 횡단의 원지반·설계 표본 유효"
+ return "결측 경고: %d/%d횡단 · 원지반 %d / 설계 %d표본 · 전체 결측 횡단 원지반 %d / 설계 %d\n결측 STA(m): %s%s · DEM 범위·원본 결측·설계 유효 범위를 확인하세요." % [affected,sections.size(),ground,design,ground_empty,design_empty,", ".join(stations)," 외 %d개" % (affected-10) if affected>10 else ""]

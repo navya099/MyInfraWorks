@@ -97,6 +97,16 @@ func run():
  app.section_dxf.label_decimals.set_value_no_signal(1)
  assert(app.section_dxf.result_text()=="" and app.section_dxf.copy_button.disabled)
  assert(not app.section_dxf.save_report(report_path) and app.section_dxf.report_button.disabled)
+ var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
+ assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
+ var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]
+ var warning=app.section_dxf.missing_summary(gaps,10)
+ assert("2/2횡단" in warning and "원지반 10 / 설계 12표본" in warning)
+ assert("원지반 1 / 설계 1" in warning and "12.500, 20.000" in warning)
+ var many=[]
+ for i in range(12):many.append({"station":float(i),"ground_missing":1,"design_missing":0})
+ assert("외 2개" in app.section_dxf.missing_summary(many,10))
+ print("PASS MISSING SUMMARY: valid, partial/full ground/design gaps, exact counts and bounded station list")
  print("PASS REPORT: UTF-8 content, overwrite, invalid path and stale-result rejection")
  print("PASS COPY: result text, stale input rejection and copy availability")
  print("PASS RESET: defaults, control states, stale worker rejection, recalculation and immutable design")
