@@ -46,7 +46,13 @@ func run():
  app.section_dxf.start_calculation()
  while app.section_dxf.worker!=null:await process_frame
  assert("SEC 001 | STA" in app.section_dxf.result.text)
- app.section_dxf.number_sections.set_pressed_no_signal(false)
+ app.section_dxf.common_datum_enabled.button_pressed=true
+ assert(app.section_dxf.result.is_empty() and app.section_dxf.common_datum_input.editable)
+ app.section_dxf.common_datum_input.value=-10000
+ app.section_dxf.start_calculation()
+ while app.section_dxf.worker!=null:await process_frame
+ assert(app.section_dxf.result.sections[0].datum==-10000)
+ app.section_dxf.common_datum_input.set_value_no_signal(-9999)
  assert(not app.section_dxf.export_csv("user://section-selected-stale.dxf"))
  assert(app.model.edit_state()==before and app.undo_stack.size()==history and app.revision==rev)
  print("PASS SECTION SELECTED UI: empty rejection, current station single save, disabled/restored controls, stale result/export rejection, immutable design/history")

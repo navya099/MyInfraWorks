@@ -70,3 +70,10 @@ titles = [e.dxf.text for e in numbered.modelspace().query("TEXT") if e.dxf.text.
 assert titles == ["SEC 001 | STA 12.250 | H:V 1:1", "SEC 002 | STA 50.000 | H:V 1:1", "SEC 003 | STA 87.750 | H:V 1:1"]
 assert [m["station"] for m in nm] == [12.25,50,87.75]
 print("PASS SECTION NUMBERS: sorted consecutive titles and original stations")
+
+common, cm = read("section-common-datum.dxf")
+assert len(cm)==2 and all(m["datum"]==-10 for m in cm)
+for m in cm:
+    ground = [e for e in common.modelspace().query("POLYLINE") if e.dxf.layer=="KROAD_SEC_GROUND" and abs(e.vertices[0].dxf.location.x-(m["origin_x"]-30))<1e-7 and abs(e.vertices[0].dxf.location.y-(m["origin_y"]+10))<1e-7]
+    assert len(ground)==1
+print("PASS COMMON DATUM: shared datum and correct ground elevation after layout translation")
