@@ -11,6 +11,7 @@ var extra_input: LineEdit
 var include_boundaries: CheckBox
 var grid_enabled: CheckBox
 var grid_interval: SpinBox
+var extras_only: CheckBox
 
 func _ready():
  super._ready()
@@ -60,6 +61,13 @@ func _ready():
  root.move_child(extra_row,3)
  var extra_label=Label.new()
  extra_label.text="추가 STA(m)"
+ extras_only=CheckBox.new()
+ extras_only.text="추가 STA만 출력"
+ extras_only.toggled.connect(func(enabled):
+  interval.editable=not enabled
+  include_boundaries.disabled=enabled
+  invalidate())
+ extra_row.add_child(extras_only)
  extra_row.add_child(extra_label)
  extra_input=LineEdit.new()
  extra_input.placeholder_text="예: 123.45, 567.89 · 쉼표 구분 · 최대 100개"
@@ -76,7 +84,7 @@ func _ready():
  clear_button.pressed.connect(func():extra_input.text="";invalidate())
  extra_row.add_child(clear_button)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
- hint.text="지정 구간 양 끝+정규 측점+추가 STA · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
+ hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
 
 func number(parent,title,value,minimum,maximum,step):
@@ -124,7 +132,7 @@ func add_current_station():
  invalidate()
 
 func input_signature():
- return PackedStringArray([begin_input.text,end_input.text,str(interval.value),str(reach.value),str(lateral_step.value),str(columns.value),extra_input.text,str(include_boundaries.button_pressed),str(grid_enabled.button_pressed),str(grid_interval.value)])
+ return PackedStringArray([begin_input.text,end_input.text,str(interval.value),str(reach.value),str(lateral_step.value),str(columns.value),extra_input.text,str(include_boundaries.button_pressed),str(grid_enabled.button_pressed),str(grid_interval.value),str(extras_only.button_pressed)])
 
 func open_export():
  if range_length!=snapshot_provider.call().length:full_range()
@@ -145,7 +153,7 @@ func start_calculation():
  requested_generation=generation
  status.text="횡단 DXF 산출 중 · 최대 500횡단 / 전체 100000표본"
  worker=Thread.new()
- if worker.start(CrossDxf.calculate_job.bind(state.snapshot,interval.value,reach.value,lateral_step.value,int(columns.value),bounds,extra_input.text,include_boundaries.button_pressed,grid_interval.value if grid_enabled.button_pressed else 0.0))!=OK:
+ if worker.start(CrossDxf.calculate_job.bind(state.snapshot,interval.value,reach.value,lateral_step.value,int(columns.value),bounds,extra_input.text,include_boundaries.button_pressed,grid_interval.value if grid_enabled.button_pressed else 0.0,extras_only.button_pressed))!=OK:
   worker=null
   status.text="작업 스레드를 시작하지 못했습니다."
 
@@ -166,6 +174,7 @@ func _process(_delta):
  var lines=PackedStringArray(["주요 경계 %s · 경계 포함 횡단 %d개" % ["포함" if result.include_boundaries else "제외",result.boundary_sections],"추가 STA 입력 %d개 · 중복 병합 후 총 %d횡단" % [result.extra_requested,result.sections.size()],"출력 STA %.3f~%.3fm · 구간 길이 %.3fm · 원래 STA 유지" % [result.begin,result.end,result.end-result.begin],"DXF R12 ASCII / H:V 1:1 / Z=0 배치 / CAD 단위 m", "녹색 KROAD_SEC_GROUND / 노랑 KROAD_SEC_DESIGN", "회색 KROAD_SEC_AXIS / 흰색 KROAD_SEC_TEXT", "DATUM: 각 횡단 기준표고 · Y좌표=배치기준+표고−DATUM", "결측은 선을 끊고 단독 유효 표본은 POINT · 사면 폐합/수량 계산 없음", "", "STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각"])
  for section in result.sections:lines.append("%.3f | %.3f | %d / %d | %d / %d" % [section.station,section.datum,section.ground_missing,section.design_missing,section.ground_runs,section.design_runs])
  if result.grid_step>0:lines.insert(0,"격자 %.2fm · %d선 · GRID/GRID_TEXT 별도 레이어 · 눈금=실제 표고" % [result.grid_step,result.grid_lines])
+ if result.extras_only:lines.insert(0,"추가 STA만 출력 · 구간 양 끝/정규 측점/주요 경계 자동 추가 없음")
  table.text="\n".join(lines)
 
 

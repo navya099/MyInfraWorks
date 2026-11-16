@@ -64,7 +64,7 @@ static func alignment_boundaries(info,begin,finish):
    candidates.append(float(info.pvi_stations[i]+info.pvi_lengths[i]/2.0))
  return candidates.filter(func(station):return station>=begin and station<=finish)
 
-static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text="",include_boundaries=false,grid_step=0.0):
+static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text="",include_boundaries=false,grid_step=0.0,extras_only=false):
  var started=Time.get_ticks_usec()
  if not is_finite(grid_step) or (grid_step!=0 and (grid_step<0.5 or grid_step>1000)):return fail("격자 간격은 0(끄기) 또는 0.5~1000m입니다.")
  if typeof(columns)!=TYPE_INT:return fail("배치 열 수는 정수여야 합니다.")
@@ -76,17 +76,21 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
  var finish=float(station_range.get("end",reference.length))
  if not is_finite(begin) or not is_finite(finish) or begin<0 or finish>reference.length or finish-begin<1:
   return fail("노선 안에서 길이 1m 이상의 시작·끝 STA를 지정하세요.")
- var first=ceili(begin/station_step)
- var last=floori(finish/station_step)
- if last-first+1>MAX_SECTIONS:return fail("횡단 수가 500개를 넘습니다. 간격을 늘리거나 구간을 줄이세요.")
- var stations=[begin]
- for i in range(first,last+1):
-  var station=i*station_step
-  if station-begin>=0.0000001 and finish-station>=0.0000001:stations.append(station)
- stations.append(finish)
- if stations.size()>MAX_SECTIONS:return fail("구간 양 끝을 포함해 500횡단을 넘습니다. 간격을 늘리거나 구간을 줄이세요.")
  var parsed=parse_extra(extra_text)
  if not parsed.ok:return parsed
+ if extras_only and parsed.stations.is_empty():return fail("추가 STA만 출력하려면 STA를 하나 이상 입력하세요.")
+ var stations=[]
+ if not extras_only:
+  var first=ceili(begin/station_step)
+  var last=floori(finish/station_step)
+  if last-first+1>MAX_SECTIONS:return fail("횡단 수가 500개를 넘습니다. 간격을 늘리거나 구간을 줄이세요.")
+  stations.append(begin)
+  for i in range(first,last+1):
+   var station=i*station_step
+   if station-begin>=0.0000001 and finish-station>=0.0000001:stations.append(station)
+  stations.append(finish)
+  if stations.size()>MAX_SECTIONS:return fail("구간 양 끝을 포함해 500횡단을 넘습니다. 간격을 늘리거나 구간을 줄이세요.")
+ include_boundaries=include_boundaries and not extras_only
  var events=[]
  for station in stations:events.append({"s":station,"priority":4 if station==begin or station==finish else 1,"boundary":false})
  for station in parsed.stations:
@@ -161,6 +165,7 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
    if abs(d)>0.0000001 and abs(d)<half-0.0000001:grid_offsets.append(d)
   for k in range(1,levels+1):grid_levels.append(k*grid_step)
  var lines=PackedStringArray()
+ if extras_only:pair(lines,999,"SECTION_STATION_MODE=EXPLICIT_ONLY")
  if grid_step>0:pair(lines,999,"SECTION_GRID_STEP=%.9f; H_V=1; ELEVATION_LABELS=DATUM_PLUS_LOCAL_Y" % grid_step)
  if include_boundaries:pair(lines,999,"AUTO_ALIGNMENT_BOUNDARIES=1; PI_PVI_PLAN_ELEMENTS_BVC_EVC; ENDPOINT_PRIORITY")
  for station in parsed.stations:pair(lines,999,"EXTRA_STA=%.9f; MERGE_TOLERANCE=0.0000001m" % station)
@@ -212,4 +217,4 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
   for d in [-half,0.0,half]:text(lines,ox+d,oy-text_height*2,text_height,"%.3f" % d)
   summaries.append({"station":section.station,"datum":section.datum,"ground_missing":section.ground_missing,"design_missing":section.design_missing,"ground_runs":ground_runs,"design_runs":design_runs})
  pair(lines,0,"ENDSEC");pair(lines,0,"EOF")
- return {"ok":true,"text":"\n".join(lines)+"\n","sections":summaries,"samples":stations.size()*unique.size(),"lateral_count":unique.size(),"missing":missing_total,"length":reference.length,"begin":begin,"end":finish,"station_step":station_step,"half":half,"lateral_step":lateral_step,"columns":columns,"extra_requested":parsed.stations.size(),"include_boundaries":include_boundaries,"boundary_sections":boundary_flags.count(true),"grid_step":grid_step,"grid_lines":(grid_offsets.size()+grid_levels.size())*sections.size(),"ms":(Time.get_ticks_usec()-started)/1000.0}
+ return {"ok":true,"text":"\n".join(lines)+"\n","sections":summaries,"samples":stations.size()*unique.size(),"lateral_count":unique.size(),"missing":missing_total,"length":reference.length,"begin":begin,"end":finish,"station_step":station_step,"half":half,"lateral_step":lateral_step,"columns":columns,"extras_only":extras_only,"extra_requested":parsed.stations.size(),"include_boundaries":include_boundaries,"boundary_sections":boundary_flags.count(true),"grid_step":grid_step,"grid_lines":(grid_offsets.size()+grid_levels.size())*sections.size(),"ms":(Time.get_ticks_usec()-started)/1000.0}
