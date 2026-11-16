@@ -1,5 +1,6 @@
 extends "res://scripts/dxf_window.gd"
 const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
+var copy_button: Button
 var reach: SpinBox
 var lateral_step: SpinBox
 var columns: SpinBox
@@ -25,6 +26,11 @@ var extras_only: CheckBox
 func _ready():
  super._ready()
  title="횡단 DXF 일괄 내보내기"
+ copy_button=Button.new()
+ copy_button.text="산출 결과 복사"
+ copy_button.disabled=true
+ copy_button.pressed.connect(copy_result)
+ settings.add_child(copy_button)
  coordinate_mode.hide()
  interval.min_value=1
  interval.max_value=10000
@@ -218,6 +224,7 @@ func _process(_delta):
  result=completed
  result_revision=requested_revision
  csv_button.disabled=false
+ copy_button.disabled=false
  status.text="%d횡단 / %d표본 · 원지반 결측 %d · %.1fms" % [result.sections.size(),result.samples,result.missing,result.ms]
  var lines=PackedStringArray(["주요 경계 %s · 경계 포함 횡단 %d개" % ["포함" if result.include_boundaries else "제외",result.boundary_sections],"추가 STA 입력 %d개 · 중복 병합 후 총 %d횡단" % [result.extra_requested,result.sections.size()],"출력 STA %.3f~%.3fm · 구간 길이 %.3fm · 원래 STA 유지" % [result.begin,result.end,result.end-result.begin],"DXF R12 ASCII / H:V 1:1 / Z=0 배치 / CAD 단위 m", "녹색 KROAD_SEC_GROUND / 노랑 KROAD_SEC_DESIGN", "회색 KROAD_SEC_AXIS / 흰색 KROAD_SEC_TEXT", "DATUM: 각 횡단 기준표고 · Y좌표=배치기준+표고−DATUM", "결측은 선을 끊고 단독 유효 표본은 POINT · 사면 폐합/수량 계산 없음", "", "STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각"])
  for section in result.sections:lines.append("%.3f | %.3f | %d / %d | %d / %d" % [section.station,section.datum,section.ground_missing,section.design_missing,section.ground_runs,section.design_runs])
@@ -266,3 +273,21 @@ func reset_settings():
 
 func on_off(enabled):
  return "켜짐" if enabled else "꺼짐"
+
+
+func invalidate():
+ super.invalidate()
+ if copy_button!=null:copy_button.disabled=true
+
+func result_text():
+ if result.is_empty() or worker!=null or requested_inputs!=input_signature() or result_revision!=revision_provider.call():
+  invalidate()
+  return ""
+ return table.text
+
+func copy_result():
+ var content=result_text()
+ if content.is_empty():return false
+ DisplayServer.clipboard_set(content)
+ status.text="산출 결과를 클립보드에 복사했습니다."
+ return true
