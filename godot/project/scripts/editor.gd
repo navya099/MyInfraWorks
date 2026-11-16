@@ -536,6 +536,7 @@ func build_ui():
  section_dxf.visible=false
  section_dxf.snapshot_provider=func():return {"snapshot":model.snapshot(),"revision":revision,"length":model.length(),"station":model.station*model.length()}
  section_dxf.revision_provider=func():return revision
+ section_dxf.station_selected.connect(set_station_distance)
  dxf_window.section_export_requested.connect(func():section_dxf.open_export())
  add_child(section_dxf)
  profile_dxf=ProfileDxfWindow.new()

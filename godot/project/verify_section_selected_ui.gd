@@ -89,6 +89,16 @@ func run():
  if DisplayServer.get_name()!="headless":
   assert(app.section_dxf.copy_result())
   assert(DisplayServer.clipboard_get().replace("\r\n","\n")==app.section_dxf.table.text)
+ var original_station=app.model.station
+ var row=app.section_dxf.row_stations.keys()[-1]
+ var exact_station=app.section_dxf.row_stations[row]
+ app.section_dxf.table.set_caret_line(row)
+ app.section_dxf.select_row()
+ assert(is_equal_approx(app.model.station*app.model.length(),exact_station))
+ app.section_dxf.table.set_caret_line(0)
+ app.section_dxf.select_row()
+ assert(is_equal_approx(app.model.station*app.model.length(),exact_station))
+ app.model.station=original_station
  var original_dxf=app.section_dxf.result.text
  var original_rows=app.section_dxf.table.text
  app.section_dxf.missing_only.button_pressed=true

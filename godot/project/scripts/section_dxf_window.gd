@@ -1,5 +1,6 @@
 extends "res://scripts/dxf_window.gd"
 const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
+var row_stations={}
 var missing_only: CheckBox
 var report_button: Button
 var report_dialog: FileDialog
@@ -263,7 +264,12 @@ func render_result():
  lines.insert(3,"반폭 %.2fm · 횡단 간격 %.2fm · 배치 %d열 · 결측 통계는 원지반/설계 전체 기준" % [result.half,result.lateral_step,result.columns])
  lines.insert(0,missing_summary(result.sections,result.lateral_count))
  lines.insert(0,"목록: %s · 표시 %d / 전체 %d횡단 · DXF는 전체 횡단 출력" % ["결측만" if missing_only.button_pressed else "전체",visible.size(),result.sections.size()])
+ setting_table=true
+ row_stations.clear()
+ var first_row=lines.find("STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각")+1
+ for i in range(visible.size()):row_stations[first_row+i]=visible[i].station
  table.text="\n".join(lines)
+ setting_table=false
 
 
 func export_csv(path):
@@ -306,6 +312,7 @@ func on_off(enabled):
 
 
 func invalidate():
+ row_stations.clear()
  super.invalidate()
  if copy_button!=null:copy_button.disabled=true
  if report_button!=null:report_button.disabled=true
@@ -361,3 +368,12 @@ static func missing_summary(sections,lateral_count):
    if stations.size()<10:stations.append("%.3f" % section.station)
  if affected==0:return "결측 검사: 모든 횡단의 원지반·설계 표본 유효"
  return "결측 경고: %d/%d횡단 · 원지반 %d / 설계 %d표본 · 전체 결측 횡단 원지반 %d / 설계 %d\n결측 STA(m): %s%s · DEM 범위·원본 결측·설계 유효 범위를 확인하세요." % [affected,sections.size(),ground,design,ground_empty,design_empty,", ".join(stations)," 외 %d개" % (affected-10) if affected>10 else ""]
+
+
+func select_row():
+ if setting_table or result.is_empty():return
+ if requested_inputs!=input_signature() or result_revision!=revision_provider.call():
+  invalidate()
+  return
+ var row=table.get_caret_line()
+ if row_stations.has(row):station_selected.emit(row_stations[row])
