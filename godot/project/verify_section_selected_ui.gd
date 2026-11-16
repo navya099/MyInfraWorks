@@ -57,7 +57,11 @@ func run():
  app.section_dxf.start_calculation()
  while app.section_dxf.worker!=null:await process_frame
  assert(app.section_dxf.result.sections[0].ground_runs==0)
- app.section_dxf.export_ground.set_pressed_no_signal(true)
+ app.section_dxf.export_axes.button_pressed=false
+ assert(app.section_dxf.result.is_empty())
+ app.section_dxf.start_calculation()
+ while app.section_dxf.worker!=null:await process_frame
+ app.section_dxf.export_axes.set_pressed_no_signal(true)
  assert(not app.section_dxf.export_csv("user://section-selected-stale.dxf"))
  assert(app.model.edit_state()==before and app.undo_stack.size()==history and app.revision==rev)
  print("PASS SECTION SELECTED UI: empty rejection, current station single save, disabled/restored controls, stale result/export rejection, immutable design/history")

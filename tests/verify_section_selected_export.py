@@ -83,3 +83,9 @@ for name, present, absent in [("section-ground-only.dxf","KROAD_SEC_GROUND","KRO
     assert any(e.dxf.layer==present for e in filtered.modelspace())
     assert not any(e.dxf.layer==absent for e in filtered.modelspace())
 print("PASS TRACE SELECTION: only requested ground/design entities exported")
+
+no_axes, _ = read("section-no-axes.dxf")
+assert not any(e.dxf.layer=="KROAD_SEC_AXIS" for e in no_axes.modelspace())
+for layer in ["KROAD_SEC_GROUND","KROAD_SEC_DESIGN","KROAD_SEC_GRID","KROAD_SEC_TEXT"]:
+    assert any(e.dxf.layer==layer for e in no_axes.modelspace())
+print("PASS AXIS SELECTION: axes omitted with traces, grid and annotations preserved")
