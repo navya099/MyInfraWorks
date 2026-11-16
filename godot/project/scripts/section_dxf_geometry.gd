@@ -71,8 +71,9 @@ static func alignment_boundaries(info,begin,finish):
    candidates.append(float(info.pvi_stations[i]+info.pvi_lengths[i]/2.0))
  return candidates.filter(func(station):return station>=begin and station<=finish)
 
-static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text="",include_boundaries=false,grid_step=0.0,extras_only=false,chainage_labels=false,label_decimals=3,text_height_override=0.0,number_sections=false,common_datum=null):
+static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text="",include_boundaries=false,grid_step=0.0,extras_only=false,chainage_labels=false,label_decimals=3,text_height_override=0.0,number_sections=false,common_datum=null,export_ground=true,export_design=true):
  var started=Time.get_ticks_usec()
+ if not export_ground and not export_design:return fail("원지반·설계선 중 하나 이상 선택하세요.")
  if common_datum!=null and (not (typeof(common_datum) in [TYPE_INT,TYPE_FLOAT]) or not is_finite(common_datum) or abs(common_datum)>100000):return fail("공통 DATUM은 -100000~100000m의 유한한 값이어야 합니다.")
  if not is_finite(text_height_override) or (text_height_override!=0 and (text_height_override<0.1 or text_height_override>5)):return fail("글자 높이는 0(자동) 또는 0.1~5m입니다.")
  if typeof(label_decimals)!=TYPE_INT or label_decimals<0 or label_decimals>3:return fail("STA 소수 자릿수는 0~3 정수입니다.")
@@ -221,8 +222,8 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
     text(lines,ox-half-margin+text_height,oy+level,text_height,"%.2f" % (section.datum+level),"KROAD_SEC_GRID_TEXT")
   polyline(lines,"KROAD_SEC_AXIS",[[ox-half,oy],[ox+half,oy]])
   polyline(lines,"KROAD_SEC_AXIS",[[ox,oy],[ox,oy+max_height]])
-  var ground_runs=trace(lines,"KROAD_SEC_GROUND",section.values,1,ox,oy,section.datum)
-  var design_runs=trace(lines,"KROAD_SEC_DESIGN",section.values,2,ox,oy,section.datum)
+  var ground_runs=trace(lines,"KROAD_SEC_GROUND",section.values,1,ox,oy,section.datum) if export_ground else 0
+  var design_runs=trace(lines,"KROAD_SEC_DESIGN",section.values,2,ox,oy,section.datum) if export_design else 0
   text(lines,ox-half,oy+max_height+text_height*6.5,text_height,("SEC %03d | " % (i+1) if number_sections else "")+"STA %s | H:V 1:1" % (station_label(section.station,label_decimals) if chainage_labels else ("%."+str(label_decimals)+"f") % section.station))
   text(lines,ox-half,oy+max_height+text_height*5,text_height,"DATUM %.3f | CENTER %.3f" % [section.datum,section.centre])
   text(lines,ox-half,oy+max_height+text_height*3.5,text_height,"GROUND MISSING %d | DESIGN MISSING %d / %d" % [section.ground_missing,section.design_missing,unique.size()])

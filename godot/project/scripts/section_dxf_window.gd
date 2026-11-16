@@ -11,6 +11,8 @@ var extra_input: LineEdit
 var include_boundaries: CheckBox
 var grid_enabled: CheckBox
 var grid_interval: SpinBox
+var export_ground: CheckBox
+var export_design: CheckBox
 var common_datum_enabled: CheckBox
 var common_datum_input: SpinBox
 var number_sections: CheckBox
@@ -107,6 +109,14 @@ func _ready():
  datum_row.add_child(common_datum_enabled)
  common_datum_input=number(datum_row,"기준표고(m)",0,-100000,100000,0.1)
  common_datum_input.editable=false
+ for title_text in ["원지반 출력","설계선 출력"]:
+  var toggle=CheckBox.new()
+  toggle.text=title_text
+  toggle.button_pressed=true
+  toggle.toggled.connect(func(_enabled):invalidate())
+  datum_row.add_child(toggle)
+  if export_ground==null:export_ground=toggle
+  else:export_design=toggle
  common_datum_enabled.toggled.connect(func(enabled):common_datum_input.editable=enabled;invalidate())
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
@@ -157,7 +167,7 @@ func add_current_station():
  invalidate()
 
 func input_signature():
- return PackedStringArray([begin_input.text,end_input.text,str(interval.value),str(reach.value),str(lateral_step.value),str(columns.value),extra_input.text,str(include_boundaries.button_pressed),str(grid_enabled.button_pressed),str(grid_interval.value),str(extras_only.button_pressed),str(chainage_labels.button_pressed),str(label_decimals.value),str(text_height_input.value),str(number_sections.button_pressed),str(common_datum_enabled.button_pressed),str(common_datum_input.value)])
+ return PackedStringArray([begin_input.text,end_input.text,str(interval.value),str(reach.value),str(lateral_step.value),str(columns.value),extra_input.text,str(include_boundaries.button_pressed),str(grid_enabled.button_pressed),str(grid_interval.value),str(extras_only.button_pressed),str(chainage_labels.button_pressed),str(label_decimals.value),str(text_height_input.value),str(number_sections.button_pressed),str(common_datum_enabled.button_pressed),str(common_datum_input.value),str(export_ground.button_pressed),str(export_design.button_pressed)])
 
 func open_export():
  if range_length!=snapshot_provider.call().length:full_range()
@@ -178,7 +188,7 @@ func start_calculation():
  requested_generation=generation
  status.text="횡단 DXF 산출 중 · 최대 500횡단 / 전체 100000표본"
  worker=Thread.new()
- if worker.start(CrossDxf.calculate_job.bind(state.snapshot,interval.value,reach.value,lateral_step.value,int(columns.value),bounds,extra_input.text,include_boundaries.button_pressed,grid_interval.value if grid_enabled.button_pressed else 0.0,extras_only.button_pressed,chainage_labels.button_pressed,int(label_decimals.value),text_height_input.value,number_sections.button_pressed,common_datum_input.value if common_datum_enabled.button_pressed else null))!=OK:
+ if worker.start(CrossDxf.calculate_job.bind(state.snapshot,interval.value,reach.value,lateral_step.value,int(columns.value),bounds,extra_input.text,include_boundaries.button_pressed,grid_interval.value if grid_enabled.button_pressed else 0.0,extras_only.button_pressed,chainage_labels.button_pressed,int(label_decimals.value),text_height_input.value,number_sections.button_pressed,common_datum_input.value if common_datum_enabled.button_pressed else null,export_ground.button_pressed,export_design.button_pressed))!=OK:
   worker=null
   status.text="작업 스레드를 시작하지 못했습니다."
 

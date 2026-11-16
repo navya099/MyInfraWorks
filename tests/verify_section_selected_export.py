@@ -77,3 +77,9 @@ for m in cm:
     ground = [e for e in common.modelspace().query("POLYLINE") if e.dxf.layer=="KROAD_SEC_GROUND" and abs(e.vertices[0].dxf.location.x-(m["origin_x"]-30))<1e-7 and abs(e.vertices[0].dxf.location.y-(m["origin_y"]+10))<1e-7]
     assert len(ground)==1
 print("PASS COMMON DATUM: shared datum and correct ground elevation after layout translation")
+
+for name, present, absent in [("section-ground-only.dxf","KROAD_SEC_GROUND","KROAD_SEC_DESIGN"),("section-design-only.dxf","KROAD_SEC_DESIGN","KROAD_SEC_GROUND")]:
+    filtered, _ = read(name)
+    assert any(e.dxf.layer==present for e in filtered.modelspace())
+    assert not any(e.dxf.layer==absent for e in filtered.modelspace())
+print("PASS TRACE SELECTION: only requested ground/design entities exported")

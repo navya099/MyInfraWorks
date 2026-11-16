@@ -45,6 +45,11 @@ func _initialize():
  assert(common.ok and common.sections.all(func(v):return v.datum==-10))
  save("section-common-datum.dxf",common)
  for invalid_datum in [1,NAN,INF,100001]:assert(not Dxf.calculate_job(snap,25,30,1,2,{},"12.25",false,0,true,false,3,0,false,invalid_datum).ok)
+ for ground_only in [true,false]:
+  var filtered=Dxf.calculate_job(snap,25,30,1,2,{},"12.25",false,0,true,false,3,0,false,null,ground_only,not ground_only)
+  assert(filtered.ok)
+  save("section-ground-only.dxf" if ground_only else "section-design-only.dxf",filtered)
+ assert(not Dxf.calculate_job(snap,25,30,1,2,{},"",false,0,false,false,3,0,false,null,false,false).ok)
  var ends=Dxf.calculate_job(snap,25,30,1,3,{},"100,0",false,0,true)
  assert(ends.ok and ends.sections.size()==2 and ends.sections[0].station==0 and ends.sections[1].station==100)
  save("section-selected-ends.dxf",ends)
