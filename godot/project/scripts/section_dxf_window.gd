@@ -65,11 +65,13 @@ func _ready():
  include_boundaries.text="주요 선형 경계 포함"
  include_boundaries.toggled.connect(func(_enabled):invalidate())
  range_row.add_child(include_boundaries)
+ var style_row=HBoxContainer.new()
+ root.add_child(style_row)
  chainage_labels=CheckBox.new()
  chainage_labels.text="STA km+m 표기"
  chainage_labels.toggled.connect(func(_enabled):invalidate())
- range_row.add_child(chainage_labels)
- label_decimals=number(range_row,"STA 소수",3,0,3,1)
+ style_row.add_child(chainage_labels)
+ label_decimals=number(style_row,"STA 소수",3,0,3,1)
  var extra_row=HBoxContainer.new()
  root.add_child(extra_row)
  root.move_child(extra_row,3)
@@ -97,14 +99,15 @@ func _ready():
  clear_button.text="비우기"
  clear_button.pressed.connect(func():extra_input.text="";invalidate())
  extra_row.add_child(clear_button)
- text_height_input=number(extra_row,"글자(m, 0=자동)",0,0,5,0.1)
+ text_height_input=number(style_row,"글자(m, 0=자동)",0,0,5,0.1)
  number_sections=CheckBox.new()
  number_sections.text="횡단 번호"
  number_sections.toggled.connect(func(_enabled):invalidate())
- extra_row.add_child(number_sections)
+ style_row.add_child(number_sections)
  var datum_row=HBoxContainer.new()
  root.add_child(datum_row)
- root.move_child(datum_row,4)
+ root.move_child(style_row,4)
+ root.move_child(datum_row,5)
  common_datum_enabled=CheckBox.new()
  common_datum_enabled.text="공통 DATUM 사용"
  datum_row.add_child(common_datum_enabled)
@@ -127,7 +130,7 @@ func _ready():
  var reset_button=Button.new()
  reset_button.text="출력 설정 초기화"
  reset_button.pressed.connect(reset_settings)
- datum_row.add_child(reset_button)
+ style_row.add_child(reset_button)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
