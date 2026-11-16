@@ -11,6 +11,7 @@ var extra_input: LineEdit
 var include_boundaries: CheckBox
 var grid_enabled: CheckBox
 var grid_interval: SpinBox
+var number_sections: CheckBox
 var text_height_input: SpinBox
 var label_decimals: SpinBox
 var chainage_labels: CheckBox
@@ -92,6 +93,10 @@ func _ready():
  clear_button.pressed.connect(func():extra_input.text="";invalidate())
  extra_row.add_child(clear_button)
  text_height_input=number(extra_row,"글자(m, 0=자동)",0,0,5,0.1)
+ number_sections=CheckBox.new()
+ number_sections.text="횡단 번호"
+ number_sections.toggled.connect(func(_enabled):invalidate())
+ extra_row.add_child(number_sections)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -141,7 +146,7 @@ func add_current_station():
  invalidate()
 
 func input_signature():
- return PackedStringArray([begin_input.text,end_input.text,str(interval.value),str(reach.value),str(lateral_step.value),str(columns.value),extra_input.text,str(include_boundaries.button_pressed),str(grid_enabled.button_pressed),str(grid_interval.value),str(extras_only.button_pressed),str(chainage_labels.button_pressed),str(label_decimals.value),str(text_height_input.value)])
+ return PackedStringArray([begin_input.text,end_input.text,str(interval.value),str(reach.value),str(lateral_step.value),str(columns.value),extra_input.text,str(include_boundaries.button_pressed),str(grid_enabled.button_pressed),str(grid_interval.value),str(extras_only.button_pressed),str(chainage_labels.button_pressed),str(label_decimals.value),str(text_height_input.value),str(number_sections.button_pressed)])
 
 func open_export():
  if range_length!=snapshot_provider.call().length:full_range()
@@ -162,7 +167,7 @@ func start_calculation():
  requested_generation=generation
  status.text="횡단 DXF 산출 중 · 최대 500횡단 / 전체 100000표본"
  worker=Thread.new()
- if worker.start(CrossDxf.calculate_job.bind(state.snapshot,interval.value,reach.value,lateral_step.value,int(columns.value),bounds,extra_input.text,include_boundaries.button_pressed,grid_interval.value if grid_enabled.button_pressed else 0.0,extras_only.button_pressed,chainage_labels.button_pressed,int(label_decimals.value),text_height_input.value))!=OK:
+ if worker.start(CrossDxf.calculate_job.bind(state.snapshot,interval.value,reach.value,lateral_step.value,int(columns.value),bounds,extra_input.text,include_boundaries.button_pressed,grid_interval.value if grid_enabled.button_pressed else 0.0,extras_only.button_pressed,chainage_labels.button_pressed,int(label_decimals.value),text_height_input.value,number_sections.button_pressed))!=OK:
   worker=null
   status.text="작업 스레드를 시작하지 못했습니다."
 

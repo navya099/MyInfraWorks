@@ -64,3 +64,9 @@ print("PASS SECTION SELECTED EZDXF: audited R12 single/multiple/endpoints/UI fil
 sized, _ = read("section-text-height.dxf")
 assert all(abs(e.dxf.height-1.5)<1e-9 for e in sized.modelspace().query("TEXT"))
 print("PASS TEXT HEIGHT: all title, offset and elevation labels use requested height")
+
+numbered, nm = read("section-numbered.dxf")
+titles = [e.dxf.text for e in numbered.modelspace().query("TEXT") if e.dxf.text.startswith("SEC ")]
+assert titles == ["SEC 001 | STA 12.250 | H:V 1:1", "SEC 002 | STA 50.000 | H:V 1:1", "SEC 003 | STA 87.750 | H:V 1:1"]
+assert [m["station"] for m in nm] == [12.25,50,87.75]
+print("PASS SECTION NUMBERS: sorted consecutive titles and original stations")
