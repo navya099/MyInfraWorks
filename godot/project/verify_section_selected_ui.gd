@@ -89,8 +89,15 @@ func run():
  if DisplayServer.get_name()!="headless":
   assert(app.section_dxf.copy_result())
   assert(DisplayServer.clipboard_get().replace("\r\n","\n")==app.section_dxf.table.text)
+ var report_path="user://section-result-report.txt"
+ app.section_dxf.report_dialog.file_selected.emit(report_path)
+ assert(FileAccess.get_file_as_string(report_path)==app.section_dxf.table.text+"\n")
+ assert(app.section_dxf.save_report(report_path))
+ assert(not app.section_dxf.save_report("user://missing-directory/report.txt"))
  app.section_dxf.label_decimals.set_value_no_signal(1)
  assert(app.section_dxf.result_text()=="" and app.section_dxf.copy_button.disabled)
+ assert(not app.section_dxf.save_report(report_path) and app.section_dxf.report_button.disabled)
+ print("PASS REPORT: UTF-8 content, overwrite, invalid path and stale-result rejection")
  print("PASS COPY: result text, stale input rejection and copy availability")
  print("PASS RESET: defaults, control states, stale worker rejection, recalculation and immutable design")
  print("PASS SECTION SELECTED UI: empty rejection, current station single save, disabled/restored controls, stale result/export rejection, immutable design/history")
