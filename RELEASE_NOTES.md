@@ -1,9 +1,5 @@
-# MyInfraWorks 0.40
+# MyInfraWorks 0.41
 
-승인된 0.39는 main에 반영했습니다. 현재 개발 브랜치는 `feature/section-dxf-selected-stations`입니다.
+횡단 DXF 창에서 **STA km+m 표기**를 켜면 도면 제목에 1234.567m를 1+234.567로 표시합니다. 기본값은 기존 미터 표기입니다. 입력·계산·DXF 메타데이터의 STA는 미터를 유지합니다. 밀리미터 반올림이 km 경계를 넘는 경우도 처리합니다.
 
-## 지정 STA만 횡단 DXF 출력
-
-`DXF → 횡단 DXF`에서 **추가 STA만 출력**을 켜면 입력한 위치만 출력합니다. **현재 STA 추가**로 한 횡단을 저장하거나 여러 위치를 쉼표로 구분해 입력하세요. 정규 측점과 주요 경계는 자동 추가하지 않습니다. 기본값은 꺼짐입니다.
-
-[사용법·제한·검증](docs/section-dxf-selected-stations.md)을 참조하세요. 실행은 `run-godot.cmd`입니다. 기존 준비·빌드·개발 이력은 [README](README.md)를 참조하세요.
+개발 브랜치: feature/section-station-labels

@@ -4,6 +4,10 @@ const Surface=preload("res://scripts/section_reference.gd")
 const MAX_SECTIONS=500
 const MAX_SAMPLES=100000
 
+static func station_label(station):
+ var millimetres=roundi(station*1000.0)
+ return "%d+%07.3f" % [millimetres/1000000,(millimetres%1000000)/1000.0]
+
 static func fail(message):
  return {"ok":false,"error":message}
 
@@ -64,7 +68,7 @@ static func alignment_boundaries(info,begin,finish):
    candidates.append(float(info.pvi_stations[i]+info.pvi_lengths[i]/2.0))
  return candidates.filter(func(station):return station>=begin and station<=finish)
 
-static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text="",include_boundaries=false,grid_step=0.0,extras_only=false):
+static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text="",include_boundaries=false,grid_step=0.0,extras_only=false,chainage_labels=false):
  var started=Time.get_ticks_usec()
  if not is_finite(grid_step) or (grid_step!=0 and (grid_step<0.5 or grid_step>1000)):return fail("격자 간격은 0(끄기) 또는 0.5~1000m입니다.")
  if typeof(columns)!=TYPE_INT:return fail("배치 열 수는 정수여야 합니다.")
@@ -210,7 +214,7 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
   polyline(lines,"KROAD_SEC_AXIS",[[ox,oy],[ox,oy+max_height]])
   var ground_runs=trace(lines,"KROAD_SEC_GROUND",section.values,1,ox,oy,section.datum)
   var design_runs=trace(lines,"KROAD_SEC_DESIGN",section.values,2,ox,oy,section.datum)
-  text(lines,ox-half,oy+max_height+text_height*6.5,text_height,"STA %.3f | H:V 1:1" % section.station)
+  text(lines,ox-half,oy+max_height+text_height*6.5,text_height,"STA %s | H:V 1:1" % (station_label(section.station) if chainage_labels else "%.3f" % section.station))
   text(lines,ox-half,oy+max_height+text_height*5,text_height,"DATUM %.3f | CENTER %.3f" % [section.datum,section.centre])
   text(lines,ox-half,oy+max_height+text_height*3.5,text_height,"GROUND MISSING %d | DESIGN MISSING %d / %d" % [section.ground_missing,section.design_missing,unique.size()])
   text(lines,ox-half,oy+max_height+text_height*2,text_height,"HALF %.2f | LATERAL %.2f" % [half,lateral_step])
