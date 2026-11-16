@@ -60,3 +60,7 @@ assert [m["station"] for m in ends]==[0,100]
 _, ui=read("section-selected-ui.dxf")
 assert len(ui)==1
 print("PASS SECTION SELECTED EZDXF: audited R12 single/multiple/endpoints/UI files, explicit stations, analytic ground/design heights and grid")
+
+sized, _ = read("section-text-height.dxf")
+assert all(abs(e.dxf.height-1.5)<1e-9 for e in sized.modelspace().query("TEXT"))
+print("PASS TEXT HEIGHT: all title, offset and elevation labels use requested height")

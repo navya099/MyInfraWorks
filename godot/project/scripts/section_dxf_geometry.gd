@@ -71,8 +71,9 @@ static func alignment_boundaries(info,begin,finish):
    candidates.append(float(info.pvi_stations[i]+info.pvi_lengths[i]/2.0))
  return candidates.filter(func(station):return station>=begin and station<=finish)
 
-static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text="",include_boundaries=false,grid_step=0.0,extras_only=false,chainage_labels=false,label_decimals=3):
+static func calculate_job(snapshot,station_step,half,lateral_step,columns,station_range={},extra_text="",include_boundaries=false,grid_step=0.0,extras_only=false,chainage_labels=false,label_decimals=3,text_height_override=0.0):
  var started=Time.get_ticks_usec()
+ if not is_finite(text_height_override) or (text_height_override!=0 and (text_height_override<0.1 or text_height_override>5)):return fail("글자 높이는 0(자동) 또는 0.1~5m입니다.")
  if typeof(label_decimals)!=TYPE_INT or label_decimals<0 or label_decimals>3:return fail("STA 소수 자릿수는 0~3 정수입니다.")
  if not is_finite(grid_step) or (grid_step!=0 and (grid_step<0.5 or grid_step>1000)):return fail("격자 간격은 0(끄기) 또는 0.5~1000m입니다.")
  if typeof(columns)!=TYPE_INT:return fail("배치 열 수는 정수여야 합니다.")
@@ -157,7 +158,7 @@ static func calculate_job(snapshot,station_step,half,lateral_step,columns,statio
   if is_finite(high):max_height=max(max_height,high-datum)
   sections.append({"station":station,"datum":datum,"centre":at.elevation+snapshot.offset,"values":values,"ground_missing":ground_missing,"design_missing":design_missing})
   missing_total+=ground_missing
- var text_height=clamp(half/40.0,0.25,2.0)
+ var text_height=clamp(half/40.0,0.25,2.0) if text_height_override==0 else text_height_override
  var margin=max(10.0,text_height*10)
  var cell_width=2.0*half+2.0*margin
  var cell_height=max_height+2.0*margin+text_height*8

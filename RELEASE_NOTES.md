@@ -1,5 +1,5 @@
-# MyInfraWorks 0.42
+# MyInfraWorks 0.43
 
-횡단 DXF의 **STA 소수**에서 0~3자리를 선택할 수 있습니다. 기본값은 3자리이며 미터 및 km+m 표기에 모두 적용됩니다. 실제 계산 STA와 메타데이터는 유지합니다.
+횡단 DXF 창의 **글자(m, 0=자동)**에서 도면 글자 높이를 지정합니다. 0은 기존 자동 크기, 직접 지정은 0.1~5m입니다. 제목·횡단 거리·표고 눈금에 함께 적용하고 배치 여백과 눈금 표시 간격도 조정합니다. 형상과 H:V=1:1은 유지합니다.
 
-개발 브랜치: feature/section-label-precision
+개발 브랜치: feature/section-text-height
