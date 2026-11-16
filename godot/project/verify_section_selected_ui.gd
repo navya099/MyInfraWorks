@@ -57,6 +57,8 @@ func run():
  app.section_dxf.start_calculation()
  while app.section_dxf.worker!=null:await process_frame
  assert(app.section_dxf.result.sections[0].ground_runs==0)
+ assert("원지반 꺼짐 / 설계선 켜짐" in app.section_dxf.table.text)
+ assert("공통 -10000.000m" in app.section_dxf.table.text)
  app.section_dxf.export_axes.button_pressed=false
  assert(app.section_dxf.result.is_empty())
  app.section_dxf.start_calculation()
@@ -80,6 +82,8 @@ func run():
  while app.section_dxf.worker!=null:await process_frame
  assert(not app.section_dxf.result.is_empty())
  assert(app.model.edit_state()==before and app.undo_stack.size()==history and app.revision==rev)
+ assert("원지반 켜짐 / 설계선 켜짐 / 축선 켜짐" in app.section_dxf.table.text)
+ assert("횡단별 자동" in app.section_dxf.table.text and "글자 높이: 자동" in app.section_dxf.table.text)
  print("PASS RESET: defaults, control states, stale worker rejection, recalculation and immutable design")
  print("PASS SECTION SELECTED UI: empty rejection, current station single save, disabled/restored controls, stale result/export rejection, immutable design/history")
  quit(0)
