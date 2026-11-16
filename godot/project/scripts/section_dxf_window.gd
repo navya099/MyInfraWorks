@@ -124,6 +124,10 @@ func _ready():
  export_axes.toggled.connect(func(_enabled):invalidate())
  datum_row.add_child(export_axes)
  common_datum_enabled.toggled.connect(func(enabled):common_datum_input.editable=enabled;invalidate())
+ var reset_button=Button.new()
+ reset_button.text="출력 설정 초기화"
+ reset_button.pressed.connect(reset_settings)
+ datum_row.add_child(reset_button)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -224,3 +228,30 @@ func export_csv(path):
   invalidate()
   return false
  return super.export_csv(path)
+
+
+func reset_settings():
+ interval.value=1000
+ reach.value=100
+ lateral_step.value=2
+ columns.value=3
+ grid_enabled.button_pressed=false
+ grid_interval.value=10
+ grid_interval.editable=false
+ include_boundaries.button_pressed=false
+ chainage_labels.button_pressed=false
+ label_decimals.value=3
+ extras_only.button_pressed=false
+ interval.editable=true
+ include_boundaries.disabled=false
+ extra_input.text=""
+ text_height_input.value=0
+ number_sections.button_pressed=false
+ common_datum_enabled.button_pressed=false
+ common_datum_input.value=0
+ common_datum_input.editable=false
+ export_ground.button_pressed=true
+ export_design.button_pressed=true
+ export_axes.button_pressed=true
+ full_range()
+ status.text="출력 설정을 기본값으로 초기화했습니다. 다시 산출하세요."
