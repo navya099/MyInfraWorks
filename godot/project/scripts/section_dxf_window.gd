@@ -194,11 +194,20 @@ func _ready():
  current_result.pressed.connect(find_current_result)
  navigation_row.add_child(current_result)
  navigation_buttons.append(current_result)
+ var preset_row=HBoxContainer.new()
+ root.add_child(preset_row)
+ root.move_child(preset_row,7)
+ for action in ["설정 저장","설정 불러오기"]:
+  var button=Button.new()
+  button.text=action
+  if action=="설정 저장":button.pressed.connect(func():save_preset())
+  else:button.pressed.connect(func():load_preset())
+  preset_row.add_child(button)
  selected_summary=Label.new()
  selected_summary.text="선택 횡단: 없음"
  selected_summary.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  root.add_child(selected_summary)
- root.move_child(selected_summary,7)
+ root.move_child(selected_summary,8)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -486,3 +495,51 @@ static func matches_missing(section,lateral_count,mode):
   2:return section.design_missing>0
   3:return section.ground_missing>=lateral_count or section.design_missing>=lateral_count
  return section.ground_missing>0 or section.design_missing>0
+
+
+func preset_controls():
+ return {"interval":interval,"reach":reach,"lateral_step":lateral_step,"columns":columns,"grid_interval":grid_interval,"label_decimals":label_decimals,"text_height":text_height_input,"datum":common_datum_input,"grid":grid_enabled,"boundaries":include_boundaries,"chainage":chainage_labels,"number":number_sections,"common_datum":common_datum_enabled,"ground":export_ground,"design":export_design,"axes":export_axes}
+
+func save_preset(path="user://section-export.cfg"):
+ var config=ConfigFile.new()
+ config.set_value("format","version",1)
+ var controls=preset_controls()
+ for key in controls:
+  var control=controls[key]
+  config.set_value("settings",key,control.value if control is SpinBox else control.button_pressed)
+ var temporary=path+".tmp"
+ if config.save(temporary)!=OK or DirAccess.rename_absolute(temporary,path)!=OK:
+  DirAccess.remove_absolute(temporary)
+  status.text="출력 설정 저장 실패"
+  return false
+ status.text="출력 설정 저장 완료"
+ return true
+
+func load_preset(path="user://section-export.cfg"):
+ var config=ConfigFile.new()
+ if config.load(path)!=OK or config.get_value("format","version",0)!=1:
+  status.text="저장된 출력 설정을 읽지 못했습니다."
+  return false
+ var controls=preset_controls()
+ for key in controls:
+  var value=config.get_value("settings",key,null)
+  var control=controls[key]
+  if control is SpinBox:
+   if not (typeof(value) in [TYPE_INT,TYPE_FLOAT]) or not is_finite(value) or value<control.min_value or value>control.max_value:
+    status.text="출력 설정 값 오류: "+key
+    return false
+   if key in ["columns","label_decimals"] and value!=floor(value):return false
+  elif typeof(value)!=TYPE_BOOL:
+   status.text="출력 설정 값 오류: "+key
+   return false
+ if not config.get_value("settings","ground") and not config.get_value("settings","design"):return false
+ for key in controls:
+  var control=controls[key]
+  var value=config.get_value("settings",key)
+  if control is SpinBox:control.value=value
+  else:control.button_pressed=value
+ grid_interval.editable=grid_enabled.button_pressed
+ common_datum_input.editable=common_datum_enabled.button_pressed
+ invalidate()
+ status.text="출력 설정을 불러왔습니다. 범위·추가 STA 확인 후 다시 산출하세요."
+ return true

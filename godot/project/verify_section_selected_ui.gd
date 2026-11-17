@@ -140,6 +140,14 @@ func run():
  assert(not app.section_dxf.matches_missing(ground_gap,10,2))
  assert(not app.section_dxf.matches_missing(ground_gap,10,3))
  assert(app.section_dxf.matches_missing(design_gap,10,2) and app.section_dxf.matches_missing(design_gap,10,3))
+ app.section_dxf.reach.value=150
+ assert(app.section_dxf.save_preset("user://test-section-preset.cfg"))
+ app.section_dxf.reach.value=200
+ var bounds_before=app.section_dxf.begin_input.text
+ assert(app.section_dxf.load_preset("user://test-section-preset.cfg"))
+ assert(app.section_dxf.reach.value==150 and app.section_dxf.begin_input.text==bounds_before)
+ assert(app.section_dxf.result.is_empty())
+ assert(not app.section_dxf.load_preset("user://missing-section-preset.cfg"))
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]
