@@ -555,6 +555,9 @@ func save_preset(path="user://section-export.cfg"):
  for key in controls:
   var control=controls[key]
   config.set_value("settings",key,control.value if control is SpinBox else control.button_pressed)
+ config.set_value("view","font_size",table.get_theme_font_size("font_size"))
+ config.set_value("view","wrap",wrap_results.button_pressed)
+ config.set_value("view","collapsed",collapse_button.button_pressed)
  var temporary=path+".tmp"
  if config.save(temporary)!=OK or DirAccess.rename_absolute(temporary,path)!=OK:
   DirAccess.remove_absolute(temporary)
@@ -589,6 +592,12 @@ func load_preset(path="user://section-export.cfg"):
  if not config.get_value("settings","ground") and not config.get_value("settings","design"):
   status.text="원지반·설계선 중 하나 이상 선택해야 합니다."
   return false
+ var font_size=config.get_value("view","font_size",table.get_theme_font_size("font_size"))
+ var wrap=config.get_value("view","wrap",wrap_results.button_pressed)
+ var collapsed=config.get_value("view","collapsed",collapse_button.button_pressed)
+ if typeof(font_size)!=TYPE_INT or font_size<10 or font_size>30 or typeof(wrap)!=TYPE_BOOL or typeof(collapsed)!=TYPE_BOOL:
+  status.text="결과 화면 보기 설정 값 오류"
+  return false
  for key in controls:
   var control=controls[key]
   var value=config.get_value("settings",key)
@@ -597,6 +606,9 @@ func load_preset(path="user://section-export.cfg"):
  grid_interval.editable=grid_enabled.button_pressed
  common_datum_input.editable=common_datum_enabled.button_pressed
  invalidate()
+ set_result_font(font_size)
+ wrap_results.button_pressed=wrap
+ collapse_button.button_pressed=collapsed
  status.text="출력 설정을 불러왔습니다. 범위·추가 STA 확인 후 다시 산출하세요."
  return true
 

@@ -220,6 +220,26 @@ func run():
  no_traces.save("user://invalid-section.cfg")
  assert(not app.section_dxf.load_preset("user://invalid-section.cfg"))
  assert("하나 이상" in app.section_dxf.status.text and app.section_dxf.input_signature()==preserved)
+ app.section_dxf.set_result_font(22)
+ app.section_dxf.wrap_results.button_pressed=true
+ app.section_dxf.collapse_button.button_pressed=true
+ assert(app.section_dxf.save_preset("user://view-preset.cfg"))
+ app.section_dxf.set_result_font(14)
+ app.section_dxf.wrap_results.button_pressed=false
+ app.section_dxf.collapse_button.button_pressed=false
+ assert(app.section_dxf.load_preset("user://view-preset.cfg"))
+ assert(app.section_dxf.table.get_theme_font_size("font_size")==22)
+ assert(app.section_dxf.wrap_results.button_pressed and app.section_dxf.collapse_button.button_pressed)
+ var old=ConfigFile.new()
+ old.load("user://view-preset.cfg")
+ old.erase_section("view")
+ old.save("user://legacy-preset.cfg")
+ assert(app.section_dxf.load_preset("user://legacy-preset.cfg"))
+ assert(app.section_dxf.table.get_theme_font_size("font_size")==22)
+ old.set_value("view","font_size",100)
+ old.save("user://bad-view-preset.cfg")
+ assert(not app.section_dxf.load_preset("user://bad-view-preset.cfg"))
+ assert(app.section_dxf.table.get_theme_font_size("font_size")==22)
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]
