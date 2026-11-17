@@ -160,6 +160,20 @@ func run():
  var preserved=app.section_dxf.input_signature()
  assert(not app.section_dxf.load_preset("user://damaged-section.cfg"))
  assert(app.section_dxf.input_signature()==preserved)
+ for invalid in [{"key":"columns","value":2.5},{"key":"text_height","value":0.05},{"key":"ground","value":1},{"key":"interval","value":-1}]:
+  var config=ConfigFile.new()
+  assert(config.load("user://portable-section.cfg")==OK)
+  config.set_value("settings",invalid.key,invalid.value)
+  config.save("user://invalid-section.cfg")
+  assert(not app.section_dxf.load_preset("user://invalid-section.cfg"))
+  assert(app.section_dxf.input_signature()==preserved)
+ var no_traces=ConfigFile.new()
+ no_traces.load("user://portable-section.cfg")
+ no_traces.set_value("settings","ground",false)
+ no_traces.set_value("settings","design",false)
+ no_traces.save("user://invalid-section.cfg")
+ assert(not app.section_dxf.load_preset("user://invalid-section.cfg"))
+ assert("하나 이상" in app.section_dxf.status.text and app.section_dxf.input_signature()==preserved)
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]

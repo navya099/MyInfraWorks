@@ -536,7 +536,11 @@ func save_preset(path="user://section-export.cfg"):
 
 func load_preset(path="user://section-export.cfg"):
  var config=ConfigFile.new()
- if config.load(path)!=OK or config.get_value("format","version",0)!=1:
+ if config.load(path)!=OK:
+  status.text="저장된 출력 설정을 읽지 못했습니다."
+  return false
+ var version=config.get_value("format","version",null)
+ if typeof(version)!=TYPE_INT or version!=1:
   status.text="저장된 출력 설정을 읽지 못했습니다."
   return false
  var controls=preset_controls()
@@ -547,11 +551,15 @@ func load_preset(path="user://section-export.cfg"):
    if not (typeof(value) in [TYPE_INT,TYPE_FLOAT]) or not is_finite(value) or value<control.min_value or value>control.max_value:
     status.text="출력 설정 값 오류: "+key
     return false
-   if key in ["columns","label_decimals"] and value!=floor(value):return false
+   if control.step>0 and abs(value/control.step-round(value/control.step))>0.000001:
+    status.text="출력 설정 입력 간격 오류: %s (간격 %s)" % [key,str(control.step)]
+    return false
   elif typeof(value)!=TYPE_BOOL:
    status.text="출력 설정 값 오류: "+key
    return false
- if not config.get_value("settings","ground") and not config.get_value("settings","design"):return false
+ if not config.get_value("settings","ground") and not config.get_value("settings","design"):
+  status.text="원지반·설계선 중 하나 이상 선택해야 합니다."
+  return false
  for key in controls:
   var control=controls[key]
   var value=config.get_value("settings",key)
