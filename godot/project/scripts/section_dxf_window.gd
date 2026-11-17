@@ -3,6 +3,8 @@ const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
 var search_input: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var settings_rows=[]
+var collapse_button: Button
 var preset_export_dialog: FileDialog
 var preset_import_dialog: FileDialog
 var selected_summary: Label
@@ -227,6 +229,12 @@ func _ready():
  selected_summary.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  root.add_child(selected_summary)
  root.move_child(selected_summary,8)
+ settings_rows=[extra,range_row,extra_row,style_row,datum_row,preset_row]
+ collapse_button=Button.new()
+ collapse_button.text="설정 접기"
+ collapse_button.toggle_mode=true
+ collapse_button.toggled.connect(set_settings_collapsed)
+ navigation_row.add_child(collapse_button)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -570,3 +578,8 @@ func load_preset(path="user://section-export.cfg"):
  invalidate()
  status.text="출력 설정을 불러왔습니다. 범위·추가 STA 확인 후 다시 산출하세요."
  return true
+
+
+func set_settings_collapsed(collapsed):
+ for row in settings_rows:row.visible=not collapsed
+ collapse_button.text="설정 펼치기" if collapsed else "설정 접기"

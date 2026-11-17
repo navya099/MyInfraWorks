@@ -116,6 +116,14 @@ func run():
  app.section_dxf.search_input.text="NaN"
  assert(not app.section_dxf.find_result())
  app.model.station=original_station
+ var preserved_signature=app.section_dxf.input_signature()
+ var preserved_result=app.section_dxf.result.text
+ app.section_dxf.collapse_button.button_pressed=true
+ for settings_row in app.section_dxf.settings_rows:assert(not settings_row.visible)
+ assert(app.section_dxf.result.text==preserved_result and app.section_dxf.input_signature()==preserved_signature)
+ assert(not app.section_dxf.csv_button.disabled and app.section_dxf.move_result(1))
+ app.section_dxf.collapse_button.button_pressed=false
+ for settings_row in app.section_dxf.settings_rows:assert(settings_row.visible)
  var original_dxf=app.section_dxf.result.text
  var original_rows=app.section_dxf.table.text
  app.section_dxf.missing_only.button_pressed=true
