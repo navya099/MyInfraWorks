@@ -3,6 +3,7 @@ const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
 var search_input: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var wrap_results: CheckBox
 var default_result_font=14
 var settings_rows=[]
 var collapse_button: Button
@@ -247,6 +248,11 @@ func _ready():
   elif action=="결과 글자 +":button.pressed.connect(func():set_result_font(table.get_theme_font_size("font_size")+2))
   else:button.pressed.connect(func():set_result_font(table.get_theme_font_size("font_size")-2))
   view_row.add_child(button)
+ wrap_results=CheckBox.new()
+ wrap_results.text="결과 자동 줄바꿈"
+ wrap_results.toggled.connect(func(enabled):
+  table.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY if enabled else TextEdit.LINE_WRAPPING_NONE)
+ view_row.add_child(wrap_results)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"

@@ -116,6 +116,15 @@ func run():
  app.section_dxf.search_input.text="NaN"
  assert(not app.section_dxf.find_result())
  app.model.station=original_station
+ var content_before_wrap=app.section_dxf.table.text
+ var count_before_wrap=app.section_dxf.table.get_line_count()
+ app.section_dxf.wrap_results.button_pressed=true
+ assert(app.section_dxf.table.wrap_mode==TextEdit.LINE_WRAPPING_BOUNDARY)
+ assert(app.section_dxf.table.text==content_before_wrap and app.section_dxf.table.get_line_count()==count_before_wrap)
+ assert(app.section_dxf.move_result(1))
+ assert(app.section_dxf.row_stations.has(app.section_dxf.table.get_caret_line()))
+ app.section_dxf.wrap_results.button_pressed=false
+ assert(app.section_dxf.table.wrap_mode==TextEdit.LINE_WRAPPING_NONE)
  var text_before_zoom=app.section_dxf.table.text
  app.section_dxf.set_result_font(24)
  assert(app.section_dxf.table.get_theme_font_size("font_size")==24)
