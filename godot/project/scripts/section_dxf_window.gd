@@ -180,6 +180,12 @@ func _ready():
  search_input.text_submitted.connect(func(_text):find_result())
  navigation_row.add_child(find_button)
  navigation_buttons.append(find_button)
+ var current_result=Button.new()
+ current_result.text="현재 STA 결과 찾기"
+ current_result.disabled=true
+ current_result.pressed.connect(find_current_result)
+ navigation_row.add_child(current_result)
+ navigation_buttons.append(current_result)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -440,3 +446,11 @@ func find_result():
  select_row()
  status.text="검색 %.3fm → 표시 목록의 가장 가까운 STA %.3fm" % [target,row_stations[best]]
  return true
+
+
+func find_current_result():
+ if result_text().is_empty() or row_stations.is_empty():return false
+ var station=snapshot_provider.call().station
+ if not is_finite(station) or station<0:return false
+ search_input.text=str(station)
+ return find_result()
