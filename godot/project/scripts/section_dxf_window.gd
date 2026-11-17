@@ -3,6 +3,7 @@ const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
 var search_input: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var default_result_font=14
 var settings_rows=[]
 var collapse_button: Button
 var preset_export_dialog: FileDialog
@@ -234,7 +235,18 @@ func _ready():
  collapse_button.text="설정 접기"
  collapse_button.toggle_mode=true
  collapse_button.toggled.connect(set_settings_collapsed)
- navigation_row.add_child(collapse_button)
+ var view_row=HBoxContainer.new()
+ root.add_child(view_row)
+ root.move_child(view_row,9)
+ view_row.add_child(collapse_button)
+ default_result_font=table.get_theme_font_size("font_size")
+ for action in ["결과 글자 −","결과 글자 +","글자 기본값"]:
+  var button=Button.new()
+  button.text=action
+  if action=="글자 기본값":button.pressed.connect(func():set_result_font(default_result_font))
+  elif action=="결과 글자 +":button.pressed.connect(func():set_result_font(table.get_theme_font_size("font_size")+2))
+  else:button.pressed.connect(func():set_result_font(table.get_theme_font_size("font_size")-2))
+  view_row.add_child(button)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -583,3 +595,7 @@ func load_preset(path="user://section-export.cfg"):
 func set_settings_collapsed(collapsed):
  for row in settings_rows:row.visible=not collapsed
  collapse_button.text="설정 펼치기" if collapsed else "설정 접기"
+
+
+func set_result_font(size):
+ table.add_theme_font_size_override("font_size",clampi(size,10,30))

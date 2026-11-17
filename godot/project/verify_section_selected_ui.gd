@@ -116,6 +116,15 @@ func run():
  app.section_dxf.search_input.text="NaN"
  assert(not app.section_dxf.find_result())
  app.model.station=original_station
+ var text_before_zoom=app.section_dxf.table.text
+ app.section_dxf.set_result_font(24)
+ assert(app.section_dxf.table.get_theme_font_size("font_size")==24)
+ app.section_dxf.set_result_font(100)
+ assert(app.section_dxf.table.get_theme_font_size("font_size")==30)
+ app.section_dxf.set_result_font(1)
+ assert(app.section_dxf.table.get_theme_font_size("font_size")==10)
+ app.section_dxf.set_result_font(app.section_dxf.default_result_font)
+ assert(app.section_dxf.table.text==text_before_zoom and not app.section_dxf.result.is_empty())
  var preserved_signature=app.section_dxf.input_signature()
  var preserved_result=app.section_dxf.result.text
  app.section_dxf.collapse_button.button_pressed=true
