@@ -125,6 +125,26 @@ func run():
  assert(app.section_dxf.row_stations.has(app.section_dxf.table.get_caret_line()))
  app.section_dxf.wrap_results.button_pressed=false
  assert(app.section_dxf.table.wrap_mode==TextEdit.LINE_WRAPPING_NONE)
+ var wheel=InputEventMouseButton.new()
+ wheel.pressed=true
+ wheel.ctrl_pressed=true
+ wheel.button_index=MOUSE_BUTTON_WHEEL_UP
+ app.section_dxf.set_result_font(14)
+ assert(app.section_dxf.handle_result_input(wheel))
+ assert(app.section_dxf.table.get_theme_font_size("font_size")==16)
+ wheel.ctrl_pressed=false
+ assert(not app.section_dxf.handle_result_input(wheel))
+ var key=InputEventKey.new()
+ key.pressed=true
+ key.ctrl_pressed=true
+ key.keycode=KEY_0
+ assert(app.section_dxf.handle_result_input(key))
+ assert(app.section_dxf.table.get_theme_font_size("font_size")==app.section_dxf.default_result_font)
+ key.ctrl_pressed=false
+ key.alt_pressed=true
+ key.keycode=KEY_RIGHT
+ assert(app.section_dxf.handle_result_input(key))
+ assert(app.section_dxf.row_stations.has(app.section_dxf.table.get_caret_line()))
  var text_before_zoom=app.section_dxf.table.text
  app.section_dxf.set_result_font(24)
  assert(app.section_dxf.table.get_theme_font_size("font_size")==24)

@@ -39,6 +39,9 @@ var extras_only: CheckBox
 
 func _ready():
  super._ready()
+ table.gui_input.connect(func(event):
+  if handle_result_input(event):table.accept_event())
+ table.tooltip_text="Ctrl+휠: 글자 크기 · Ctrl+0: 기본 크기 · Alt+←/→: 이전/다음 횡단"
  title="횡단 DXF 일괄 내보내기"
  copy_button=Button.new()
  copy_button.text="산출 결과 복사"
@@ -605,3 +608,18 @@ func set_settings_collapsed(collapsed):
 
 func set_result_font(size):
  table.add_theme_font_size_override("font_size",clampi(size,10,30))
+
+
+func handle_result_input(event):
+ if event is InputEventMouseButton and event.pressed and event.ctrl_pressed and not event.alt_pressed and not event.shift_pressed:
+  if event.button_index in [MOUSE_BUTTON_WHEEL_UP,MOUSE_BUTTON_WHEEL_DOWN]:
+   set_result_font(table.get_theme_font_size("font_size")+(2 if event.button_index==MOUSE_BUTTON_WHEEL_UP else -2))
+   return true
+ if event is InputEventKey and event.pressed and not event.echo:
+  if event.ctrl_pressed and not event.alt_pressed and not event.shift_pressed and event.keycode==KEY_0:
+   set_result_font(default_result_font)
+   return true
+  if event.alt_pressed and not event.ctrl_pressed and not event.shift_pressed and event.keycode in [KEY_LEFT,KEY_RIGHT]:
+   move_result(-1 if event.keycode==KEY_LEFT else 1)
+   return true
+ return false
