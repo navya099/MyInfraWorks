@@ -1,5 +1,6 @@
 extends "res://scripts/dxf_window.gd"
 const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
+var navigation_buttons=[]
 var row_stations={}
 var missing_only: CheckBox
 var report_button: Button
@@ -156,6 +157,13 @@ func _ready():
  reset_button.text="출력 설정 초기화"
  reset_button.pressed.connect(reset_settings)
  style_row.add_child(reset_button)
+ for direction in [-1,1]:
+  var button=Button.new()
+  button.text="이전 횡단" if direction<0 else "다음 횡단"
+  button.disabled=true
+  button.pressed.connect(move_result.bind(direction))
+  style_row.add_child(button)
+  navigation_buttons.append(button)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -270,6 +278,7 @@ func render_result():
  for i in range(visible.size()):row_stations[first_row+i]=visible[i].station
  table.text="\n".join(lines)
  setting_table=false
+ for button in navigation_buttons:button.disabled=row_stations.is_empty()
 
 
 func export_csv(path):
@@ -312,6 +321,7 @@ func on_off(enabled):
 
 
 func invalidate():
+ for button in navigation_buttons:button.disabled=true
  row_stations.clear()
  super.invalidate()
  if copy_button!=null:copy_button.disabled=true
@@ -377,3 +387,18 @@ func select_row():
   return
  var row=table.get_caret_line()
  if row_stations.has(row):station_selected.emit(row_stations[row])
+
+
+func move_result(direction):
+ if result_text().is_empty() or row_stations.is_empty():return false
+ var rows=row_stations.keys()
+ rows.sort()
+ var index=rows.find(table.get_caret_line())
+ if index<0:index=0 if direction>0 else rows.size()-1
+ else:index=posmod(index+direction,rows.size())
+ setting_table=true
+ table.set_caret_line(rows[index])
+ table.center_viewport_to_caret()
+ setting_table=false
+ select_row()
+ return true

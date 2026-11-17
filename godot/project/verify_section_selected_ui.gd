@@ -98,6 +98,11 @@ func run():
  app.section_dxf.table.set_caret_line(0)
  app.section_dxf.select_row()
  assert(is_equal_approx(app.model.station*app.model.length(),exact_station))
+ assert(app.section_dxf.move_result(1))
+ var first=app.section_dxf.row_stations.keys()[0]
+ assert(app.section_dxf.table.get_caret_line()==first)
+ assert(app.section_dxf.move_result(-1))
+ assert(app.section_dxf.table.get_caret_line()==row)
  app.model.station=original_station
  var original_dxf=app.section_dxf.result.text
  var original_rows=app.section_dxf.table.text
@@ -113,6 +118,8 @@ func run():
  app.section_dxf.label_decimals.set_value_no_signal(1)
  assert(app.section_dxf.result_text()=="" and app.section_dxf.copy_button.disabled)
  assert(not app.section_dxf.save_report(report_path) and app.section_dxf.report_button.disabled)
+ assert(not app.section_dxf.move_result(1))
+ for button in app.section_dxf.navigation_buttons:assert(button.disabled)
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]
