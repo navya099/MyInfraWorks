@@ -3,6 +3,8 @@ const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
 var search_input: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var preset_export_dialog: FileDialog
+var preset_import_dialog: FileDialog
 var selected_summary: Label
 var missing_type: OptionButton
 var missing_only: CheckBox
@@ -202,6 +204,23 @@ func _ready():
   button.text=action
   if action=="설정 저장":button.pressed.connect(func():save_preset())
   else:button.pressed.connect(func():load_preset())
+  preset_row.add_child(button)
+ for exporting in [true,false]:
+  var dialog=FileDialog.new()
+  dialog.access=FileDialog.ACCESS_FILESYSTEM
+  dialog.file_mode=FileDialog.FILE_MODE_SAVE_FILE if exporting else FileDialog.FILE_MODE_OPEN_FILE
+  dialog.filters=PackedStringArray(["*.cfg ; Cross-section export settings"])
+  dialog.title="출력 설정 파일 내보내기" if exporting else "출력 설정 파일 가져오기"
+  add_child(dialog)
+  if exporting:
+   preset_export_dialog=dialog
+   dialog.file_selected.connect(save_preset)
+  else:
+   preset_import_dialog=dialog
+   dialog.file_selected.connect(load_preset)
+  var button=Button.new()
+  button.text="설정 파일 내보내기" if exporting else "설정 파일 가져오기"
+  button.pressed.connect(dialog.popup_centered_ratio.bind(0.7))
   preset_row.add_child(button)
  selected_summary=Label.new()
  selected_summary.text="선택 횡단: 없음"

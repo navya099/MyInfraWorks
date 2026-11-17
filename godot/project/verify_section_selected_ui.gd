@@ -148,6 +148,18 @@ func run():
  assert(app.section_dxf.reach.value==150 and app.section_dxf.begin_input.text==bounds_before)
  assert(app.section_dxf.result.is_empty())
  assert(not app.section_dxf.load_preset("user://missing-section-preset.cfg"))
+ app.section_dxf.reach.value=175
+ app.section_dxf.preset_export_dialog.file_selected.emit("user://portable-section.cfg")
+ app.section_dxf.reach.value=250
+ app.section_dxf.preset_import_dialog.file_selected.emit("user://portable-section.cfg")
+ assert(app.section_dxf.reach.value==175)
+ var damaged=ConfigFile.new()
+ damaged.set_value("format","version",1)
+ damaged.set_value("settings","interval",-1)
+ damaged.save("user://damaged-section.cfg")
+ var preserved=app.section_dxf.input_signature()
+ assert(not app.section_dxf.load_preset("user://damaged-section.cfg"))
+ assert(app.section_dxf.input_signature()==preserved)
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]
