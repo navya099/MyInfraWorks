@@ -3,6 +3,7 @@ const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
 var search_input: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var missing_type: OptionButton
 var missing_only: CheckBox
 var report_button: Button
 var report_dialog: FileDialog
@@ -45,6 +46,12 @@ func _ready():
  missing_only.text="결측 횡단만 표시"
  missing_only.toggled.connect(func(_enabled):render_result())
  settings.add_child(missing_only)
+ missing_type=OptionButton.new()
+ for label in ["모든 결측","원지반 결측","설계 결측","전체 표본 결측"]:missing_type.add_item(label)
+ missing_type.disabled=true
+ missing_type.item_selected.connect(func(_index):render_result())
+ missing_only.toggled.connect(func(enabled):missing_type.disabled=not enabled)
+ settings.add_child(missing_type)
  report_dialog=FileDialog.new()
  report_dialog.access=FileDialog.ACCESS_FILESYSTEM
  report_dialog.file_mode=FileDialog.FILE_MODE_SAVE_FILE
@@ -284,7 +291,7 @@ func render_result():
   invalidate()
   return
  var lines=PackedStringArray(["주요 경계 %s · 경계 포함 횡단 %d개" % ["포함" if result.include_boundaries else "제외",result.boundary_sections],"추가 STA 입력 %d개 · 중복 병합 후 총 %d횡단" % [result.extra_requested,result.sections.size()],"출력 STA %.3f~%.3fm · 구간 길이 %.3fm · 원래 STA 유지" % [result.begin,result.end,result.end-result.begin],"DXF R12 ASCII / H:V 1:1 / Z=0 배치 / CAD 단위 m", "녹색 KROAD_SEC_GROUND / 노랑 KROAD_SEC_DESIGN", "회색 KROAD_SEC_AXIS / 흰색 KROAD_SEC_TEXT", "DATUM: 각 횡단 기준표고 · Y좌표=배치기준+표고−DATUM", "결측은 선을 끊고 단독 유효 표본은 POINT · 사면 폐합/수량 계산 없음", "", "STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각"])
- var visible=result.sections.filter(func(section):return not missing_only.button_pressed or section.ground_missing>0 or section.design_missing>0)
+ var visible=result.sections.filter(func(section):return not missing_only.button_pressed or matches_missing(section,result.lateral_count,missing_type.selected))
  for section in visible:lines.append("%.3f | %.3f | %d / %d | %d / %d" % [section.station,section.datum,section.ground_missing,section.design_missing,section.ground_runs,section.design_runs])
  if result.grid_step>0:lines.insert(0,"격자 %.2fm · %d선 · GRID/GRID_TEXT 별도 레이어 · 눈금=실제 표고" % [result.grid_step,result.grid_lines])
  if result.extras_only:lines.insert(0,"추가 STA만 출력 · 구간 양 끝/정규 측점/주요 경계 자동 추가 없음")
@@ -293,7 +300,7 @@ func render_result():
  lines.insert(2,"글자 높이: %s · DATUM: %s" % ["자동" if text_height_input.value==0 else "%.2fm" % text_height_input.value,"공통 %.3fm" % common_datum_input.value if common_datum_enabled.button_pressed else "횡단별 자동"])
  lines.insert(3,"반폭 %.2fm · 횡단 간격 %.2fm · 배치 %d열 · 결측 통계는 원지반/설계 전체 기준" % [result.half,result.lateral_step,result.columns])
  lines.insert(0,missing_summary(result.sections,result.lateral_count))
- lines.insert(0,"목록: %s · 표시 %d / 전체 %d횡단 · DXF는 전체 횡단 출력" % ["결측만" if missing_only.button_pressed else "전체",visible.size(),result.sections.size()])
+ lines.insert(0,"목록: %s · 표시 %d / 전체 %d횡단 · DXF는 전체 횡단 출력" % ["결측만 / "+missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체",visible.size(),result.sections.size()])
  setting_table=true
  row_stations.clear()
  var first_row=lines.find("STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각")+1
@@ -311,6 +318,8 @@ func export_csv(path):
 
 
 func reset_settings():
+ missing_type.select(0)
+ missing_type.disabled=true
  search_input.text=""
  missing_only.button_pressed=false
  interval.value=1000
@@ -454,3 +463,11 @@ func find_current_result():
  if not is_finite(station) or station<0:return false
  search_input.text=str(station)
  return find_result()
+
+
+static func matches_missing(section,lateral_count,mode):
+ match mode:
+  1:return section.ground_missing>0
+  2:return section.design_missing>0
+  3:return section.ground_missing>=lateral_count or section.design_missing>=lateral_count
+ return section.ground_missing>0 or section.design_missing>0

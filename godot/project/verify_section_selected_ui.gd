@@ -131,6 +131,12 @@ func run():
  assert(not app.section_dxf.move_result(1))
  assert(not app.section_dxf.find_current_result())
  for button in app.section_dxf.navigation_buttons:assert(button.disabled)
+ var ground_gap={"ground_missing":1,"design_missing":0}
+ var design_gap={"ground_missing":0,"design_missing":10}
+ assert(app.section_dxf.matches_missing(ground_gap,10,1))
+ assert(not app.section_dxf.matches_missing(ground_gap,10,2))
+ assert(not app.section_dxf.matches_missing(ground_gap,10,3))
+ assert(app.section_dxf.matches_missing(design_gap,10,2) and app.section_dxf.matches_missing(design_gap,10,3))
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]
