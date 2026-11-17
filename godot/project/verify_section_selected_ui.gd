@@ -168,6 +168,16 @@ func run():
  assert("목록: 결측만" in app.section_dxf.table.text and app.section_dxf.result.text==original_dxf)
  app.section_dxf.missing_only.button_pressed=false
  assert(app.section_dxf.table.text==original_rows)
+ app.section_dxf.result_csv_dialog.file_selected.emit("user://section-results.csv")
+ var csv=FileAccess.open("user://section-results.csv",FileAccess.READ)
+ var bytes=csv.get_buffer(3)
+ assert(bytes==PackedByteArray([239,187,191]))
+ var header=csv.get_csv_line()
+ assert(header[0]=="station_m" and header.size()==8)
+ for section in app.section_dxf.result.sections:
+  var values=csv.get_csv_line()
+  assert(values[0].to_float()==section.station and values[3].to_int()==section.ground_missing)
+ csv.close()
  var report_path="user://section-result-report.txt"
  app.section_dxf.report_dialog.file_selected.emit(report_path)
  assert(FileAccess.get_file_as_string(report_path)==app.section_dxf.table.text+"\n")
@@ -177,6 +187,7 @@ func run():
  assert(app.section_dxf.result_text()=="" and app.section_dxf.copy_button.disabled)
  assert(not app.section_dxf.save_report(report_path) and app.section_dxf.report_button.disabled)
  assert(app.section_dxf.selected_summary.text=="선택 횡단: 없음")
+ assert(not app.section_dxf.save_result_csv("user://stale-section-results.csv"))
  assert(not app.section_dxf.move_result(1))
  assert(not app.section_dxf.find_current_result())
  for button in app.section_dxf.navigation_buttons:assert(button.disabled)

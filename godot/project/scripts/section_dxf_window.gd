@@ -12,6 +12,8 @@ var preset_import_dialog: FileDialog
 var selected_summary: Label
 var missing_type: OptionButton
 var missing_only: CheckBox
+var result_csv_button: Button
+var result_csv_dialog: FileDialog
 var report_button: Button
 var report_dialog: FileDialog
 var copy_button: Button
@@ -52,6 +54,17 @@ func _ready():
  report_button.text="결과 TXT 저장"
  report_button.disabled=true
  settings.add_child(report_button)
+ result_csv_button=Button.new()
+ result_csv_button.text="결과 CSV 저장"
+ result_csv_button.disabled=true
+ settings.add_child(result_csv_button)
+ result_csv_dialog=FileDialog.new()
+ result_csv_dialog.access=FileDialog.ACCESS_FILESYSTEM
+ result_csv_dialog.file_mode=FileDialog.FILE_MODE_SAVE_FILE
+ result_csv_dialog.filters=PackedStringArray(["*.csv ; Cross-section result table"])
+ add_child(result_csv_dialog)
+ result_csv_button.pressed.connect(func():result_csv_dialog.popup_centered_ratio(0.7))
+ result_csv_dialog.file_selected.connect(save_result_csv)
  missing_only=CheckBox.new()
  missing_only.text="결측 횡단만 표시"
  missing_only.toggled.connect(func(_enabled):render_result())
@@ -345,6 +358,7 @@ func _process(_delta):
  csv_button.disabled=false
  copy_button.disabled=false
  report_button.disabled=false
+ result_csv_button.disabled=false
  status.text="%d횡단 / %d표본 · 원지반 결측 %d · %.1fms" % [result.sections.size(),result.samples,result.missing,result.ms]
  render_result()
 
@@ -423,6 +437,7 @@ func invalidate():
  super.invalidate()
  if copy_button!=null:copy_button.disabled=true
  if report_button!=null:report_button.disabled=true
+ if result_csv_button!=null:result_csv_button.disabled=true
 
 func result_text():
  if result.is_empty() or worker!=null or requested_inputs!=input_signature() or result_revision!=revision_provider.call():
@@ -635,3 +650,27 @@ func handle_result_input(event):
    move_result(-1 if event.keycode==KEY_LEFT else 1)
    return true
  return false
+
+
+func save_result_csv(path):
+ if result_text().is_empty():return false
+ var temporary=path+".tmp"
+ var file=FileAccess.open(temporary,FileAccess.WRITE)
+ if file==null:
+  status.text="결과 CSV 파일을 열지 못했습니다."
+  return false
+ file.store_buffer(PackedByteArray([239,187,191]))
+ file.store_csv_line(PackedStringArray(["station_m","datum_m","samples_per_section","ground_missing","design_missing","ground_runs","design_runs","list_filter"]))
+ var filter_name=missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체"
+ for section in result.sections:
+  if missing_only.button_pressed and not matches_missing(section,result.lateral_count,missing_type.selected):continue
+  file.store_csv_line(PackedStringArray([str(section.station),str(section.datum),str(result.lateral_count),str(section.ground_missing),str(section.design_missing),str(section.ground_runs),str(section.design_runs),filter_name]))
+ file.flush()
+ var error=file.get_error()
+ file.close()
+ if error!=OK or DirAccess.rename_absolute(temporary,path)!=OK:
+  DirAccess.remove_absolute(temporary)
+  status.text="결과 CSV 저장 실패"
+  return false
+ status.text="결과 CSV 저장 완료: "+path
+ return true
