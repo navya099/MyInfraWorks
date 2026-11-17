@@ -103,6 +103,11 @@ func run():
  assert(app.section_dxf.table.get_caret_line()==first)
  assert(app.section_dxf.move_result(-1))
  assert(app.section_dxf.table.get_caret_line()==row)
+ app.section_dxf.search_input.text=str(exact_station+0.1)
+ assert(app.section_dxf.find_result())
+ assert(is_equal_approx(app.model.station*app.model.length(),exact_station))
+ app.section_dxf.search_input.text="NaN"
+ assert(not app.section_dxf.find_result())
  app.model.station=original_station
  var original_dxf=app.section_dxf.result.text
  var original_rows=app.section_dxf.table.text

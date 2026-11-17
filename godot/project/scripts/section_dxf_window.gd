@@ -1,5 +1,6 @@
 extends "res://scripts/dxf_window.gd"
 const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
+var search_input: LineEdit
 var navigation_buttons=[]
 var row_stations={}
 var missing_only: CheckBox
@@ -157,13 +158,28 @@ func _ready():
  reset_button.text="출력 설정 초기화"
  reset_button.pressed.connect(reset_settings)
  style_row.add_child(reset_button)
+ var navigation_row=HBoxContainer.new()
+ root.add_child(navigation_row)
+ root.move_child(navigation_row,6)
  for direction in [-1,1]:
   var button=Button.new()
   button.text="이전 횡단" if direction<0 else "다음 횡단"
   button.disabled=true
   button.pressed.connect(move_result.bind(direction))
-  style_row.add_child(button)
+  navigation_row.add_child(button)
   navigation_buttons.append(button)
+ search_input=LineEdit.new()
+ search_input.placeholder_text="검색 STA(m)"
+ search_input.custom_minimum_size.x=180
+ search_input.max_length=32
+ navigation_row.add_child(search_input)
+ var find_button=Button.new()
+ find_button.text="가까운 횡단 찾기"
+ find_button.disabled=true
+ find_button.pressed.connect(find_result)
+ search_input.text_submitted.connect(func(_text):find_result())
+ navigation_row.add_child(find_button)
+ navigation_buttons.append(find_button)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -289,6 +305,7 @@ func export_csv(path):
 
 
 func reset_settings():
+ search_input.text=""
  missing_only.button_pressed=false
  interval.value=1000
  reach.value=100
@@ -401,4 +418,25 @@ func move_result(direction):
  table.center_viewport_to_caret()
  setting_table=false
  select_row()
+ return true
+
+
+func find_result():
+ if result_text().is_empty() or row_stations.is_empty():return false
+ var token=search_input.text.strip_edges()
+ if not token.is_valid_float() or not is_finite(token.to_float()) or token.to_float()<0:
+  status.text="검색 STA는 0 이상의 유한한 미터 값으로 입력하세요."
+  return false
+ var target=token.to_float()
+ var rows=row_stations.keys()
+ rows.sort()
+ var best=rows[0]
+ for row in rows:
+  if abs(row_stations[row]-target)<abs(row_stations[best]-target):best=row
+ setting_table=true
+ table.set_caret_line(best)
+ table.center_viewport_to_caret()
+ setting_table=false
+ select_row()
+ status.text="검색 %.3fm → 표시 목록의 가장 가까운 STA %.3fm" % [target,row_stations[best]]
  return true
