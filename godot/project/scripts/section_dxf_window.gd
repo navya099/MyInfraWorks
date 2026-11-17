@@ -3,6 +3,7 @@ const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
 var search_input: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var selected_summary: Label
 var missing_type: OptionButton
 var missing_only: CheckBox
 var report_button: Button
@@ -193,6 +194,11 @@ func _ready():
  current_result.pressed.connect(find_current_result)
  navigation_row.add_child(current_result)
  navigation_buttons.append(current_result)
+ selected_summary=Label.new()
+ selected_summary.text="선택 횡단: 없음"
+ selected_summary.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+ root.add_child(selected_summary)
+ root.move_child(selected_summary,7)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -301,6 +307,7 @@ func render_result():
  lines.insert(3,"반폭 %.2fm · 횡단 간격 %.2fm · 배치 %d열 · 결측 통계는 원지반/설계 전체 기준" % [result.half,result.lateral_step,result.columns])
  lines.insert(0,missing_summary(result.sections,result.lateral_count))
  lines.insert(0,"목록: %s · 표시 %d / 전체 %d횡단 · DXF는 전체 횡단 출력" % ["결측만 / "+missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체",visible.size(),result.sections.size()])
+ selected_summary.text="선택 횡단: 없음"
  setting_table=true
  row_stations.clear()
  var first_row=lines.find("STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각")+1
@@ -353,6 +360,7 @@ func on_off(enabled):
 
 
 func invalidate():
+ if selected_summary!=null:selected_summary.text="선택 횡단: 없음"
  for button in navigation_buttons:button.disabled=true
  row_stations.clear()
  super.invalidate()
@@ -418,7 +426,14 @@ func select_row():
   invalidate()
   return
  var row=table.get_caret_line()
- if row_stations.has(row):station_selected.emit(row_stations[row])
+ if row_stations.has(row):
+  var station=row_stations[row]
+  for section in result.sections:
+   if section.station==station:
+    selected_summary.text="선택 STA %.3fm · DATUM %.3fm · 원지반 결측 %d/%d · 설계 결측 %d/%d · 도형 조각 %d/%d" % [station,section.datum,section.ground_missing,result.lateral_count,section.design_missing,result.lateral_count,section.ground_runs,section.design_runs]
+    break
+  station_selected.emit(station)
+ else:selected_summary.text="선택 횡단: 없음"
 
 
 func move_result(direction):
