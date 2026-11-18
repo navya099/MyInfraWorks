@@ -265,6 +265,10 @@ func run():
  assert(not app.section_dxf.matches_missing(coverage_sample,10,4))
  coverage_sample.ground_missing=6
  assert(app.section_dxf.matches_missing(coverage_sample,10,4))
+ var unsorted=[{"station":20.0,"ground_missing":2,"design_missing":0},{"station":10.0,"ground_missing":2,"design_missing":5},{"station":30.0,"ground_missing":8,"design_missing":1}]
+ assert(app.section_dxf.sorted_sections(unsorted,1).map(func(v):return v.station)==[30.0,10.0,20.0])
+ assert(app.section_dxf.sorted_sections(unsorted,2).map(func(v):return v.station)==[10.0,30.0,20.0])
+ assert(unsorted[0].station==20.0)
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]

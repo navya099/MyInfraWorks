@@ -3,6 +3,7 @@ const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
 var search_input: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var result_sort: OptionButton
 var wrap_results: CheckBox
 var default_result_font=14
 var settings_rows=[]
@@ -269,6 +270,10 @@ func _ready():
  wrap_results.toggled.connect(func(enabled):
   table.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY if enabled else TextEdit.LINE_WRAPPING_NONE)
  view_row.add_child(wrap_results)
+ result_sort=OptionButton.new()
+ for label in ["STA 순","원지반 유효 낮은 순","설계 유효 낮은 순"]:result_sort.add_item(label)
+ result_sort.item_selected.connect(func(_index):render_result())
+ view_row.add_child(result_sort)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -368,7 +373,7 @@ func render_result():
   invalidate()
   return
  var lines=PackedStringArray(["주요 경계 %s · 경계 포함 횡단 %d개" % ["포함" if result.include_boundaries else "제외",result.boundary_sections],"추가 STA 입력 %d개 · 중복 병합 후 총 %d횡단" % [result.extra_requested,result.sections.size()],"출력 STA %.3f~%.3fm · 구간 길이 %.3fm · 원래 STA 유지" % [result.begin,result.end,result.end-result.begin],"DXF R12 ASCII / H:V 1:1 / Z=0 배치 / CAD 단위 m", "녹색 KROAD_SEC_GROUND / 노랑 KROAD_SEC_DESIGN", "회색 KROAD_SEC_AXIS / 흰색 KROAD_SEC_TEXT", "DATUM: 각 횡단 기준표고 · Y좌표=배치기준+표고−DATUM", "결측은 선을 끊고 단독 유효 표본은 POINT · 사면 폐합/수량 계산 없음", "", "STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각 | 원지반/설계 유효(%)"])
- var visible=result.sections.filter(func(section):return not missing_only.button_pressed or matches_missing(section,result.lateral_count,missing_type.selected))
+ var visible=displayed_sections()
  for section in visible:lines.append("%.3f | %.3f | %d / %d | %d / %d | %.1f / %.1f" % [section.station,section.datum,section.ground_missing,section.design_missing,section.ground_runs,section.design_runs,valid_percent(section.ground_missing,result.lateral_count),valid_percent(section.design_missing,result.lateral_count)])
  if result.grid_step>0:lines.insert(0,"격자 %.2fm · %d선 · GRID/GRID_TEXT 별도 레이어 · 눈금=실제 표고" % [result.grid_step,result.grid_lines])
  if result.extras_only:lines.insert(0,"추가 STA만 출력 · 구간 양 끝/정규 측점/주요 경계 자동 추가 없음")
@@ -377,6 +382,7 @@ func render_result():
  lines.insert(2,"글자 높이: %s · DATUM: %s" % ["자동" if text_height_input.value==0 else "%.2fm" % text_height_input.value,"공통 %.3fm" % common_datum_input.value if common_datum_enabled.button_pressed else "횡단별 자동"])
  lines.insert(3,"반폭 %.2fm · 횡단 간격 %.2fm · 배치 %d열 · 결측 통계는 원지반/설계 전체 기준" % [result.half,result.lateral_step,result.columns])
  lines.insert(0,missing_summary(result.sections,result.lateral_count))
+ lines.insert(0,"정렬: "+result_sort.get_item_text(result_sort.selected))
  lines.insert(0,"목록: %s · 표시 %d / 전체 %d횡단 · DXF는 전체 횡단 출력" % ["결측만 / "+missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체",visible.size(),result.sections.size()])
  selected_summary.text="선택 횡단: 없음"
  setting_table=true
@@ -396,6 +402,7 @@ func export_csv(path):
 
 
 func reset_settings():
+ result_sort.select(0)
  missing_type.select(0)
  missing_type.disabled=true
  search_input.text=""
@@ -535,7 +542,7 @@ func find_result():
  rows.sort()
  var best=rows[0]
  for row in rows:
-  if abs(row_stations[row]-target)<abs(row_stations[best]-target):best=row
+  if abs(row_stations[row]-target)<abs(row_stations[best]-target) or (abs(row_stations[row]-target)==abs(row_stations[best]-target) and row_stations[row]<row_stations[best]):best=row
  setting_table=true
  table.set_caret_line(best)
  table.center_viewport_to_caret()
@@ -666,8 +673,7 @@ func save_result_csv(path):
  file.store_buffer(PackedByteArray([239,187,191]))
  file.store_csv_line(PackedStringArray(["station_m","datum_m","samples_per_section","ground_missing","design_missing","ground_runs","design_runs","list_filter","ground_valid_pct","design_valid_pct"]))
  var filter_name=missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체"
- for section in result.sections:
-  if missing_only.button_pressed and not matches_missing(section,result.lateral_count,missing_type.selected):continue
+ for section in displayed_sections():
   file.store_csv_line(PackedStringArray([str(section.station),str(section.datum),str(result.lateral_count),str(section.ground_missing),str(section.design_missing),str(section.ground_runs),str(section.design_runs),filter_name,str(valid_percent(section.ground_missing,result.lateral_count)),str(valid_percent(section.design_missing,result.lateral_count))]))
  file.flush()
  var error=file.get_error()
@@ -682,3 +688,17 @@ func save_result_csv(path):
 
 static func valid_percent(missing,total):
  return 0.0 if total<=0 else 100.0*(total-missing)/total
+
+
+func displayed_sections():
+ var visible=result.sections.filter(func(section):return not missing_only.button_pressed or matches_missing(section,result.lateral_count,missing_type.selected))
+ return sorted_sections(visible,result_sort.selected)
+
+static func sorted_sections(sections,mode):
+ var ordered=sections.duplicate()
+ ordered.sort_custom(func(a,b):
+  if mode>0:
+   var key="ground_missing" if mode==1 else "design_missing"
+   if a[key]!=b[key]:return a[key]>b[key]
+  return a.station<b.station)
+ return ordered
