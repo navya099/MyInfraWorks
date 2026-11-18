@@ -183,9 +183,13 @@ func run():
  app.section_dxf.review_end.text=str(review_target)
  assert(app.section_dxf.apply_review_range())
  assert(app.section_dxf.displayed_sections().size()==1)
+ assert("표시 1횡단 유효 표본 비율" in app.section_dxf.table.text)
+ assert("전체 %d횡단" % app.section_dxf.result.sections.size() in app.section_dxf.table.text)
  app.section_dxf.review_begin.text="NaN"
  assert(not app.section_dxf.apply_review_range())
  assert(app.section_dxf.displayed_sections().size()==1)
+ assert("표시 1횡단 유효 표본 비율" in app.section_dxf.table.text)
+ assert("전체 %d횡단" % app.section_dxf.result.sections.size() in app.section_dxf.table.text)
  app.section_dxf.review_begin.text=""
  app.section_dxf.review_end.text=""
  assert(app.section_dxf.apply_review_range())
@@ -317,6 +321,7 @@ func run():
  assert(grouped[0].begin==0 and grouped[0].end==10 and grouped[0].count==2)
  assert(grouped[1].begin==30 and grouped[1].end==30 and grouped[1].count==1)
  assert(app.section_dxf.missing_ranges([]).is_empty())
+ assert("표시 유효 비율: 산출 횡단 없음"==app.section_dxf.coverage_summary([],10,"표시"))
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]

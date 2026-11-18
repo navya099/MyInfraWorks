@@ -421,6 +421,7 @@ func render_result():
  lines.insert(3,"반폭 %.2fm · 횡단 간격 %.2fm · 배치 %d열 · 결측 통계는 원지반/설계 전체 기준" % [result.half,result.lateral_step,result.columns])
  lines.insert(0,missing_summary(result.sections,result.lateral_count))
  lines.insert(0,coverage_summary(result.sections,result.lateral_count))
+ lines.insert(0,coverage_summary(visible,result.lateral_count,"표시"))
  lines.insert(0,missing_ranges_summary(result.sections))
  if not review_range.is_empty():lines.insert(0,"목록 STA 범위 %.3f~%.3fm · DXF 출력 범위와 별도" % [review_range.begin,review_range.end])
  lines.insert(0,"정렬: "+result_sort.get_item_text(result_sort.selected))
@@ -760,8 +761,8 @@ static func sorted_sections(sections,mode):
  return ordered
 
 
-static func coverage_summary(sections,total):
- if sections.is_empty():return "전체 유효 비율: 산출 횡단 없음"
+static func coverage_summary(sections,total,scope="전체"):
+ if sections.is_empty():return scope+" 유효 비율: 산출 횡단 없음"
  var ground_sum=0.0
  var design_sum=0.0
  var ground_min=100.0
@@ -773,7 +774,7 @@ static func coverage_summary(sections,total):
   design_sum+=design
   ground_min=min(ground_min,ground)
   design_min=min(design_min,design)
- return "전체 %d횡단 유효 표본 비율 · 원지반 평균 %.1f%% / 최저 %.1f%% · 설계 평균 %.1f%% / 최저 %.1f%% (필터 전 전체 기준)" % [sections.size(),ground_sum/sections.size(),ground_min,design_sum/sections.size(),design_min]
+ return "%s %d횡단 유효 표본 비율 · 원지반 평균 %.1f%% / 최저 %.1f%% · 설계 평균 %.1f%% / 최저 %.1f%% (%s 기준)" % [scope,sections.size(),ground_sum/sections.size(),ground_min,design_sum/sections.size(),design_min,"필터 전 전체" if scope=="전체" else "현재 필터 목록"]
 
 
 func find_worst_result(ground):
