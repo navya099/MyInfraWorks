@@ -394,6 +394,7 @@ func render_result():
  lines.insert(3,"반폭 %.2fm · 횡단 간격 %.2fm · 배치 %d열 · 결측 통계는 원지반/설계 전체 기준" % [result.half,result.lateral_step,result.columns])
  lines.insert(0,missing_summary(result.sections,result.lateral_count))
  lines.insert(0,coverage_summary(result.sections,result.lateral_count))
+ lines.insert(0,missing_ranges_summary(result.sections))
  lines.insert(0,"정렬: "+result_sort.get_item_text(result_sort.selected))
  lines.insert(0,"목록: %s · 표시 %d / 전체 %d횡단 · DXF는 전체 횡단 출력" % ["결측만 / "+missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체",visible.size(),result.sections.size()])
  selected_summary.text="선택 횡단: 없음"
@@ -756,3 +757,29 @@ func find_worst_result(ground):
    status.text="표시 목록 기준 %s 유효 최저 STA %.3fm · %.1f%%" % ["원지반" if ground else "설계",worst.station,valid_percent(worst.ground_missing if ground else worst.design_missing,result.lateral_count)]
    return true
  return false
+
+
+static func missing_ranges(sections):
+ var ordered=sections.duplicate()
+ ordered.sort_custom(func(a,b):return a.station<b.station)
+ var ranges=[]
+ var active={}
+ for section in ordered:
+  if section.ground_missing>0 or section.design_missing>0:
+   if active.is_empty():active={"begin":section.station,"end":section.station,"count":0}
+   active.end=section.station
+   active.count+=1
+  elif not active.is_empty():
+   ranges.append(active)
+   active={}
+ if not active.is_empty():ranges.append(active)
+ return ranges
+
+static func missing_ranges_summary(sections):
+ var ranges=missing_ranges(sections)
+ if ranges.is_empty():return "연속 결측 측점 묶음: 없음"
+ var labels=[]
+ for i in range(mini(5,ranges.size())):
+  var group=ranges[i]
+  labels.append("%.3f~%.3fm (%d횡단)" % [group.begin,group.end,group.count])
+ return "연속 결측 측점 묶음 %d개: %s%s · STA 순 인접 산출 횡단 기준, 측점 사이 지형은 미검사" % [ranges.size(),", ".join(labels)," 외 %d개" % (ranges.size()-5) if ranges.size()>5 else ""]

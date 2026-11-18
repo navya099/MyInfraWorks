@@ -290,6 +290,11 @@ func run():
  assert("원지반 평균 75.0% / 최저 50.0%" in coverage_stats)
  assert("설계 평균 50.0% / 최저 0.0%" in coverage_stats)
  assert("산출 횡단 없음" in app.section_dxf.coverage_summary([],10))
+ var grouped=app.section_dxf.missing_ranges([{"station":30.0,"ground_missing":0,"design_missing":1},{"station":0.0,"ground_missing":1,"design_missing":0},{"station":10.0,"ground_missing":2,"design_missing":0},{"station":20.0,"ground_missing":0,"design_missing":0}])
+ assert(grouped.size()==2)
+ assert(grouped[0].begin==0 and grouped[0].end==10 and grouped[0].count==2)
+ assert(grouped[1].begin==30 and grouped[1].end==30 and grouped[1].count==1)
+ assert(app.section_dxf.missing_ranges([]).is_empty())
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]
