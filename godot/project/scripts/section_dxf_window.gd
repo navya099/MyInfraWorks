@@ -217,6 +217,15 @@ func _ready():
  current_result.pressed.connect(find_current_result)
  navigation_row.add_child(current_result)
  navigation_buttons.append(current_result)
+ var worst_row=HBoxContainer.new()
+ root.add_child(worst_row)
+ for ground in [true,false]:
+  var button=Button.new()
+  button.text="원지반 유효 최저로 이동" if ground else "설계 유효 최저로 이동"
+  button.disabled=true
+  button.pressed.connect(find_worst_result.bind(ground))
+  worst_row.add_child(button)
+  navigation_buttons.append(button)
  var preset_row=HBoxContainer.new()
  root.add_child(preset_row)
  root.move_child(preset_row,7)
@@ -274,6 +283,7 @@ func _ready():
  for label in ["STA 순","원지반 유효 낮은 순","설계 유효 낮은 순"]:result_sort.add_item(label)
  result_sort.item_selected.connect(func(_index):render_result())
  view_row.add_child(result_sort)
+ root.move_child(worst_row,table.get_index())
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -730,3 +740,19 @@ static func coverage_summary(sections,total):
   ground_min=min(ground_min,ground)
   design_min=min(design_min,design)
  return "전체 %d횡단 유효 표본 비율 · 원지반 평균 %.1f%% / 최저 %.1f%% · 설계 평균 %.1f%% / 최저 %.1f%% (필터 전 전체 기준)" % [sections.size(),ground_sum/sections.size(),ground_min,design_sum/sections.size(),design_min]
+
+
+func find_worst_result(ground):
+ if result_text().is_empty() or row_stations.is_empty():return false
+ var ordered=sorted_sections(displayed_sections(),1 if ground else 2)
+ var worst=ordered[0]
+ for row in row_stations:
+  if row_stations[row]==worst.station:
+   setting_table=true
+   table.set_caret_line(row)
+   table.center_viewport_to_caret()
+   setting_table=false
+   select_row()
+   status.text="표시 목록 기준 %s 유효 최저 STA %.3fm · %.1f%%" % ["원지반" if ground else "설계",worst.station,valid_percent(worst.ground_missing if ground else worst.design_missing,result.lateral_count)]
+   return true
+ return false

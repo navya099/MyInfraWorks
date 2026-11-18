@@ -170,6 +170,14 @@ func run():
  assert(app.model.station==current_before_sort)
  app.section_dxf.result_sort.select(0)
  app.section_dxf.render_result()
+ var station_before_worst=app.model.station
+ var dxf_before_worst=app.section_dxf.result.text
+ assert(app.section_dxf.find_worst_result(true))
+ var expected_worst=app.section_dxf.sorted_sections(app.section_dxf.displayed_sections(),1)[0].station
+ assert(is_equal_approx(app.model.station*app.model.length(),expected_worst))
+ assert(app.section_dxf.find_worst_result(false))
+ assert(app.section_dxf.result.text==dxf_before_worst)
+ app.model.station=station_before_worst
  var original_dxf=app.section_dxf.result.text
  var original_rows=app.section_dxf.table.text
  app.section_dxf.missing_only.button_pressed=true
@@ -197,6 +205,7 @@ func run():
  assert(not app.section_dxf.save_report(report_path) and app.section_dxf.report_button.disabled)
  assert(app.section_dxf.selected_summary.text=="선택 횡단: 없음")
  assert(not app.section_dxf.save_result_csv("user://stale-section-results.csv"))
+ assert(not app.section_dxf.find_worst_result(true))
  assert(not app.section_dxf.move_result(1))
  assert(not app.section_dxf.find_current_result())
  for button in app.section_dxf.navigation_buttons:assert(button.disabled)
