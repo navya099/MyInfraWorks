@@ -284,6 +284,14 @@ func _ready():
  result_sort.item_selected.connect(func(_index):render_result())
  view_row.add_child(result_sort)
  root.move_child(worst_row,table.get_index())
+ var export_row=HBoxContainer.new()
+ root.add_child(export_row)
+ root.move_child(export_row,1)
+ for control in [csv_button,copy_button,report_button,result_csv_button]:control.reparent(export_row)
+ var filter_row=HBoxContainer.new()
+ root.add_child(filter_row)
+ root.move_child(filter_row,view_row.get_index()+1)
+ for control in [missing_only,missing_type,result_sort]:control.reparent(filter_row)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
