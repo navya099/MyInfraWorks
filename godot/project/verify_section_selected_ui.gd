@@ -162,6 +162,14 @@ func run():
  assert(not app.section_dxf.csv_button.disabled and app.section_dxf.move_result(1))
  app.section_dxf.collapse_button.button_pressed=false
  for settings_row in app.section_dxf.settings_rows:assert(settings_row.visible)
+ var current_before_sort=app.model.station
+ var selected_before_sort=app.section_dxf.row_stations[app.section_dxf.table.get_caret_line()]
+ app.section_dxf.result_sort.select(1)
+ app.section_dxf.render_result()
+ assert(app.section_dxf.row_stations[app.section_dxf.table.get_caret_line()]==selected_before_sort)
+ assert(app.model.station==current_before_sort)
+ app.section_dxf.result_sort.select(0)
+ app.section_dxf.render_result()
  var original_dxf=app.section_dxf.result.text
  var original_rows=app.section_dxf.table.text
  app.section_dxf.missing_only.button_pressed=true

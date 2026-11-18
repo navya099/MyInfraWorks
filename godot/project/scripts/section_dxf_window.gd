@@ -369,6 +369,7 @@ func _process(_delta):
 
 func render_result():
  if result.is_empty():return
+ var selected_station=row_stations.get(table.get_caret_line(),null)
  if requested_inputs!=input_signature() or result_revision!=revision_provider.call():
   invalidate()
   return
@@ -390,7 +391,17 @@ func render_result():
  var first_row=lines.find("STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각 | 원지반/설계 유효(%)")+1
  for i in range(visible.size()):row_stations[first_row+i]=visible[i].station
  table.text="\n".join(lines)
+ var restored=false
+ if selected_station!=null:
+  for row in row_stations:
+   if row_stations[row]==selected_station:
+    table.set_caret_line(row)
+    table.center_viewport_to_caret()
+    restored=true
+    break
+ if not restored:table.set_caret_line(0)
  setting_table=false
+ if restored:select_row(false)
  for button in navigation_buttons:button.disabled=row_stations.is_empty()
 
 
@@ -499,7 +510,7 @@ static func missing_summary(sections,lateral_count):
  return "결측 경고: %d/%d횡단 · 원지반 %d / 설계 %d표본 · 전체 결측 횡단 원지반 %d / 설계 %d\n결측 STA(m): %s%s · DEM 범위·원본 결측·설계 유효 범위를 확인하세요." % [affected,sections.size(),ground,design,ground_empty,design_empty,", ".join(stations)," 외 %d개" % (affected-10) if affected>10 else ""]
 
 
-func select_row():
+func select_row(navigate=true):
  if setting_table or result.is_empty():return
  if requested_inputs!=input_signature() or result_revision!=revision_provider.call():
   invalidate()
@@ -512,7 +523,7 @@ func select_row():
     selected_summary.text="선택 STA %.3fm · DATUM %.3fm · 원지반 결측 %d/%d · 설계 결측 %d/%d · 도형 조각 %d/%d" % [station,section.datum,section.ground_missing,result.lateral_count,section.design_missing,result.lateral_count,section.ground_runs,section.design_runs]
     selected_summary.text+=" · 유효 원지반 %.1f%% / 설계 %.1f%%" % [valid_percent(section.ground_missing,result.lateral_count),valid_percent(section.design_missing,result.lateral_count)]
     break
-  station_selected.emit(station)
+  if navigate:station_selected.emit(station)
  else:selected_summary.text="선택 횡단: 없음"
 
 
