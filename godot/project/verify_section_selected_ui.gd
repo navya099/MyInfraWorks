@@ -173,10 +173,11 @@ func run():
  var bytes=csv.get_buffer(3)
  assert(bytes==PackedByteArray([239,187,191]))
  var header=csv.get_csv_line()
- assert(header[0]=="station_m" and header.size()==8)
+ assert(header[0]=="station_m" and header.size()==10)
  for section in app.section_dxf.result.sections:
   var values=csv.get_csv_line()
   assert(values[0].to_float()==section.station and values[3].to_int()==section.ground_missing)
+  assert(is_equal_approx(values[8].to_float(),app.section_dxf.valid_percent(section.ground_missing,app.section_dxf.result.lateral_count)))
  csv.close()
  var report_path="user://section-result-report.txt"
  app.section_dxf.report_dialog.file_selected.emit(report_path)
@@ -251,6 +252,9 @@ func run():
  old.save("user://bad-view-preset.cfg")
  assert(not app.section_dxf.load_preset("user://bad-view-preset.cfg"))
  assert(app.section_dxf.table.get_theme_font_size("font_size")==22)
+ assert(app.section_dxf.valid_percent(0,10)==100)
+ assert(app.section_dxf.valid_percent(3,10)==70)
+ assert(app.section_dxf.valid_percent(10,10)==0)
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]

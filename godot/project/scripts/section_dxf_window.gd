@@ -367,9 +367,9 @@ func render_result():
  if requested_inputs!=input_signature() or result_revision!=revision_provider.call():
   invalidate()
   return
- var lines=PackedStringArray(["주요 경계 %s · 경계 포함 횡단 %d개" % ["포함" if result.include_boundaries else "제외",result.boundary_sections],"추가 STA 입력 %d개 · 중복 병합 후 총 %d횡단" % [result.extra_requested,result.sections.size()],"출력 STA %.3f~%.3fm · 구간 길이 %.3fm · 원래 STA 유지" % [result.begin,result.end,result.end-result.begin],"DXF R12 ASCII / H:V 1:1 / Z=0 배치 / CAD 단위 m", "녹색 KROAD_SEC_GROUND / 노랑 KROAD_SEC_DESIGN", "회색 KROAD_SEC_AXIS / 흰색 KROAD_SEC_TEXT", "DATUM: 각 횡단 기준표고 · Y좌표=배치기준+표고−DATUM", "결측은 선을 끊고 단독 유효 표본은 POINT · 사면 폐합/수량 계산 없음", "", "STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각"])
+ var lines=PackedStringArray(["주요 경계 %s · 경계 포함 횡단 %d개" % ["포함" if result.include_boundaries else "제외",result.boundary_sections],"추가 STA 입력 %d개 · 중복 병합 후 총 %d횡단" % [result.extra_requested,result.sections.size()],"출력 STA %.3f~%.3fm · 구간 길이 %.3fm · 원래 STA 유지" % [result.begin,result.end,result.end-result.begin],"DXF R12 ASCII / H:V 1:1 / Z=0 배치 / CAD 단위 m", "녹색 KROAD_SEC_GROUND / 노랑 KROAD_SEC_DESIGN", "회색 KROAD_SEC_AXIS / 흰색 KROAD_SEC_TEXT", "DATUM: 각 횡단 기준표고 · Y좌표=배치기준+표고−DATUM", "결측은 선을 끊고 단독 유효 표본은 POINT · 사면 폐합/수량 계산 없음", "", "STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각 | 원지반/설계 유효(%)"])
  var visible=result.sections.filter(func(section):return not missing_only.button_pressed or matches_missing(section,result.lateral_count,missing_type.selected))
- for section in visible:lines.append("%.3f | %.3f | %d / %d | %d / %d" % [section.station,section.datum,section.ground_missing,section.design_missing,section.ground_runs,section.design_runs])
+ for section in visible:lines.append("%.3f | %.3f | %d / %d | %d / %d | %.1f / %.1f" % [section.station,section.datum,section.ground_missing,section.design_missing,section.ground_runs,section.design_runs,valid_percent(section.ground_missing,result.lateral_count),valid_percent(section.design_missing,result.lateral_count)])
  if result.grid_step>0:lines.insert(0,"격자 %.2fm · %d선 · GRID/GRID_TEXT 별도 레이어 · 눈금=실제 표고" % [result.grid_step,result.grid_lines])
  if result.extras_only:lines.insert(0,"추가 STA만 출력 · 구간 양 끝/정규 측점/주요 경계 자동 추가 없음")
  lines.insert(0,"출력선: 원지반 %s / 설계선 %s / 축선 %s" % [on_off(export_ground.button_pressed),on_off(export_design.button_pressed),on_off(export_axes.button_pressed)])
@@ -381,7 +381,7 @@ func render_result():
  selected_summary.text="선택 횡단: 없음"
  setting_table=true
  row_stations.clear()
- var first_row=lines.find("STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각")+1
+ var first_row=lines.find("STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각 | 원지반/설계 유효(%)")+1
  for i in range(visible.size()):row_stations[first_row+i]=visible[i].station
  table.text="\n".join(lines)
  setting_table=false
@@ -503,6 +503,7 @@ func select_row():
   for section in result.sections:
    if section.station==station:
     selected_summary.text="선택 STA %.3fm · DATUM %.3fm · 원지반 결측 %d/%d · 설계 결측 %d/%d · 도형 조각 %d/%d" % [station,section.datum,section.ground_missing,result.lateral_count,section.design_missing,result.lateral_count,section.ground_runs,section.design_runs]
+    selected_summary.text+=" · 유효 원지반 %.1f%% / 설계 %.1f%%" % [valid_percent(section.ground_missing,result.lateral_count),valid_percent(section.design_missing,result.lateral_count)]
     break
   station_selected.emit(station)
  else:selected_summary.text="선택 횡단: 없음"
@@ -660,11 +661,11 @@ func save_result_csv(path):
   status.text="결과 CSV 파일을 열지 못했습니다."
   return false
  file.store_buffer(PackedByteArray([239,187,191]))
- file.store_csv_line(PackedStringArray(["station_m","datum_m","samples_per_section","ground_missing","design_missing","ground_runs","design_runs","list_filter"]))
+ file.store_csv_line(PackedStringArray(["station_m","datum_m","samples_per_section","ground_missing","design_missing","ground_runs","design_runs","list_filter","ground_valid_pct","design_valid_pct"]))
  var filter_name=missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체"
  for section in result.sections:
   if missing_only.button_pressed and not matches_missing(section,result.lateral_count,missing_type.selected):continue
-  file.store_csv_line(PackedStringArray([str(section.station),str(section.datum),str(result.lateral_count),str(section.ground_missing),str(section.design_missing),str(section.ground_runs),str(section.design_runs),filter_name]))
+  file.store_csv_line(PackedStringArray([str(section.station),str(section.datum),str(result.lateral_count),str(section.ground_missing),str(section.design_missing),str(section.ground_runs),str(section.design_runs),filter_name,str(valid_percent(section.ground_missing,result.lateral_count)),str(valid_percent(section.design_missing,result.lateral_count))]))
  file.flush()
  var error=file.get_error()
  file.close()
@@ -674,3 +675,7 @@ func save_result_csv(path):
   return false
  status.text="결과 CSV 저장 완료: "+path
  return true
+
+
+static func valid_percent(missing,total):
+ return 0.0 if total<=0 else 100.0*(total-missing)/total
