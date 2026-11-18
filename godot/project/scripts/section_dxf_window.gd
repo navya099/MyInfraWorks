@@ -6,6 +6,7 @@ var review_begin: LineEdit
 var review_end: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var details_only: CheckBox
 var result_sort: OptionButton
 var wrap_results: CheckBox
 var default_result_font=14
@@ -282,6 +283,10 @@ func _ready():
  wrap_results.toggled.connect(func(enabled):
   table.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY if enabled else TextEdit.LINE_WRAPPING_NONE)
  view_row.add_child(wrap_results)
+ details_only=CheckBox.new()
+ details_only.text="상세 목록만 표시"
+ details_only.toggled.connect(func(_enabled):render_result())
+ view_row.add_child(details_only)
  result_sort=OptionButton.new()
  for label in ["STA 순","원지반 유효 낮은 순","설계 유효 낮은 순"]:result_sort.add_item(label)
  result_sort.item_selected.connect(func(_index):render_result())
@@ -426,6 +431,9 @@ func render_result():
  if not review_range.is_empty():lines.insert(0,"목록 STA 범위 %.3f~%.3fm · DXF 출력 범위와 별도" % [review_range.begin,review_range.end])
  lines.insert(0,"정렬: "+result_sort.get_item_text(result_sort.selected))
  lines.insert(0,"목록: %s · 표시 %d / 전체 %d횡단 · DXF는 전체 횡단 출력" % ["결측만 / "+missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체",visible.size(),result.sections.size()])
+ if details_only.button_pressed:
+  var header=lines.find("STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각 | 원지반/설계 유효(%)")
+  lines=lines.slice(header)
  selected_summary.text="선택 횡단: 없음"
  setting_table=true
  row_stations.clear()

@@ -204,6 +204,15 @@ func run():
  assert(app.section_dxf.result_sort.selected==0 and app.section_dxf.review_range.is_empty())
  assert(app.section_dxf.displayed_sections().size()==app.section_dxf.result.sections.size())
  assert(app.section_dxf.result.text==filter_dxf and app.section_dxf.input_signature()==filter_signature)
+ var full_details_text=app.section_dxf.table.text
+ var details_dxf=app.section_dxf.result.text
+ app.section_dxf.details_only.button_pressed=true
+ assert(app.section_dxf.table.text.begins_with("STA(m) | DATUM(m)"))
+ assert(app.section_dxf.table.get_line_count()==app.section_dxf.displayed_sections().size()+1)
+ assert(app.section_dxf.move_result(1))
+ assert(app.section_dxf.result.text==details_dxf)
+ app.section_dxf.details_only.button_pressed=false
+ assert(app.section_dxf.table.text==full_details_text)
  var original_dxf=app.section_dxf.result.text
  var original_rows=app.section_dxf.table.text
  app.section_dxf.missing_only.button_pressed=true
