@@ -178,6 +178,17 @@ func run():
  assert(app.section_dxf.find_worst_result(false))
  assert(app.section_dxf.result.text==dxf_before_worst)
  app.model.station=station_before_worst
+ var review_target=app.section_dxf.result.sections[-1].station
+ app.section_dxf.review_begin.text=str(review_target)
+ app.section_dxf.review_end.text=str(review_target)
+ assert(app.section_dxf.apply_review_range())
+ assert(app.section_dxf.displayed_sections().size()==1)
+ app.section_dxf.review_begin.text="NaN"
+ assert(not app.section_dxf.apply_review_range())
+ assert(app.section_dxf.displayed_sections().size()==1)
+ app.section_dxf.review_begin.text=""
+ app.section_dxf.review_end.text=""
+ assert(app.section_dxf.apply_review_range())
  var original_dxf=app.section_dxf.result.text
  var original_rows=app.section_dxf.table.text
  app.section_dxf.missing_only.button_pressed=true

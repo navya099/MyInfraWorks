@@ -1,6 +1,9 @@
 extends "res://scripts/dxf_window.gd"
 const CrossDxf=preload("res://scripts/section_dxf_geometry.gd")
 var search_input: LineEdit
+var review_range={}
+var review_begin: LineEdit
+var review_end: LineEdit
 var navigation_buttons=[]
 var row_stations={}
 var result_sort: OptionButton
@@ -292,6 +295,18 @@ func _ready():
  root.add_child(filter_row)
  root.move_child(filter_row,view_row.get_index()+1)
  for control in [missing_only,missing_type,result_sort]:control.reparent(filter_row)
+ review_begin=LineEdit.new()
+ review_end=LineEdit.new()
+ for input in [review_begin,review_end]:
+  input.custom_minimum_size.x=110
+  input.max_length=32
+  filter_row.add_child(input)
+ review_begin.placeholder_text="표시 시작 STA"
+ review_end.placeholder_text="표시 끝 STA"
+ var apply_range=Button.new()
+ apply_range.text="목록 범위 적용"
+ apply_range.pressed.connect(apply_review_range)
+ filter_row.add_child(apply_range)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -403,6 +418,7 @@ func render_result():
  lines.insert(0,missing_summary(result.sections,result.lateral_count))
  lines.insert(0,coverage_summary(result.sections,result.lateral_count))
  lines.insert(0,missing_ranges_summary(result.sections))
+ if not review_range.is_empty():lines.insert(0,"목록 STA 범위 %.3f~%.3fm · DXF 출력 범위와 별도" % [review_range.begin,review_range.end])
  lines.insert(0,"정렬: "+result_sort.get_item_text(result_sort.selected))
  lines.insert(0,"목록: %s · 표시 %d / 전체 %d횡단 · DXF는 전체 횡단 출력" % ["결측만 / "+missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체",visible.size(),result.sections.size()])
  selected_summary.text="선택 횡단: 없음"
@@ -433,6 +449,9 @@ func export_csv(path):
 
 
 func reset_settings():
+ review_range={}
+ review_begin.text=""
+ review_end.text=""
  result_sort.select(0)
  missing_type.select(0)
  missing_type.disabled=true
@@ -704,6 +723,7 @@ func save_result_csv(path):
  file.store_buffer(PackedByteArray([239,187,191]))
  file.store_csv_line(PackedStringArray(["station_m","datum_m","samples_per_section","ground_missing","design_missing","ground_runs","design_runs","list_filter","ground_valid_pct","design_valid_pct"]))
  var filter_name=missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체"
+ if not review_range.is_empty():filter_name+="; STA %.9f~%.9f" % [review_range.begin,review_range.end]
  for section in displayed_sections():
   file.store_csv_line(PackedStringArray([str(section.station),str(section.datum),str(result.lateral_count),str(section.ground_missing),str(section.design_missing),str(section.ground_runs),str(section.design_runs),filter_name,str(valid_percent(section.ground_missing,result.lateral_count)),str(valid_percent(section.design_missing,result.lateral_count))]))
  file.flush()
@@ -723,6 +743,7 @@ static func valid_percent(missing,total):
 
 func displayed_sections():
  var visible=result.sections.filter(func(section):return not missing_only.button_pressed or matches_missing(section,result.lateral_count,missing_type.selected))
+ if not review_range.is_empty():visible=visible.filter(func(section):return section.station>=review_range.begin and section.station<=review_range.end)
  return sorted_sections(visible,result_sort.selected)
 
 static func sorted_sections(sections,mode):
@@ -791,3 +812,16 @@ static func missing_ranges_summary(sections):
   var group=ranges[i]
   labels.append("%.3f~%.3fm (%d횡단)" % [group.begin,group.end,group.count])
  return "연속 결측 측점 묶음 %d개: %s%s · STA 순 인접 산출 횡단 기준, 측점 사이 지형은 미검사" % [ranges.size(),", ".join(labels)," 외 %d개" % (ranges.size()-5) if ranges.size()>5 else ""]
+
+
+func apply_review_range():
+ var begin=review_begin.text.strip_edges()
+ var finish=review_end.text.strip_edges()
+ if begin.is_empty() and finish.is_empty():
+  review_range={}
+ elif not begin.is_valid_float() or not finish.is_valid_float() or not is_finite(begin.to_float()) or not is_finite(finish.to_float()) or begin.to_float()<0 or finish.to_float()<begin.to_float():
+  status.text="목록 범위는 0 이상 시작≤끝 STA로 입력하세요. 빈 두 칸은 전체입니다."
+  return false
+ else:review_range={"begin":begin.to_float(),"end":finish.to_float()}
+ render_result()
+ return true
