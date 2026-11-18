@@ -277,6 +277,10 @@ func run():
  assert(app.section_dxf.sorted_sections(unsorted,1).map(func(v):return v.station)==[30.0,10.0,20.0])
  assert(app.section_dxf.sorted_sections(unsorted,2).map(func(v):return v.station)==[10.0,30.0,20.0])
  assert(unsorted[0].station==20.0)
+ var coverage_stats=app.section_dxf.coverage_summary([{"ground_missing":0,"design_missing":10},{"ground_missing":5,"design_missing":0}],10)
+ assert("원지반 평균 75.0% / 최저 50.0%" in coverage_stats)
+ assert("설계 평균 50.0% / 최저 0.0%" in coverage_stats)
+ assert("산출 횡단 없음" in app.section_dxf.coverage_summary([],10))
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]

@@ -383,12 +383,13 @@ func render_result():
  lines.insert(2,"글자 높이: %s · DATUM: %s" % ["자동" if text_height_input.value==0 else "%.2fm" % text_height_input.value,"공통 %.3fm" % common_datum_input.value if common_datum_enabled.button_pressed else "횡단별 자동"])
  lines.insert(3,"반폭 %.2fm · 횡단 간격 %.2fm · 배치 %d열 · 결측 통계는 원지반/설계 전체 기준" % [result.half,result.lateral_step,result.columns])
  lines.insert(0,missing_summary(result.sections,result.lateral_count))
+ lines.insert(0,coverage_summary(result.sections,result.lateral_count))
  lines.insert(0,"정렬: "+result_sort.get_item_text(result_sort.selected))
  lines.insert(0,"목록: %s · 표시 %d / 전체 %d횡단 · DXF는 전체 횡단 출력" % ["결측만 / "+missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체",visible.size(),result.sections.size()])
  selected_summary.text="선택 횡단: 없음"
  setting_table=true
  row_stations.clear()
- var first_row=lines.find("STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각 | 원지반/설계 유효(%)")+1
+ var first_row="\n".join(lines).split("\n").find("STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각 | 원지반/설계 유효(%)")+1
  for i in range(visible.size()):row_stations[first_row+i]=visible[i].station
  table.text="\n".join(lines)
  var restored=false
@@ -713,3 +714,19 @@ static func sorted_sections(sections,mode):
    if a[key]!=b[key]:return a[key]>b[key]
   return a.station<b.station)
  return ordered
+
+
+static func coverage_summary(sections,total):
+ if sections.is_empty():return "전체 유효 비율: 산출 횡단 없음"
+ var ground_sum=0.0
+ var design_sum=0.0
+ var ground_min=100.0
+ var design_min=100.0
+ for section in sections:
+  var ground=valid_percent(section.ground_missing,total)
+  var design=valid_percent(section.design_missing,total)
+  ground_sum+=ground
+  design_sum+=design
+  ground_min=min(ground_min,ground)
+  design_min=min(design_min,design)
+ return "전체 %d횡단 유효 표본 비율 · 원지반 평균 %.1f%% / 최저 %.1f%% · 설계 평균 %.1f%% / 최저 %.1f%% (필터 전 전체 기준)" % [sections.size(),ground_sum/sections.size(),ground_min,design_sum/sections.size(),design_min]
