@@ -307,6 +307,10 @@ func _ready():
  apply_range.text="목록 범위 적용"
  apply_range.pressed.connect(apply_review_range)
  filter_row.add_child(apply_range)
+ var reset_filter=Button.new()
+ reset_filter.text="목록 필터 초기화"
+ reset_filter.pressed.connect(reset_review_filters)
+ filter_row.add_child(reset_filter)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -825,3 +829,15 @@ func apply_review_range():
  else:review_range={"begin":begin.to_float(),"end":finish.to_float()}
  render_result()
  return true
+
+
+func reset_review_filters():
+ missing_only.set_pressed_no_signal(false)
+ missing_type.select(0)
+ missing_type.disabled=true
+ result_sort.select(0)
+ review_range={}
+ review_begin.text=""
+ review_end.text=""
+ render_result()
+ if not result.is_empty():status.text="목록 필터를 초기화했습니다. 전체 결과를 STA 순으로 표시합니다."
