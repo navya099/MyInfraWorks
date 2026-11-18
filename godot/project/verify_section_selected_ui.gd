@@ -255,6 +255,16 @@ func run():
  assert(app.section_dxf.valid_percent(0,10)==100)
  assert(app.section_dxf.valid_percent(3,10)==70)
  assert(app.section_dxf.valid_percent(10,10)==0)
+ var coverage_sample={"ground_missing":1,"design_missing":0}
+ assert(not app.section_dxf.matches_missing(coverage_sample,10,6))
+ assert(app.section_dxf.matches_missing(coverage_sample,10,7))
+ coverage_sample.ground_missing=2
+ assert(app.section_dxf.matches_missing(coverage_sample,10,6))
+ assert(not app.section_dxf.matches_missing(coverage_sample,10,5))
+ coverage_sample.ground_missing=5
+ assert(not app.section_dxf.matches_missing(coverage_sample,10,4))
+ coverage_sample.ground_missing=6
+ assert(app.section_dxf.matches_missing(coverage_sample,10,4))
  var valid=[{"station":0.0,"ground_missing":0,"design_missing":0}]
  assert("모든 횡단" in app.section_dxf.missing_summary(valid,10))
  var gaps=[{"station":12.5,"ground_missing":10,"design_missing":2},{"station":20.0,"ground_missing":0,"design_missing":10}]

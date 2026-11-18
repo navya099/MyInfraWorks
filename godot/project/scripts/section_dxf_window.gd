@@ -70,7 +70,7 @@ func _ready():
  missing_only.toggled.connect(func(_enabled):render_result())
  settings.add_child(missing_only)
  missing_type=OptionButton.new()
- for label in ["모든 결측","원지반 결측","설계 결측","전체 표본 결측"]:missing_type.add_item(label)
+ for label in ["모든 결측","원지반 결측","설계 결측","전체 표본 결측","유효 50% 미만","유효 75% 미만","유효 90% 미만","유효 100% 미만"]:missing_type.add_item(label)
  missing_type.disabled=true
  missing_type.item_selected.connect(func(_index):render_result())
  missing_only.toggled.connect(func(enabled):missing_type.disabled=not enabled)
@@ -554,6 +554,9 @@ func find_current_result():
 
 
 static func matches_missing(section,lateral_count,mode):
+ if mode>=4 and mode<=7:
+  var threshold=[50.0,75.0,90.0,100.0][mode-4]
+  return min(valid_percent(section.ground_missing,lateral_count),valid_percent(section.design_missing,lateral_count))<threshold
  match mode:
   1:return section.ground_missing>0
   2:return section.design_missing>0

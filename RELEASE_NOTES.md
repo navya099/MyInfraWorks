@@ -1,5 +1,5 @@
-# MyInfraWorks 0.70
+# MyInfraWorks 0.71
 
-횡단 결과 상세 행과 선택 요약에 원지반·설계 **유효 표본 비율(%)**을 표시합니다. (전체 표본 수−결측 수)/전체 표본 수 기준이며 면적 비율이 아닙니다. CSV에는 기존 열 뒤에 ground_valid_pct, design_valid_pct를 추가합니다. 결과 복사·TXT에도 표시되며 계산과 DXF 형상은 유지합니다.
+결측 필터에 **유효 50/75/90/100% 미만**을 추가했습니다. 원지반 또는 설계 한쪽이라도 해당 유효 표본 비율 미만이면 표시합니다. 기준과 같은 비율은 제외하며 화면 반올림 전 값으로 판정합니다. 목록·탐색·복사·TXT·CSV에 반영하고 DXF 출력 대상은 유지합니다.
 
-개발 브랜치: feature/section-valid-coverage
+개발 브랜치: feature/section-coverage-filter
