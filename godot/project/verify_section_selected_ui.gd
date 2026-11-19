@@ -352,4 +352,17 @@ func run():
  print("PASS COPY: result text, stale input rejection and copy availability")
  print("PASS RESET: defaults, control states, stale worker rejection, recalculation and immutable design")
  print("PASS SECTION SELECTED UI: empty rejection, current station single save, disabled/restored controls, stale result/export rejection, immutable design/history")
+ app.section_dxf.reset_settings()
+ app.section_dxf.start_calculation()
+ while app.section_dxf.worker!=null:await process_frame
+ assert(app.section_dxf.result.sections.size()>1)
+ app.section_dxf.review_begin.text="1000"
+ app.section_dxf.review_end.text="1000"
+ assert(app.section_dxf.apply_review_range())
+ assert(not app.section_dxf.recalculate_review_button.disabled)
+ assert(app.section_dxf.recalculate_review())
+ while app.section_dxf.worker!=null:await process_frame
+ assert(app.section_dxf.result.sections.size()==1 and app.section_dxf.result.sections[0].station==1000)
+ assert(app.section_dxf.extras_only.button_pressed)
+ print("PASS REVIEW RECALCULATION")
  quit(0)

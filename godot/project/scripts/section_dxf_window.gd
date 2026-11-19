@@ -6,6 +6,7 @@ var review_begin: LineEdit
 var review_end: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var recalculate_review_button: Button
 var full_report_text=""
 var report_include_summary: CheckBox
 var details_only: CheckBox
@@ -302,6 +303,11 @@ func _ready():
  report_include_summary.text="TXT 전체 요약 포함"
  report_include_summary.button_pressed=true
  export_row.add_child(report_include_summary)
+ recalculate_review_button=Button.new()
+ recalculate_review_button.text="표시 STA로 재산출"
+ recalculate_review_button.disabled=true
+ recalculate_review_button.pressed.connect(recalculate_review)
+ export_row.add_child(recalculate_review_button)
  var filter_row=HBoxContainer.new()
  root.add_child(filter_row)
  root.move_child(filter_row,view_row.get_index()+1)
@@ -458,6 +464,7 @@ func render_result():
  if not restored:table.set_caret_line(0)
  setting_table=false
  if restored:select_row(false)
+ recalculate_review_button.disabled=visible.is_empty() or visible.size()>100
  for button in navigation_buttons:button.disabled=row_stations.is_empty()
 
 
@@ -508,6 +515,7 @@ func on_off(enabled):
 
 
 func invalidate():
+ if recalculate_review_button!=null:recalculate_review_button.disabled=true
  full_report_text=""
  if selected_summary!=null:selected_summary.text="선택 횡단: 없음"
  for button in navigation_buttons:button.disabled=true
@@ -858,3 +866,20 @@ func reset_review_filters():
  review_end.text=""
  render_result()
  if not result.is_empty():status.text="목록 필터를 초기화했습니다. 전체 결과를 STA 순으로 표시합니다."
+
+
+func recalculate_review():
+ if result_text().is_empty():return false
+ var sections=sorted_sections(displayed_sections(),0)
+ if sections.is_empty() or sections.size()>100:return false
+ var stations=PackedStringArray()
+ for section in sections:
+  stations.append(JSON.stringify(section.station,"",true,true))
+ var station_list=", ".join(stations)
+ if station_list.length()>extra_input.max_length:
+  status.text="표시 STA 목록이 입력 가능한 길이를 넘었습니다."
+  return false
+ extra_input.text=station_list
+ extras_only.button_pressed=true
+ start_calculation()
+ return worker!=null
