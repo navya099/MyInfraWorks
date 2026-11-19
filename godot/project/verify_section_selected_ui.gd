@@ -380,4 +380,18 @@ func run():
  while app.section_dxf.worker!=null:await process_frame
  assert(app.section_dxf.result.sections.size()==1 and app.section_dxf.result.sections[0].station==chosen_station)
  print("PASS SELECTED STATION RECALCULATION")
+ app.section_dxf.reset_settings()
+ app.section_dxf.start_calculation()
+ while app.section_dxf.worker!=null:await process_frame
+ var rows=app.section_dxf.row_stations.keys()
+ assert(rows.size()>2)
+ for collection_row in [rows[0],rows[-1]]:
+  app.section_dxf.table.set_caret_line(collection_row)
+  assert(app.section_dxf.collect_selected_station())
+  assert(not app.section_dxf.collect_selected_station())
+ assert(app.section_dxf.result.sections.size()>2)
+ assert(app.section_dxf.calculate_collection())
+ while app.section_dxf.worker!=null:await process_frame
+ assert(app.section_dxf.result.sections.map(func(section):return section.station)==app.section_dxf.collected_stations)
+ print("PASS STATION COLLECTION")
  quit(0)

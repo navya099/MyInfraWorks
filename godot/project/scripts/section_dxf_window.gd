@@ -6,6 +6,10 @@ var review_begin: LineEdit
 var review_end: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var collection_revision=-1
+var collected_stations: Array[float]=[]
+var collection_button: Button
+var apply_collection_button: Button
 var recalculate_selected_button: Button
 var recalculate_review_button: Button
 var full_report_text=""
@@ -314,6 +318,22 @@ func _ready():
  recalculate_selected_button.disabled=true
  recalculate_selected_button.pressed.connect(recalculate_selected)
  export_row.add_child(recalculate_selected_button)
+ collection_button=Button.new()
+ collection_button.text="선택 STA 담기"
+ collection_button.disabled=true
+ collection_button.pressed.connect(collect_selected_station)
+ worst_row.add_child(collection_button)
+ apply_collection_button=Button.new()
+ apply_collection_button.disabled=true
+ apply_collection_button.pressed.connect(calculate_collection)
+ worst_row.add_child(apply_collection_button)
+ update_collection_button()
+ var clear_collection=Button.new()
+ clear_collection.text="담은 STA 비우기"
+ clear_collection.pressed.connect(func():
+  collected_stations.clear()
+  update_collection_button())
+ worst_row.add_child(clear_collection)
  var filter_row=HBoxContainer.new()
  root.add_child(filter_row)
  root.move_child(filter_row,view_row.get_index()+1)
@@ -470,6 +490,8 @@ func render_result():
  if not restored:table.set_caret_line(0)
  setting_table=false
  recalculate_selected_button.disabled=not restored
+ collection_button.disabled=not restored
+ update_collection_button()
  if restored:select_row(false)
  recalculate_review_button.disabled=visible.is_empty() or visible.size()>100
  for button in navigation_buttons:button.disabled=row_stations.is_empty()
@@ -483,6 +505,8 @@ func export_csv(path):
 
 
 func reset_settings():
+ collected_stations.clear()
+ update_collection_button()
  review_range={}
  review_begin.text=""
  review_end.text=""
@@ -522,6 +546,8 @@ func on_off(enabled):
 
 
 func invalidate():
+ if collection_button!=null:collection_button.disabled=true
+ if apply_collection_button!=null:apply_collection_button.disabled=true
  if recalculate_selected_button!=null:recalculate_selected_button.disabled=true
  if recalculate_review_button!=null:recalculate_review_button.disabled=true
  full_report_text=""
@@ -593,6 +619,7 @@ func select_row(navigate=true):
   return
  var row=table.get_caret_line()
  recalculate_selected_button.disabled=not row_stations.has(row)
+ collection_button.disabled=recalculate_selected_button.disabled
  if row_stations.has(row):
   var station=row_stations[row]
   for section in result.sections:
@@ -901,3 +928,34 @@ func recalculate_stations(station_values):
  extras_only.button_pressed=true
  start_calculation()
  return worker!=null
+
+
+func update_collection_button():
+ if not collected_stations.is_empty() and collection_revision!=revision_provider.call():collected_stations.clear()
+ apply_collection_button.text="담은 STA 재산출 (%d)" % collected_stations.size()
+ apply_collection_button.disabled=collected_stations.is_empty() or result.is_empty()
+
+func collect_selected_station():
+ if result_text().is_empty():return false
+ var row=table.get_caret_line()
+ if not row_stations.has(row):return false
+ var station=row_stations[row]
+ if collected_stations.has(station):
+  status.text="이미 담은 STA입니다."
+  return false
+ if collected_stations.size()>=100:
+  status.text="STA는 최대 100개까지 담을 수 있습니다."
+  return false
+ collection_revision=result_revision
+ collected_stations.append(station)
+ update_collection_button()
+ status.text="STA %.3fm을 담았습니다." % station
+ return true
+
+func calculate_collection():
+ if result_text().is_empty() or collected_stations.is_empty():return false
+ for station in collected_stations:
+  if station<result.begin or station>result.end:
+   status.text="출력 구간 밖에 담은 STA가 있습니다. 구간을 확인하거나 목록을 비우세요."
+   return false
+ return recalculate_stations(collected_stations)
