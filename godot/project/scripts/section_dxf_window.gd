@@ -6,6 +6,8 @@ var review_begin: LineEdit
 var review_end: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var full_report_text=""
+var report_include_summary: CheckBox
 var details_only: CheckBox
 var result_sort: OptionButton
 var wrap_results: CheckBox
@@ -296,6 +298,10 @@ func _ready():
  root.add_child(export_row)
  root.move_child(export_row,1)
  for control in [csv_button,copy_button,report_button,result_csv_button]:control.reparent(export_row)
+ report_include_summary=CheckBox.new()
+ report_include_summary.text="TXT 전체 요약 포함"
+ report_include_summary.button_pressed=true
+ export_row.add_child(report_include_summary)
  var filter_row=HBoxContainer.new()
  root.add_child(filter_row)
  root.move_child(filter_row,view_row.get_index()+1)
@@ -431,6 +437,7 @@ func render_result():
  if not review_range.is_empty():lines.insert(0,"목록 STA 범위 %.3f~%.3fm · DXF 출력 범위와 별도" % [review_range.begin,review_range.end])
  lines.insert(0,"정렬: "+result_sort.get_item_text(result_sort.selected))
  lines.insert(0,"목록: %s · 표시 %d / 전체 %d횡단 · DXF는 전체 횡단 출력" % ["결측만 / "+missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체",visible.size(),result.sections.size()])
+ full_report_text="\n".join(lines)
  if details_only.button_pressed:
   var header=lines.find("STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각 | 원지반/설계 유효(%)")
   lines=lines.slice(header)
@@ -501,6 +508,7 @@ func on_off(enabled):
 
 
 func invalidate():
+ full_report_text=""
  if selected_summary!=null:selected_summary.text="선택 횡단: 없음"
  for button in navigation_buttons:button.disabled=true
  row_stations.clear()
@@ -509,11 +517,11 @@ func invalidate():
  if report_button!=null:report_button.disabled=true
  if result_csv_button!=null:result_csv_button.disabled=true
 
-func result_text():
+func result_text(include_summary=false):
  if result.is_empty() or worker!=null or requested_inputs!=input_signature() or result_revision!=revision_provider.call():
   invalidate()
   return ""
- return table.text
+ return full_report_text if include_summary else table.text
 
 func copy_result():
  var content=result_text()
@@ -524,7 +532,7 @@ func copy_result():
 
 
 func save_report(path):
- var content=result_text()
+ var content=result_text(report_include_summary.button_pressed)
  if content.is_empty():return false
  var temporary=path+".tmp"
  var file=FileAccess.open(temporary,FileAccess.WRITE)

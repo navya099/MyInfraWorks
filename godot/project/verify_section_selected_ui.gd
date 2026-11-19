@@ -208,6 +208,13 @@ func run():
  var details_dxf=app.section_dxf.result.text
  app.section_dxf.details_only.button_pressed=true
  assert(app.section_dxf.table.text.begins_with("STA(m) | DATUM(m)"))
+ assert(app.section_dxf.save_report("user://full-summary-report.txt"))
+ assert("전체" in FileAccess.get_file_as_string("user://full-summary-report.txt"))
+ assert(FileAccess.get_file_as_string("user://full-summary-report.txt")==app.section_dxf.result_text(true)+"\n")
+ app.section_dxf.report_include_summary.button_pressed=false
+ assert(app.section_dxf.save_report("user://details-only-report.txt"))
+ assert(FileAccess.get_file_as_string("user://details-only-report.txt")==app.section_dxf.table.text+"\n")
+ app.section_dxf.report_include_summary.button_pressed=true
  assert(app.section_dxf.table.get_line_count()==app.section_dxf.displayed_sections().size()+1)
  assert(app.section_dxf.move_result(1))
  assert(app.section_dxf.result.text==details_dxf)
