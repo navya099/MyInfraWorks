@@ -8,6 +8,8 @@ var navigation_buttons=[]
 var row_stations={}
 var collection_revision=-1
 var collected_stations: Array[float]=[]
+var collection_picker: OptionButton
+var remove_collection_button: Button
 var collection_button: Button
 var apply_collection_button: Button
 var recalculate_selected_button: Button
@@ -327,13 +329,20 @@ func _ready():
  apply_collection_button.disabled=true
  apply_collection_button.pressed.connect(calculate_collection)
  worst_row.add_child(apply_collection_button)
- update_collection_button()
  var clear_collection=Button.new()
  clear_collection.text="담은 STA 비우기"
  clear_collection.pressed.connect(func():
   collected_stations.clear()
   update_collection_button())
  worst_row.add_child(clear_collection)
+ collection_picker=OptionButton.new()
+ collection_picker.tooltip_text="담은 STA 목록 (m)"
+ worst_row.add_child(collection_picker)
+ remove_collection_button=Button.new()
+ remove_collection_button.text="담은 STA 제거"
+ remove_collection_button.pressed.connect(remove_collected_station)
+ worst_row.add_child(remove_collection_button)
+ update_collection_button()
  var filter_row=HBoxContainer.new()
  root.add_child(filter_row)
  root.move_child(filter_row,view_row.get_index()+1)
@@ -555,6 +564,7 @@ func invalidate():
  for button in navigation_buttons:button.disabled=true
  row_stations.clear()
  super.invalidate()
+ if collection_picker!=null:update_collection_button()
  if copy_button!=null:copy_button.disabled=true
  if report_button!=null:report_button.disabled=true
  if result_csv_button!=null:result_csv_button.disabled=true
@@ -934,6 +944,24 @@ func update_collection_button():
  if not collected_stations.is_empty() and collection_revision!=revision_provider.call():collected_stations.clear()
  apply_collection_button.text="담은 STA 재산출 (%d)" % collected_stations.size()
  apply_collection_button.disabled=collected_stations.is_empty() or result.is_empty()
+ var selected_index=collection_picker.selected
+ collection_picker.clear()
+ var empty=collected_stations.is_empty()
+ if empty:
+  collection_picker.add_item("담은 STA 없음")
+ else:
+  for station in collected_stations:
+   collection_picker.add_item(JSON.stringify(station,"",true,true)+" m")
+ collection_picker.select(clampi(selected_index,0,collection_picker.item_count-1))
+ collection_picker.disabled=empty
+ remove_collection_button.disabled=empty
+
+func remove_collected_station():
+ var index=collection_picker.selected
+ if index<0 or index>=collected_stations.size():return
+ collected_stations.remove_at(index)
+ update_collection_button()
+
 
 func collect_selected_station():
  if result_text().is_empty():return false

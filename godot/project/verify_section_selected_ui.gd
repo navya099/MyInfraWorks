@@ -394,4 +394,16 @@ func run():
  while app.section_dxf.worker!=null:await process_frame
  assert(app.section_dxf.result.sections.map(func(section):return section.station)==app.section_dxf.collected_stations)
  print("PASS STATION COLLECTION")
+ assert(app.section_dxf.collection_picker.item_count==2)
+ var remaining_station=app.section_dxf.collected_stations[1]
+ app.section_dxf.collection_picker.select(0)
+ app.section_dxf.remove_collection_button.pressed.emit()
+ assert(app.section_dxf.collected_stations==[remaining_station])
+ assert(app.section_dxf.result.sections.size()==2)
+ assert(app.section_dxf.calculate_collection())
+ while app.section_dxf.worker!=null:await process_frame
+ assert(app.section_dxf.result.sections.size()==1 and app.section_dxf.result.sections[0].station==remaining_station)
+ app.section_dxf.remove_collection_button.pressed.emit()
+ assert(app.section_dxf.collection_picker.disabled and app.section_dxf.apply_collection_button.disabled)
+ print("PASS COLLECTION EDIT")
  quit(0)
