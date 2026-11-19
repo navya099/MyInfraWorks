@@ -365,4 +365,19 @@ func run():
  assert(app.section_dxf.result.sections.size()==1 and app.section_dxf.result.sections[0].station==1000)
  assert(app.section_dxf.extras_only.button_pressed)
  print("PASS REVIEW RECALCULATION")
+ app.section_dxf.reset_settings()
+ app.section_dxf.start_calculation()
+ while app.section_dxf.worker!=null:await process_frame
+ assert(app.section_dxf.result.sections.size()>1)
+ assert(app.section_dxf.recalculate_selected_button.disabled)
+ assert(not app.section_dxf.recalculate_selected())
+ var selected_line=app.section_dxf.row_stations.keys()[1]
+ var chosen_station=app.section_dxf.row_stations[selected_line]
+ app.section_dxf.table.set_caret_line(selected_line)
+ app.section_dxf.select_row(false)
+ assert(not app.section_dxf.recalculate_selected_button.disabled)
+ app.section_dxf.recalculate_selected_button.pressed.emit()
+ while app.section_dxf.worker!=null:await process_frame
+ assert(app.section_dxf.result.sections.size()==1 and app.section_dxf.result.sections[0].station==chosen_station)
+ print("PASS SELECTED STATION RECALCULATION")
  quit(0)
