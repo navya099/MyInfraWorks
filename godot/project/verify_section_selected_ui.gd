@@ -462,4 +462,13 @@ func run():
  app.section_dxf.reset_review_filters()
  assert(not app.section_dxf.uncollected_only.button_pressed)
  print("PASS UNCOLLECTED STATION FILTER")
+ assert(app.section_dxf.copy_collection_button.disabled)
+ assert(not app.section_dxf.copy_collected_stations())
+ assert(app.section_dxf.format_station_list([100.125,200.25])=="100.125, 200.25")
+ app.section_dxf.table.set_caret_line(app.section_dxf.row_stations.keys()[0])
+ assert(app.section_dxf.collect_selected_station())
+ assert(not app.section_dxf.copy_collection_button.disabled)
+ if DisplayServer.get_name()!="headless":
+  assert(app.section_dxf.copy_collected_stations())
+  assert(DisplayServer.clipboard_get()==app.section_dxf.format_station_list(app.section_dxf.collected_stations))
  quit(0)

@@ -9,6 +9,7 @@ var row_stations={}
 var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
+var copy_collection_button: Button
 var collection_picker: OptionButton
 var remove_collection_button: Button
 var remove_displayed_button: Button
@@ -361,6 +362,10 @@ func _ready():
  remove_collection_button.text="담은 STA 제거"
  remove_collection_button.pressed.connect(remove_collected_station)
  worst_row.add_child(remove_collection_button)
+ copy_collection_button=Button.new()
+ copy_collection_button.text="담은 STA 복사"
+ copy_collection_button.pressed.connect(copy_collected_stations)
+ worst_row.add_child(copy_collection_button)
  update_collection_button()
  var filter_row=HBoxContainer.new()
  root.add_child(filter_row)
@@ -971,11 +976,14 @@ func recalculate_selected():
  if not row_stations.has(row):return false
  return recalculate_stations([row_stations[row]])
 
-func recalculate_stations(station_values):
+static func format_station_list(station_values):
  var stations=PackedStringArray()
  for station in station_values:
   stations.append(JSON.stringify(station,"",true,true))
- var station_list=", ".join(stations)
+ return ", ".join(stations)
+
+func recalculate_stations(station_values):
+ var station_list=format_station_list(station_values)
  if station_list.length()>extra_input.max_length:
   status.text="STA 목록이 입력 가능한 길이를 넘었습니다."
   return false
@@ -1005,6 +1013,7 @@ func update_collection_button():
     has_visible_match=true
     break
  remove_displayed_button.disabled=not has_visible_match
+ copy_collection_button.disabled=empty
  collection_picker.disabled=empty
  remove_collection_button.disabled=empty
  collection_jump_button.disabled=empty
@@ -1092,3 +1101,11 @@ func refresh_collection_view():
   render_result()
  else:
   update_collection_button()
+
+
+func copy_collected_stations():
+ update_collection_button()
+ if collected_stations.is_empty():return false
+ DisplayServer.clipboard_set(format_station_list(collected_stations))
+ status.text="담은 STA %d개를 복사했습니다." % collected_stations.size()
+ return true
