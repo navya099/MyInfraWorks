@@ -471,4 +471,11 @@ func run():
  if DisplayServer.get_name()!="headless":
   assert(app.section_dxf.copy_collected_stations())
   assert(DisplayServer.clipboard_get()==app.section_dxf.format_station_list(app.section_dxf.collected_stations))
+ var paste_before=app.section_dxf.collected_stations.duplicate()
+ assert(not app.section_dxf.paste_collected_stations("20, bad"))
+ assert(not app.section_dxf.paste_collected_stations("20, -1"))
+ assert(app.section_dxf.collected_stations==paste_before)
+ assert(app.section_dxf.paste_collected_stations("20.125, 20.125, 30"))
+ assert(app.section_dxf.collected_stations.slice(paste_before.size())==[20.125,30.0])
+ print("PASS STATION PASTE")
  quit(0)

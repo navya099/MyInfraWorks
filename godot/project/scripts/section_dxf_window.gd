@@ -366,6 +366,10 @@ func _ready():
  copy_collection_button.text="담은 STA 복사"
  copy_collection_button.pressed.connect(copy_collected_stations)
  worst_row.add_child(copy_collection_button)
+ var paste_button=Button.new()
+ paste_button.text="STA 붙여넣기"
+ paste_button.pressed.connect(func():paste_collected_stations(DisplayServer.clipboard_get()))
+ worst_row.add_child(paste_button)
  update_collection_button()
  var filter_row=HBoxContainer.new()
  root.add_child(filter_row)
@@ -1108,4 +1112,32 @@ func copy_collected_stations():
  if collected_stations.is_empty():return false
  DisplayServer.clipboard_set(format_station_list(collected_stations))
  status.text="담은 STA %d개를 복사했습니다." % collected_stations.size()
+ return true
+
+
+func paste_collected_stations(content):
+ if result_text().is_empty():
+  status.text="횡단을 산출한 뒤 STA를 붙여넣으세요."
+  return false
+ var parsed=CrossDxf.parse_extra(content)
+ if not parsed.ok:
+  status.text=parsed.error
+  return false
+ var additions: Array[float]=[]
+ for station in parsed.stations:
+  if station<result.begin or station>result.end:
+   status.text="출력 구간 밖 STA가 있습니다."
+   return false
+  if not collected_stations.has(station) and not additions.has(station):
+   additions.append(station)
+ if additions.is_empty():
+  status.text="새로 담을 STA가 없습니다."
+  return false
+ if collected_stations.size()+additions.size()>100:
+  status.text="담은 STA는 최대 100개입니다."
+  return false
+ collection_revision=result_revision
+ collected_stations.append_array(additions)
+ refresh_collection_view()
+ status.text="STA %d개를 붙여넣었습니다." % additions.size()
  return true
