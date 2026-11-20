@@ -6,6 +6,8 @@ var review_begin: LineEdit
 var review_end: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var collection_before_edit=null
+var undo_collection_button: Button
 var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
@@ -348,6 +350,8 @@ func _ready():
  var clear_collection=Button.new()
  clear_collection.text="담은 STA 비우기"
  clear_collection.pressed.connect(func():
+  if collected_stations.is_empty():return
+  remember_collection()
   collected_stations.clear()
   refresh_collection_view())
  worst_row.add_child(clear_collection)
@@ -370,6 +374,10 @@ func _ready():
  paste_button.text="STA 붙여넣기"
  paste_button.pressed.connect(func():paste_collected_stations(DisplayServer.clipboard_get()))
  worst_row.add_child(paste_button)
+ undo_collection_button=Button.new()
+ undo_collection_button.text="STA 편집 되돌리기"
+ undo_collection_button.pressed.connect(undo_collection_edit)
+ worst_row.add_child(undo_collection_button)
  update_collection_button()
  var filter_row=HBoxContainer.new()
  root.add_child(filter_row)
@@ -557,6 +565,7 @@ func export_csv(path):
 
 
 func reset_settings():
+ collection_before_edit=null
  collected_only.set_pressed_no_signal(false)
  uncollected_only.set_pressed_no_signal(false)
  collected_stations.clear()
@@ -998,7 +1007,10 @@ func recalculate_stations(station_values):
 
 
 func update_collection_button():
- if not collected_stations.is_empty() and collection_revision!=revision_provider.call():collected_stations.clear()
+ if collection_revision!=revision_provider.call():
+  collected_stations.clear()
+  collection_before_edit=null
+ undo_collection_button.disabled=collection_before_edit==null
  apply_collection_button.text="담은 STA 재산출 (%d)" % collected_stations.size()
  apply_collection_button.disabled=collected_stations.is_empty() or result.is_empty()
  var selected_index=collection_picker.selected
@@ -1025,6 +1037,7 @@ func update_collection_button():
 func remove_collected_station():
  var index=collection_picker.selected
  if index<0 or index>=collected_stations.size():return
+ remember_collection()
  collected_stations.remove_at(index)
  refresh_collection_view()
 
@@ -1041,6 +1054,7 @@ func collect_selected_station():
   status.text="STA는 최대 100개까지 담을 수 있습니다."
   return false
  collection_revision=result_revision
+ remember_collection()
  collected_stations.append(station)
  refresh_collection_view()
  status.text="STA %.3fm을 담았습니다." % station
@@ -1080,6 +1094,7 @@ func collect_displayed_stations():
   status.text="담은 STA가 100개를 넘습니다. 필터 범위를 좁혀 주세요."
   return false
  collection_revision=result_revision
+ remember_collection()
  collected_stations.append_array(additions)
  refresh_collection_view()
  status.text="표시 STA %d개를 담았습니다." % additions.size()
@@ -1092,9 +1107,11 @@ func remove_displayed_stations():
  for section in displayed_sections():
   visible_stations[section.station]=true
  var previous_count=collected_stations.size()
- collected_stations=collected_stations.filter(func(station):return not visible_stations.has(station))
- var removed=previous_count-collected_stations.size()
+ var remaining=collected_stations.filter(func(station):return not visible_stations.has(station))
+ var removed=previous_count-remaining.size()
  if removed==0:return false
+ remember_collection()
+ collected_stations.assign(remaining)
  refresh_collection_view()
  status.text="담은 목록에서 표시 STA %d개를 뺐습니다." % removed
  return true
@@ -1137,7 +1154,22 @@ func paste_collected_stations(content):
   status.text="담은 STA는 최대 100개입니다."
   return false
  collection_revision=result_revision
+ remember_collection()
  collected_stations.append_array(additions)
  refresh_collection_view()
  status.text="STA %d개를 붙여넣었습니다." % additions.size()
+ return true
+
+
+func remember_collection():
+ collection_before_edit=collected_stations.duplicate()
+
+func undo_collection_edit():
+ if collection_revision!=revision_provider.call() or collection_before_edit==null:
+  update_collection_button()
+  return false
+ collected_stations.assign(collection_before_edit)
+ collection_before_edit=null
+ refresh_collection_view()
+ status.text="마지막 STA 목록 편집을 되돌렸습니다."
  return true
