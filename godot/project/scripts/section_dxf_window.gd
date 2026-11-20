@@ -8,6 +8,7 @@ var navigation_buttons=[]
 var row_stations={}
 var collection_revision=-1
 var collected_stations: Array[float]=[]
+var collection_jump_button: Button
 var collection_picker: OptionButton
 var remove_collection_button: Button
 var collection_button: Button
@@ -338,6 +339,10 @@ func _ready():
  collection_picker=OptionButton.new()
  collection_picker.tooltip_text="담은 STA 목록 (m)"
  worst_row.add_child(collection_picker)
+ collection_jump_button=Button.new()
+ collection_jump_button.text="담은 STA로 이동"
+ collection_jump_button.pressed.connect(jump_to_collected_station)
+ worst_row.add_child(collection_jump_button)
  remove_collection_button=Button.new()
  remove_collection_button.text="담은 STA 제거"
  remove_collection_button.pressed.connect(remove_collected_station)
@@ -955,6 +960,7 @@ func update_collection_button():
  collection_picker.select(clampi(selected_index,0,collection_picker.item_count-1))
  collection_picker.disabled=empty
  remove_collection_button.disabled=empty
+ collection_jump_button.disabled=empty
 
 func remove_collected_station():
  var index=collection_picker.selected
@@ -987,3 +993,15 @@ func calculate_collection():
    status.text="출력 구간 밖에 담은 STA가 있습니다. 구간을 확인하거나 목록을 비우세요."
    return false
  return recalculate_stations(collected_stations)
+
+
+func jump_to_collected_station():
+ if collection_revision!=revision_provider.call():
+  update_collection_button()
+  return false
+ var index=collection_picker.selected
+ if index<0 or index>=collected_stations.size():return false
+ var station=collected_stations[index]
+ station_selected.emit(station)
+ status.text="담은 STA %.3fm으로 이동했습니다." % station
+ return true

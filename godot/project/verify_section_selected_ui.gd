@@ -396,6 +396,10 @@ func run():
  print("PASS STATION COLLECTION")
  assert(app.section_dxf.collection_picker.item_count==2)
  var remaining_station=app.section_dxf.collected_stations[1]
+ app.section_dxf.collection_picker.select(1)
+ app.section_dxf.collection_jump_button.pressed.emit()
+ assert(is_equal_approx(app.model.station*app.model.length(),remaining_station))
+ assert(app.section_dxf.result.sections.size()==2)
  app.section_dxf.collection_picker.select(0)
  app.section_dxf.remove_collection_button.pressed.emit()
  assert(app.section_dxf.collected_stations==[remaining_station])
@@ -405,5 +409,6 @@ func run():
  assert(app.section_dxf.result.sections.size()==1 and app.section_dxf.result.sections[0].station==remaining_station)
  app.section_dxf.remove_collection_button.pressed.emit()
  assert(app.section_dxf.collection_picker.disabled and app.section_dxf.apply_collection_button.disabled)
- print("PASS COLLECTION EDIT")
+ assert(app.section_dxf.collection_jump_button.disabled and not app.section_dxf.jump_to_collected_station())
+ print("PASS COLLECTION EDIT AND NAVIGATION")
  quit(0)
