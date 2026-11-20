@@ -11,6 +11,7 @@ var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 var collection_picker: OptionButton
 var remove_collection_button: Button
+var collect_displayed_button: Button
 var collection_button: Button
 var apply_collection_button: Button
 var recalculate_selected_button: Button
@@ -326,6 +327,11 @@ func _ready():
  collection_button.disabled=true
  collection_button.pressed.connect(collect_selected_station)
  worst_row.add_child(collection_button)
+ collect_displayed_button=Button.new()
+ collect_displayed_button.text="표시 STA 모두 담기"
+ collect_displayed_button.disabled=true
+ collect_displayed_button.pressed.connect(collect_displayed_stations)
+ worst_row.add_child(collect_displayed_button)
  apply_collection_button=Button.new()
  apply_collection_button.disabled=true
  apply_collection_button.pressed.connect(calculate_collection)
@@ -505,6 +511,7 @@ func render_result():
  setting_table=false
  recalculate_selected_button.disabled=not restored
  collection_button.disabled=not restored
+ collect_displayed_button.disabled=visible.is_empty()
  update_collection_button()
  if restored:select_row(false)
  recalculate_review_button.disabled=visible.is_empty() or visible.size()>100
@@ -560,6 +567,7 @@ func on_off(enabled):
 
 
 func invalidate():
+ if collect_displayed_button!=null:collect_displayed_button.disabled=true
  if collection_button!=null:collection_button.disabled=true
  if apply_collection_button!=null:apply_collection_button.disabled=true
  if recalculate_selected_button!=null:recalculate_selected_button.disabled=true
@@ -1004,4 +1012,23 @@ func jump_to_collected_station():
  var station=collected_stations[index]
  station_selected.emit(station)
  status.text="담은 STA %.3fm으로 이동했습니다." % station
+ return true
+
+
+func collect_displayed_stations():
+ if result_text().is_empty():return false
+ var additions: Array[float]=[]
+ for section in displayed_sections():
+  if not collected_stations.has(section.station):
+   additions.append(section.station)
+ if additions.is_empty():
+  status.text="새로 담을 표시 STA가 없습니다."
+  return false
+ if collected_stations.size()+additions.size()>100:
+  status.text="담은 STA가 100개를 넘습니다. 필터 범위를 좁혀 주세요."
+  return false
+ collection_revision=result_revision
+ collected_stations.append_array(additions)
+ update_collection_button()
+ status.text="표시 STA %d개를 담았습니다." % additions.size()
  return true
