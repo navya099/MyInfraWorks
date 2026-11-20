@@ -6,9 +6,10 @@ var review_begin: LineEdit
 var review_end: LineEdit
 var navigation_buttons=[]
 var row_stations={}
-var collection_after_edit=null
+const COLLECTION_HISTORY_LIMIT=20
+var collection_redo_history: Array[Array]=[]
 var redo_collection_button: Button
-var collection_before_edit=null
+var collection_undo_history: Array[Array]=[]
 var undo_collection_button: Button
 var collection_revision=-1
 var collected_stations: Array[float]=[]
@@ -571,8 +572,8 @@ func export_csv(path):
 
 
 func reset_settings():
- collection_after_edit=null
- collection_before_edit=null
+ collection_redo_history.clear()
+ collection_undo_history.clear()
  collected_only.set_pressed_no_signal(false)
  uncollected_only.set_pressed_no_signal(false)
  collected_stations.clear()
@@ -1016,10 +1017,10 @@ func recalculate_stations(station_values):
 func update_collection_button():
  if collection_revision!=revision_provider.call():
   collected_stations.clear()
-  collection_before_edit=null
-  collection_after_edit=null
- redo_collection_button.disabled=collection_after_edit==null
- undo_collection_button.disabled=collection_before_edit==null
+  collection_undo_history.clear()
+  collection_redo_history.clear()
+ redo_collection_button.disabled=collection_redo_history.is_empty()
+ undo_collection_button.disabled=collection_undo_history.is_empty()
  apply_collection_button.text="담은 STA 재산출 (%d)" % collected_stations.size()
  apply_collection_button.disabled=collected_stations.is_empty() or result.is_empty()
  var selected_index=collection_picker.selected
@@ -1171,28 +1172,29 @@ func paste_collected_stations(content):
 
 
 func remember_collection():
- collection_after_edit=null
- collection_before_edit=collected_stations.duplicate()
+ collection_redo_history.clear()
+ collection_undo_history.append(collected_stations.duplicate())
+
+ if collection_undo_history.size()>COLLECTION_HISTORY_LIMIT:
+  collection_undo_history.pop_front()
 
 func undo_collection_edit():
- if collection_revision!=revision_provider.call() or collection_before_edit==null:
+ if collection_revision!=revision_provider.call() or collection_undo_history.is_empty():
   update_collection_button()
   return false
- collection_after_edit=collected_stations.duplicate()
- collected_stations.assign(collection_before_edit)
- collection_before_edit=null
+ collection_redo_history.append(collected_stations.duplicate())
+ collected_stations.assign(collection_undo_history.pop_back())
  refresh_collection_view()
  status.text="마지막 STA 목록 편집을 되돌렸습니다."
  return true
 
 
 func redo_collection_edit():
- if collection_revision!=revision_provider.call() or collection_after_edit==null:
+ if collection_revision!=revision_provider.call() or collection_redo_history.is_empty():
   update_collection_button()
   return false
- collection_before_edit=collected_stations.duplicate()
- collected_stations.assign(collection_after_edit)
- collection_after_edit=null
+ collection_undo_history.append(collected_stations.duplicate())
+ collected_stations.assign(collection_redo_history.pop_back())
  refresh_collection_view()
  status.text="되돌린 STA 목록 편집을 다시 실행했습니다."
  return true
