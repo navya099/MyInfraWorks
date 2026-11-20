@@ -15,6 +15,7 @@ var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 var copy_collection_button: Button
+var sort_collection_button: Button
 var collection_picker: OptionButton
 var remove_collection_button: Button
 var remove_displayed_button: Button
@@ -385,6 +386,10 @@ func _ready():
  redo_collection_button.text="STA 편집 다시 실행"
  redo_collection_button.pressed.connect(redo_collection_edit)
  worst_row.add_child(redo_collection_button)
+ sort_collection_button=Button.new()
+ sort_collection_button.text="담은 STA 정렬"
+ sort_collection_button.pressed.connect(sort_collected_stations)
+ worst_row.add_child(sort_collection_button)
  update_collection_button()
  var filter_row=HBoxContainer.new()
  root.add_child(filter_row)
@@ -1028,6 +1033,7 @@ func update_collection_button():
  var selected_index=collection_picker.selected
  collection_picker.clear()
  var empty=collected_stations.is_empty()
+ sort_collection_button.disabled=collected_stations.size()<2
  if empty:
   collection_picker.add_item("담은 STA 없음")
  else:
@@ -1199,4 +1205,18 @@ func redo_collection_edit():
  collected_stations.assign(collection_redo_history.pop_back())
  refresh_collection_view()
  status.text="되돌린 STA 목록 편집을 다시 실행했습니다."
+ return true
+
+
+func sort_collected_stations():
+ update_collection_button()
+ var sorted=collected_stations.duplicate()
+ sorted.sort()
+ if sorted==collected_stations:return false
+ var selected_station=collected_stations[collection_picker.selected]
+ remember_collection()
+ collected_stations.assign(sorted)
+ refresh_collection_view()
+ collection_picker.select(collected_stations.find(selected_station))
+ status.text="담은 STA를 오름차순으로 정렬했습니다."
  return true
