@@ -449,4 +449,17 @@ func run():
  assert(not app.section_dxf.collected_only.button_pressed)
  assert(app.section_dxf.row_stations.size()==app.section_dxf.result.sections.size())
  print("PASS COLLECTED STATION FILTER")
+ app.section_dxf.collected_only.button_pressed=true
+ app.section_dxf.uncollected_only.button_pressed=true
+ assert(not app.section_dxf.collected_only.button_pressed)
+ var row_to_collect=app.section_dxf.row_stations.keys()[0]
+ var collected_from_filter=app.section_dxf.row_stations[row_to_collect]
+ app.section_dxf.table.set_caret_line(row_to_collect)
+ assert(app.section_dxf.collect_selected_station())
+ assert(not app.section_dxf.row_stations.values().has(collected_from_filter))
+ app.section_dxf.remove_collection_button.pressed.emit()
+ assert(app.section_dxf.row_stations.values().has(collected_from_filter))
+ app.section_dxf.reset_review_filters()
+ assert(not app.section_dxf.uncollected_only.button_pressed)
+ print("PASS UNCOLLECTED STATION FILTER")
  quit(0)
