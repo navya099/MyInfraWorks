@@ -6,6 +6,8 @@ var review_begin: LineEdit
 var review_end: LineEdit
 var navigation_buttons=[]
 var row_stations={}
+var collection_after_edit=null
+var redo_collection_button: Button
 var collection_before_edit=null
 var undo_collection_button: Button
 var collection_revision=-1
@@ -378,6 +380,10 @@ func _ready():
  undo_collection_button.text="STA 편집 되돌리기"
  undo_collection_button.pressed.connect(undo_collection_edit)
  worst_row.add_child(undo_collection_button)
+ redo_collection_button=Button.new()
+ redo_collection_button.text="STA 편집 다시 실행"
+ redo_collection_button.pressed.connect(redo_collection_edit)
+ worst_row.add_child(redo_collection_button)
  update_collection_button()
  var filter_row=HBoxContainer.new()
  root.add_child(filter_row)
@@ -565,6 +571,7 @@ func export_csv(path):
 
 
 func reset_settings():
+ collection_after_edit=null
  collection_before_edit=null
  collected_only.set_pressed_no_signal(false)
  uncollected_only.set_pressed_no_signal(false)
@@ -1010,6 +1017,8 @@ func update_collection_button():
  if collection_revision!=revision_provider.call():
   collected_stations.clear()
   collection_before_edit=null
+  collection_after_edit=null
+ redo_collection_button.disabled=collection_after_edit==null
  undo_collection_button.disabled=collection_before_edit==null
  apply_collection_button.text="담은 STA 재산출 (%d)" % collected_stations.size()
  apply_collection_button.disabled=collected_stations.is_empty() or result.is_empty()
@@ -1162,14 +1171,28 @@ func paste_collected_stations(content):
 
 
 func remember_collection():
+ collection_after_edit=null
  collection_before_edit=collected_stations.duplicate()
 
 func undo_collection_edit():
  if collection_revision!=revision_provider.call() or collection_before_edit==null:
   update_collection_button()
   return false
+ collection_after_edit=collected_stations.duplicate()
  collected_stations.assign(collection_before_edit)
  collection_before_edit=null
  refresh_collection_view()
  status.text="마지막 STA 목록 편집을 되돌렸습니다."
+ return true
+
+
+func redo_collection_edit():
+ if collection_revision!=revision_provider.call() or collection_after_edit==null:
+  update_collection_button()
+  return false
+ collection_before_edit=collected_stations.duplicate()
+ collected_stations.assign(collection_after_edit)
+ collection_after_edit=null
+ refresh_collection_view()
+ status.text="되돌린 STA 목록 편집을 다시 실행했습니다."
  return true
