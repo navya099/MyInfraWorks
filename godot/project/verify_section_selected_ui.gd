@@ -426,4 +426,16 @@ func run():
  assert(not app.section_dxf.collect_displayed_stations())
  assert(app.section_dxf.result.sections.size()>2)
  print("PASS BULK STATION COLLECTION")
+ var removed_station=app.section_dxf.collected_stations[0]
+ var retained_station=app.section_dxf.collected_stations[1]
+ var dxf_before_removal=app.section_dxf.result.text
+ app.section_dxf.review_begin.text=str(removed_station)
+ app.section_dxf.review_end.text=str(removed_station)
+ assert(app.section_dxf.apply_review_range())
+ assert(not app.section_dxf.remove_displayed_button.disabled)
+ app.section_dxf.remove_displayed_button.pressed.emit()
+ assert(app.section_dxf.collected_stations==[retained_station])
+ assert(app.section_dxf.remove_displayed_button.disabled)
+ assert(app.section_dxf.result.text==dxf_before_removal)
+ print("PASS BULK STATION REMOVAL")
  quit(0)

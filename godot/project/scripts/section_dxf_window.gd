@@ -11,6 +11,7 @@ var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 var collection_picker: OptionButton
 var remove_collection_button: Button
+var remove_displayed_button: Button
 var collect_displayed_button: Button
 var collection_button: Button
 var apply_collection_button: Button
@@ -332,6 +333,11 @@ func _ready():
  collect_displayed_button.disabled=true
  collect_displayed_button.pressed.connect(collect_displayed_stations)
  worst_row.add_child(collect_displayed_button)
+ remove_displayed_button=Button.new()
+ remove_displayed_button.text="표시 STA 모두 빼기"
+ remove_displayed_button.disabled=true
+ remove_displayed_button.pressed.connect(remove_displayed_stations)
+ worst_row.add_child(remove_displayed_button)
  apply_collection_button=Button.new()
  apply_collection_button.disabled=true
  apply_collection_button.pressed.connect(calculate_collection)
@@ -966,6 +972,13 @@ func update_collection_button():
   for station in collected_stations:
    collection_picker.add_item(JSON.stringify(station,"",true,true)+" m")
  collection_picker.select(clampi(selected_index,0,collection_picker.item_count-1))
+ var has_visible_match=false
+ if not empty and not result.is_empty():
+  for station in row_stations.values():
+   if collected_stations.has(station):
+    has_visible_match=true
+    break
+ remove_displayed_button.disabled=not has_visible_match
  collection_picker.disabled=empty
  remove_collection_button.disabled=empty
  collection_jump_button.disabled=empty
@@ -1031,4 +1044,18 @@ func collect_displayed_stations():
  collected_stations.append_array(additions)
  update_collection_button()
  status.text="표시 STA %d개를 담았습니다." % additions.size()
+ return true
+
+
+func remove_displayed_stations():
+ if result_text().is_empty():return false
+ var visible_stations={}
+ for section in displayed_sections():
+  visible_stations[section.station]=true
+ var previous_count=collected_stations.size()
+ collected_stations=collected_stations.filter(func(station):return not visible_stations.has(station))
+ var removed=previous_count-collected_stations.size()
+ if removed==0:return false
+ update_collection_button()
+ status.text="담은 목록에서 표시 STA %d개를 뺐습니다." % removed
  return true
