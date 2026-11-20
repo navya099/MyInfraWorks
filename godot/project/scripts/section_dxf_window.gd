@@ -15,6 +15,8 @@ var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 var copy_collection_button: Button
+var collection_up: Button
+var collection_down: Button
 var sort_collection_button: Button
 var collection_picker: OptionButton
 var remove_collection_button: Button
@@ -390,6 +392,15 @@ func _ready():
  sort_collection_button.text="담은 STA 정렬"
  sort_collection_button.pressed.connect(sort_collected_stations)
  worst_row.add_child(sort_collection_button)
+ collection_up=Button.new()
+ collection_up.text="STA 위로"
+ collection_up.pressed.connect(move_collected_station.bind(-1))
+ worst_row.add_child(collection_up)
+ collection_down=Button.new()
+ collection_down.text="STA 아래로"
+ collection_down.pressed.connect(move_collected_station.bind(1))
+ worst_row.add_child(collection_down)
+ collection_picker.item_selected.connect(func(_index):update_collection_move_buttons())
  update_collection_button()
  var filter_row=HBoxContainer.new()
  root.add_child(filter_row)
@@ -1048,6 +1059,7 @@ func update_collection_button():
     break
  remove_displayed_button.disabled=not has_visible_match
  copy_collection_button.disabled=empty
+ update_collection_move_buttons()
  collection_picker.disabled=empty
  remove_collection_button.disabled=empty
  collection_jump_button.disabled=empty
@@ -1218,5 +1230,29 @@ func sort_collected_stations():
  collected_stations.assign(sorted)
  refresh_collection_view()
  collection_picker.select(collected_stations.find(selected_station))
+ update_collection_move_buttons()
  status.text="담은 STA를 오름차순으로 정렬했습니다."
+ return true
+
+
+func update_collection_move_buttons():
+ var index=collection_picker.selected
+ collection_up.disabled=index<=0 or index>=collected_stations.size()
+ collection_down.disabled=index<0 or index>=collected_stations.size()-1
+
+func move_collected_station(direction):
+ if collection_revision!=revision_provider.call():
+  update_collection_button()
+  return false
+ var index=collection_picker.selected
+ var target=index+direction
+ if index<0 or index>=collected_stations.size() or target<0 or target>=collected_stations.size():
+  return false
+ remember_collection()
+ var station=collected_stations[index]
+ collected_stations[index]=collected_stations[target]
+ collected_stations[target]=station
+ refresh_collection_view()
+ collection_picker.select(target)
+ update_collection_move_buttons()
  return true
