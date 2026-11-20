@@ -12,6 +12,7 @@ var collection_jump_button: Button
 var collection_picker: OptionButton
 var remove_collection_button: Button
 var remove_displayed_button: Button
+var collected_only: CheckBox
 var collect_displayed_button: Button
 var collection_button: Button
 var apply_collection_button: Button
@@ -346,7 +347,7 @@ func _ready():
  clear_collection.text="담은 STA 비우기"
  clear_collection.pressed.connect(func():
   collected_stations.clear()
-  update_collection_button())
+  refresh_collection_view())
  worst_row.add_child(clear_collection)
  collection_picker=OptionButton.new()
  collection_picker.tooltip_text="담은 STA 목록 (m)"
@@ -380,6 +381,10 @@ func _ready():
  reset_filter.text="목록 필터 초기화"
  reset_filter.pressed.connect(reset_review_filters)
  filter_row.add_child(reset_filter)
+ collected_only=CheckBox.new()
+ collected_only.text="담은 STA만 표시"
+ collected_only.toggled.connect(func(_enabled):render_result())
+ filter_row.add_child(collected_only)
  csv_dialog.filters=PackedStringArray(["*.dxf ; Cross-section layout DXF"])
  hint.text="기본: 구간 양 끝+정규 측점+추가 STA / 추가 STA만 출력: 입력한 위치만 · 도면 단위 m · H:V=1:1 · 원지반/설계 별도 레이어
 2D 도면 배치이며 지도/EPSG 좌표 아님 · 결측은 선 끊기 · CAD 가져오기 단위 m 지정"
@@ -499,6 +504,7 @@ func render_result():
  if details_only.button_pressed:
   var header=lines.find("STA(m) | DATUM(m) | 원지반/설계 결측 | 원지반/설계 도형 조각 | 원지반/설계 유효(%)")
   lines=lines.slice(header)
+ if collected_only.button_pressed:lines.insert(0,"목록 필터: 담은 STA만 표시")
  selected_summary.text="선택 횡단: 없음"
  setting_table=true
  row_stations.clear()
@@ -532,6 +538,7 @@ func export_csv(path):
 
 
 func reset_settings():
+ collected_only.set_pressed_no_signal(false)
  collected_stations.clear()
  update_collection_button()
  review_range={}
@@ -817,6 +824,7 @@ func save_result_csv(path):
  file.store_buffer(PackedByteArray([239,187,191]))
  file.store_csv_line(PackedStringArray(["station_m","datum_m","samples_per_section","ground_missing","design_missing","ground_runs","design_runs","list_filter","ground_valid_pct","design_valid_pct"]))
  var filter_name=missing_type.get_item_text(missing_type.selected) if missing_only.button_pressed else "전체"
+ if collected_only.button_pressed:filter_name+=" / 담은 STA만"
  if not review_range.is_empty():filter_name+="; STA %.9f~%.9f" % [review_range.begin,review_range.end]
  for section in displayed_sections():
   file.store_csv_line(PackedStringArray([str(section.station),str(section.datum),str(result.lateral_count),str(section.ground_missing),str(section.design_missing),str(section.ground_runs),str(section.design_runs),filter_name,str(valid_percent(section.ground_missing,result.lateral_count)),str(valid_percent(section.design_missing,result.lateral_count))]))
@@ -838,6 +846,8 @@ static func valid_percent(missing,total):
 func displayed_sections():
  var visible=result.sections.filter(func(section):return not missing_only.button_pressed or matches_missing(section,result.lateral_count,missing_type.selected))
  if not review_range.is_empty():visible=visible.filter(func(section):return section.station>=review_range.begin and section.station<=review_range.end)
+ if collected_only.button_pressed:
+  visible=visible.filter(func(section):return collected_stations.has(section.station))
  return sorted_sections(visible,result_sort.selected)
 
 static func sorted_sections(sections,mode):
@@ -922,6 +932,7 @@ func apply_review_range():
 
 
 func reset_review_filters():
+ collected_only.set_pressed_no_signal(false)
  missing_only.set_pressed_no_signal(false)
  missing_type.select(0)
  missing_type.disabled=true
@@ -987,7 +998,7 @@ func remove_collected_station():
  var index=collection_picker.selected
  if index<0 or index>=collected_stations.size():return
  collected_stations.remove_at(index)
- update_collection_button()
+ refresh_collection_view()
 
 
 func collect_selected_station():
@@ -1003,7 +1014,7 @@ func collect_selected_station():
   return false
  collection_revision=result_revision
  collected_stations.append(station)
- update_collection_button()
+ refresh_collection_view()
  status.text="STA %.3fm을 담았습니다." % station
  return true
 
@@ -1042,7 +1053,7 @@ func collect_displayed_stations():
   return false
  collection_revision=result_revision
  collected_stations.append_array(additions)
- update_collection_button()
+ refresh_collection_view()
  status.text="표시 STA %d개를 담았습니다." % additions.size()
  return true
 
@@ -1056,6 +1067,13 @@ func remove_displayed_stations():
  collected_stations=collected_stations.filter(func(station):return not visible_stations.has(station))
  var removed=previous_count-collected_stations.size()
  if removed==0:return false
- update_collection_button()
+ refresh_collection_view()
  status.text="담은 목록에서 표시 STA %d개를 뺐습니다." % removed
  return true
+
+
+func refresh_collection_view():
+ if collected_only.button_pressed and not result.is_empty():
+  render_result()
+ else:
+  update_collection_button()
