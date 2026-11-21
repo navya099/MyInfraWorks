@@ -1335,7 +1335,11 @@ func navigate_collected_station(target):
 
 
 func submit_collection_number(value: String):
+ if not collection_number.editable:
+  return
  var entered_number=value.strip_edges()
- if not collection_number.editable or not entered_number.is_valid_int():
+ var count=collected_stations.size()
+ if not entered_number.is_valid_int() or entered_number.to_int()<1 or entered_number.to_int()>count:
+  status.text="목록 번호는 1~%d 사이의 정수로 입력하세요." % count
   return
  navigate_collected_station(entered_number.to_int()-1)

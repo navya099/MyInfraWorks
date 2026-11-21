@@ -578,7 +578,10 @@ func run():
  number_editor.text_submitted.emit("1")
  assert(app.section_dxf.collection_picker.selected==0)
  assert(is_equal_approx(app.model.station*app.model.length(),stepping_order[0]))
- number_editor.text_submitted.emit("999")
+ for invalid_number in ["","abc","1.5","0","999"]:
+  number_editor.text_submitted.emit(invalid_number)
+  assert(app.section_dxf.status.text=="목록 번호는 1~%d 사이의 정수로 입력하세요." % stepping_order.size())
+  assert(is_equal_approx(app.model.station*app.model.length(),stepping_order[0]))
  assert(app.section_dxf.collection_picker.selected==0)
  app.section_dxf.reset_settings()
  assert(app.section_dxf.collection_jump_number.disabled)
