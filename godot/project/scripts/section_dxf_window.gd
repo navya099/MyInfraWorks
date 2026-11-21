@@ -15,6 +15,7 @@ var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 var copy_collection_button: Button
+var collection_first: Button
 var collection_up: Button
 var collection_down: Button
 var sort_collection_button: Button
@@ -396,6 +397,10 @@ func _ready():
  collection_up.text="STA 위로"
  collection_up.pressed.connect(move_collected_station.bind(-1))
  worst_row.add_child(collection_up)
+ collection_first=Button.new()
+ collection_first.text="STA 맨 앞으로"
+ collection_first.pressed.connect(move_collected_station_to.bind(0))
+ worst_row.add_child(collection_first)
  collection_down=Button.new()
  collection_down.text="STA 아래로"
  collection_down.pressed.connect(move_collected_station.bind(1))
@@ -1238,20 +1243,23 @@ func sort_collected_stations():
 func update_collection_move_buttons():
  var index=collection_picker.selected
  collection_up.disabled=index<=0 or index>=collected_stations.size()
+ collection_first.disabled=collection_up.disabled
  collection_down.disabled=index<0 or index>=collected_stations.size()-1
 
 func move_collected_station(direction):
+ return move_collected_station_to(collection_picker.selected+direction)
+
+func move_collected_station_to(target):
  if collection_revision!=revision_provider.call():
   update_collection_button()
   return false
  var index=collection_picker.selected
- var target=index+direction
- if index<0 or index>=collected_stations.size() or target<0 or target>=collected_stations.size():
+ if index<0 or index>=collected_stations.size() or target<0 or target>=collected_stations.size() or target==index:
   return false
  remember_collection()
  var station=collected_stations[index]
- collected_stations[index]=collected_stations[target]
- collected_stations[target]=station
+ collected_stations.remove_at(index)
+ collected_stations.insert(target,station)
  refresh_collection_view()
  collection_picker.select(target)
  update_collection_move_buttons()
