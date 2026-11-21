@@ -17,6 +17,8 @@ var collection_jump_button: Button
 var copy_collection_button: Button
 var collection_previous: Button
 var collection_jump_first: Button
+var collection_number: SpinBox
+var collection_jump_number: Button
 var collection_jump_last: Button
 var collection_next: Button
 var collection_position: Label
@@ -429,6 +431,18 @@ func _ready():
  collection_jump_last.text="마지막 담은 STA"
  collection_jump_last.pressed.connect(func():navigate_collected_station(collected_stations.size()-1))
  worst_row.add_child(collection_jump_last)
+ var number_row=HBoxContainer.new()
+ root.add_child(number_row)
+ root.move_child(number_row,worst_row.get_index()+1)
+ collection_number=SpinBox.new()
+ collection_number.min_value=1
+ collection_number.step=1
+ collection_number.tooltip_text="담은 STA 목록 번호"
+ number_row.add_child(collection_number)
+ collection_jump_number=Button.new()
+ collection_jump_number.text="목록 번호로 이동"
+ collection_jump_number.pressed.connect(func():navigate_collected_station(int(collection_number.value)-1))
+ number_row.add_child(collection_jump_number)
  collection_down=Button.new()
  collection_down.text="STA 아래로"
  collection_down.pressed.connect(move_collected_station.bind(1))
@@ -1272,6 +1286,10 @@ func update_collection_move_buttons():
  var index=collection_picker.selected
  var count=collected_stations.size()
  collection_position.text="선택 %d / %d" % [index+1 if index>=0 and index<count else 0,count]
+ collection_number.max_value=maxi(1,count)
+ collection_number.set_value_no_signal(index+1 if index>=0 and index<count else 1)
+ collection_number.editable=count>0
+ collection_jump_number.disabled=count==0
  collection_up.disabled=index<=0 or index>=collected_stations.size()
  collection_first.disabled=collection_up.disabled
  collection_down.disabled=index<0 or index>=collected_stations.size()-1
