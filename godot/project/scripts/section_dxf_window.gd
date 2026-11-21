@@ -15,6 +15,8 @@ var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 const STATION_LIST_MAX_BYTES=64*1024
+var station_import_removed_title: Label
+var station_import_removed_list: TextEdit
 var station_import_list: TextEdit
 var station_import_dialog: ConfirmationDialog
 var station_import_preview: Dictionary={}
@@ -493,10 +495,19 @@ func _ready():
  station_import_dialog.confirmed.connect(apply_station_import_preview)
  station_import_dialog.canceled.connect(func():station_import_preview.clear())
  add_child(station_import_dialog)
+ var preview_lists=VBoxContainer.new()
+ station_import_dialog.add_child(preview_lists)
  station_import_list=TextEdit.new()
  station_import_list.editable=false
  station_import_list.custom_minimum_size=Vector2(420,200)
- station_import_dialog.add_child(station_import_list)
+ station_import_list.size_flags_vertical=Control.SIZE_EXPAND_FILL
+ preview_lists.add_child(station_import_list)
+ station_import_removed_title=Label.new()
+ preview_lists.add_child(station_import_removed_title)
+ station_import_removed_list=TextEdit.new()
+ station_import_removed_list.editable=false
+ station_import_removed_list.custom_minimum_size.y=90
+ preview_lists.add_child(station_import_removed_list)
  for action in [save_collection_button,load_collection_button,replace_collection_button]:
   var dialog=FileDialog.new()
   dialog.title=action.text
@@ -1532,7 +1543,18 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  station_import_list.set_caret_line(0)
  station_import_list.set_caret_column(0)
  station_import_list.scroll_vertical=0
- station_import_dialog.popup_centered(Vector2i(520,360))
+ var removed: Array[float]=[]
+ if replace_list:
+  for station in collected_stations:
+   if not prepared.additions.has(station):
+    removed.append(station)
+ station_import_removed_title.visible=replace_list
+ station_import_removed_title.text="제외될 STA %d개 (m)" % removed.size() if not removed.is_empty() else "제외될 STA 없음"
+ station_import_removed_list.visible=not removed.is_empty()
+ station_import_removed_list.text=format_station_list(removed,"\n")
+ station_import_removed_list.set_caret_line(0)
+ station_import_removed_list.scroll_vertical=0
+ station_import_dialog.popup_centered(Vector2i(520,460 if not removed.is_empty() else 360))
  return true
 
 
