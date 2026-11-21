@@ -573,6 +573,13 @@ func run():
  assert(app.section_dxf.collection_picker.selected==1)
  assert(is_equal_approx(app.model.station*app.model.length(),stepping_order[1]))
  assert(app.section_dxf.collected_stations==stepping_order)
+ var number_editor=app.section_dxf.collection_number.get_line_edit()
+ number_editor.text="1"
+ number_editor.text_submitted.emit("1")
+ assert(app.section_dxf.collection_picker.selected==0)
+ assert(is_equal_approx(app.model.station*app.model.length(),stepping_order[0]))
+ number_editor.text_submitted.emit("999")
+ assert(app.section_dxf.collection_picker.selected==0)
  app.section_dxf.reset_settings()
  assert(app.section_dxf.collection_jump_number.disabled)
  assert(not app.section_dxf.collection_number.editable)

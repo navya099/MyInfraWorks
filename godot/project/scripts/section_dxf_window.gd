@@ -439,6 +439,7 @@ func _ready():
  collection_number.step=1
  collection_number.tooltip_text="담은 STA 목록 번호"
  number_row.add_child(collection_number)
+ collection_number.get_line_edit().text_submitted.connect(submit_collection_number)
  collection_jump_number=Button.new()
  collection_jump_number.text="목록 번호로 이동"
  collection_jump_number.pressed.connect(func():navigate_collected_station(int(collection_number.value)-1))
@@ -1331,3 +1332,10 @@ func navigate_collected_station(target):
  collection_picker.select(target)
  update_collection_move_buttons()
  return jump_to_collected_station()
+
+
+func submit_collection_number(value: String):
+ var entered_number=value.strip_edges()
+ if not collection_number.editable or not entered_number.is_valid_int():
+  return
+ navigate_collected_station(entered_number.to_int()-1)
