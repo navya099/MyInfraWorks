@@ -1259,7 +1259,7 @@ func paste_collected_stations(content):
    if not collected_stations.has(station) and not additions.has(station):
     additions.append(station)
  if additions.is_empty():
-  status.text="새로 담을 STA가 없습니다."
+  status.text="추가 0개 · 중복 %d개 건너뜀" % input_count if input_count>0 else "붙여넣을 STA가 없습니다."
   return false
  if collected_stations.size()+additions.size()>100:
   status.text="담은 STA는 최대 100개입니다."
@@ -1268,7 +1268,7 @@ func paste_collected_stations(content):
  remember_collection()
  collected_stations.append_array(additions)
  refresh_collection_view()
- status.text="STA %d개를 붙여넣었습니다." % additions.size()
+ status.text="추가 %d개 · 중복 %d개 건너뜀" % [additions.size(),input_count-additions.size()]
  return true
 
 

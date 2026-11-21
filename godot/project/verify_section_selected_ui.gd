@@ -657,4 +657,8 @@ func run():
  assert(app.section_dxf.status.text.begins_with("2번째 줄, 2번째 열:"))
  assert(app.section_dxf.collected_stations==before_tab_error)
  print("PASS MULTILINE AND TAB STATION PASTE")
+ assert(app.section_dxf.paste_collected_stations("620, 660, 660"))
+ assert(app.section_dxf.status.text=="추가 1개 · 중복 2개 건너뜀")
+ assert(not app.section_dxf.paste_collected_stations("620, 660"))
+ assert(app.section_dxf.status.text=="추가 0개 · 중복 2개 건너뜀")
  quit(0)
