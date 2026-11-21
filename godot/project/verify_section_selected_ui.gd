@@ -596,9 +596,9 @@ func run():
  assert(is_equal_approx(app.model.station*app.model.length(),stepping_order[-1]))
  assert(not app.section_dxf.find_collected_station("bad"))
  assert(is_equal_approx(app.model.station*app.model.length(),stepping_order[-1]))
- assert(app.section_dxf.parse_search_station("1+234.567")==1234.567)
- assert(not is_finite(app.section_dxf.parse_search_station("1+1000")))
- assert(not is_finite(app.section_dxf.parse_search_station("-1+20")))
+ assert(app.section_dxf.CrossDxf.parse_station("1+234.567")==1234.567)
+ assert(not is_finite(app.section_dxf.CrossDxf.parse_station("1+1000")))
+ assert(not is_finite(app.section_dxf.CrossDxf.parse_station("-1+20")))
  assert(app.section_dxf.paste_collected_stations("20, 40"))
  app.section_dxf.collection_search.text_submitted.emit("0+040.000")
  assert(is_equal_approx(app.model.station*app.model.length(),40.0))
@@ -635,4 +635,11 @@ func run():
  app.set_station_distance(200.0)
  app.section_dxf.add_current_station()
  assert(is_equal_approx(app.section_dxf.extra_input.text.to_float(),200.0))
+ app.section_dxf.extra_input.text="0+200.125, 300"
+ app.section_dxf.extras_only.button_pressed=true
+ app.section_dxf.start_calculation()
+ while app.section_dxf.worker!=null:await process_frame
+ assert(app.section_dxf.result.sections.map(func(section):return section.station)==[200.125,300.0])
+ assert(not app.section_dxf.paste_collected_stations("0+1000, 300"))
+ print("PASS MIXED EXTRA STATIONS")
  quit(0)

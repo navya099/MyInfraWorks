@@ -185,7 +185,7 @@ func _ready():
  extra_row.add_child(extras_only)
  extra_row.add_child(extra_label)
  extra_input=LineEdit.new()
- extra_input.placeholder_text="예: 123.45, 567.89 · 쉼표 구분 · 최대 100개"
+ extra_input.placeholder_text="예: 0+123.45, 567.89 · 쉼표 구분 · 최대 100개"
  extra_input.max_length=3000
  extra_input.size_flags_horizontal=Control.SIZE_EXPAND_FILL
  extra_input.text_changed.connect(func(_text):invalidate())
@@ -530,8 +530,8 @@ func full_range():
 func add_current_station():
  var state=snapshot_provider.call()
  var station=state.station
- var begin=parse_search_station(begin_input.text)
- var finish=state.length if end_input.text==str(state.length) else parse_search_station(end_input.text)
+ var begin=CrossDxf.parse_station(begin_input.text)
+ var finish=state.length if end_input.text==str(state.length) else CrossDxf.parse_station(end_input.text)
  if not is_finite(begin) or not is_finite(finish) or begin<0 or finish>state.length or finish-begin<1:
   status.text="유효한 출력 구간을 먼저 지정하세요."
   return
@@ -561,8 +561,8 @@ func start_calculation():
   return
  var state=snapshot_provider.call()
  invalidate()
- var begin=parse_search_station(begin_input.text)
- var finish=state.length if end_input.text==str(state.length) else parse_search_station(end_input.text)
+ var begin=CrossDxf.parse_station(begin_input.text)
+ var finish=state.length if end_input.text==str(state.length) else CrossDxf.parse_station(end_input.text)
  if not is_finite(begin) or not is_finite(finish):
   status.text="시작·끝 STA를 미터 또는 km+m 형식으로 입력하세요."
   return
@@ -805,7 +805,7 @@ func move_result(direction):
 
 func find_result():
  if result_text().is_empty() or row_stations.is_empty():return false
- var target=parse_search_station(search_input.text)
+ var target=CrossDxf.parse_station(search_input.text)
  if not is_finite(target):
   status.text="검색 STA에 0 이상의 미터 값 또는 1+234.567 형식을 입력하세요."
   return false
@@ -1047,8 +1047,8 @@ func apply_review_range():
  if begin.is_empty() and finish.is_empty():
   review_range={}
  else:
-  var begin_m=parse_search_station(begin)
-  var end_m=parse_search_station(finish)
+  var begin_m=CrossDxf.parse_station(begin)
+  var end_m=CrossDxf.parse_station(finish)
   if not is_finite(begin_m) or not is_finite(end_m) or begin_m>end_m:
    status.text="시작·끝 STA를 미터 또는 km+m 형식으로 입력하세요 (시작 ≤ 끝). 두 칸을 비우면 전체입니다."
    return false
@@ -1380,27 +1380,11 @@ func handle_collection_number_input(event: InputEvent):
 
 func find_collected_station(value: String):
  if collected_stations.is_empty():return false
- var target=parse_search_station(value)
+ var target=CrossDxf.parse_station(value)
  if not is_finite(target):
   status.text="담은 STA 검색에 0 이상의 미터 값 또는 1+234.567 형식을 입력하세요."
   return false
  return navigate_nearest_collected(target)
-
-static func parse_search_station(value: String) -> float:
- var token=value.strip_edges()
- if token.is_valid_float():
-  var meters=token.to_float()
-  return meters if is_finite(meters) and meters>=0 else NAN
- var parts=token.split("+")
- if parts.size()!=2:return NAN
- var km=parts[0].strip_edges()
- var remainder=parts[1].strip_edges()
- if not km.is_valid_int() or not remainder.is_valid_float():return NAN
- if km.begins_with("-") or remainder.begins_with("-"):return NAN
- var offset=remainder.to_float()
- if not is_finite(offset) or offset>=1000:return NAN
- return km.to_float()*1000.0+offset
-
 
 func find_collected_from_current():
  return navigate_nearest_collected(snapshot_provider.call().station)

@@ -47,15 +47,31 @@ static func trace(lines,layer,values,component,ox,oy,datum):
  if not points.is_empty():polyline(lines,layer,points);runs+=1
  return runs
 
+static func parse_station(value: String) -> float:
+ var token=value.strip_edges()
+ if token.is_valid_float():
+  var meters=token.to_float()
+  return meters if is_finite(meters) and meters>=0 else NAN
+ var parts=token.split("+")
+ if parts.size()!=2:return NAN
+ var km=parts[0].strip_edges()
+ var remainder=parts[1].strip_edges()
+ if not km.is_valid_int() or not remainder.is_valid_float():return NAN
+ if km.begins_with("-") or remainder.begins_with("-"):return NAN
+ var offset=remainder.to_float()
+ if not is_finite(offset) or offset>=1000:return NAN
+ return km.to_float()*1000.0+offset
+
+
 static func parse_extra(text):
  if text.strip_edges().is_empty():return {"ok":true,"stations":[]}
  var parts=text.split(",",true)
  if parts.size()>100:return fail("추가 STA는 최대 100개입니다.")
  var stations=[]
  for part in parts:
-  var token=part.strip_edges()
-  if not token.is_valid_float() or not is_finite(token.to_float()):return fail("추가 STA는 쉼표로 구분한 유한한 숫자로 입력하세요.")
-  stations.append(token.to_float())
+  var station=parse_station(part)
+  if not is_finite(station):return fail("추가 STA는 쉼표로 구분한 미터 값 또는 km+m 형식으로 입력하세요.")
+  stations.append(station)
  return {"ok":true,"stations":stations}
 
 static func alignment_boundaries(info,begin,finish):
