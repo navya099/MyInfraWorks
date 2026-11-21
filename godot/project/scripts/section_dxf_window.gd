@@ -452,7 +452,7 @@ func _ready():
  collection_number_range=Label.new()
  number_row.add_child(collection_number_range)
  collection_search=LineEdit.new()
- collection_search.placeholder_text="담은 STA 검색 (m)"
+ collection_search.placeholder_text="담은 STA 검색 (m 또는 km+m)"
  collection_search.custom_minimum_size.x=180
  collection_search.max_length=32
  collection_search.text_submitted.connect(find_collected_station)
@@ -1379,11 +1379,27 @@ func handle_collection_number_input(event: InputEvent):
 
 func find_collected_station(value: String):
  if collected_stations.is_empty():return false
- var token=value.strip_edges()
- if not token.is_valid_float() or not is_finite(token.to_float()) or token.to_float()<0:
-  status.text="담은 STA 검색은 0 이상의 유한한 미터 값으로 입력하세요."
+ var target=parse_collection_search(value)
+ if not is_finite(target):
+  status.text="담은 STA 검색에 0 이상의 미터 값 또는 1+234.567 형식을 입력하세요."
   return false
- return navigate_nearest_collected(token.to_float())
+ return navigate_nearest_collected(target)
+
+static func parse_collection_search(value: String) -> float:
+ var token=value.strip_edges()
+ if token.is_valid_float():
+  var meters=token.to_float()
+  return meters if is_finite(meters) and meters>=0 else NAN
+ var parts=token.split("+")
+ if parts.size()!=2:return NAN
+ var km=parts[0].strip_edges()
+ var remainder=parts[1].strip_edges()
+ if not km.is_valid_int() or not remainder.is_valid_float():return NAN
+ if km.begins_with("-") or remainder.begins_with("-"):return NAN
+ var offset=remainder.to_float()
+ if not is_finite(offset) or offset>=1000:return NAN
+ return km.to_float()*1000.0+offset
+
 
 func find_collected_from_current():
  return navigate_nearest_collected(snapshot_provider.call().station)
