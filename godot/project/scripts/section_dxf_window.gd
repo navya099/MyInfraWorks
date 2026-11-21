@@ -1240,9 +1240,9 @@ func paste_collected_stations(content):
  var lines=content.split("\n")
  var input_count=0
  for index in range(lines.size()):
-  var line=lines[index].strip_edges()
-  if line.is_empty():continue
-  for token in line.split(","):
+  var line=lines[index]
+  if line.strip_edges().is_empty():continue
+  for token in line.replace("\t",",").split(","):
    input_count+=1
    if input_count>100:
     status.text="한 번에 최대 100개 STA를 붙여넣을 수 있습니다."
