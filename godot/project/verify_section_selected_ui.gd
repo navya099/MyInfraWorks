@@ -702,6 +702,18 @@ func run():
  assert(app.section_dxf.redo_collection_edit())
  assert(app.section_dxf.collected_stations==[600.0,500.25])
  print("PASS STATION LIST REPLACEMENT")
+ var long_list: Array[float]=[]
+ for idx in range(15):
+  long_list.append(500.0+idx)
+ var long_list_file="user://station-list-full-preview.txt"
+ assert(app.section_dxf.write_text_file(long_list_file,app.section_dxf.format_station_list(long_list,"\n")))
+ assert(app.section_dxf.preview_station_import(long_list_file,true))
+ assert(app.section_dxf.station_import_list.get_line_count()==15)
+ assert(app.section_dxf.station_import_list.get_line(14).to_float()==514.0)
+ assert(app.section_dxf.collected_stations==[600.0,500.25])
+ app.section_dxf.station_import_dialog.canceled.emit()
+ app.section_dxf.station_import_dialog.hide()
+ print("PASS FULL STATION IMPORT PREVIEW")
  print("PASS STATION LIST FILES")
  app.section_dxf.reset_settings()
  assert(app.section_dxf.copy_collection_column_button.disabled)

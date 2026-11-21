@@ -15,6 +15,7 @@ var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 const STATION_LIST_MAX_BYTES=64*1024
+var station_import_list: TextEdit
 var station_import_dialog: ConfirmationDialog
 var station_import_preview: Dictionary={}
 var save_collection_button: Button
@@ -492,6 +493,10 @@ func _ready():
  station_import_dialog.confirmed.connect(apply_station_import_preview)
  station_import_dialog.canceled.connect(func():station_import_preview.clear())
  add_child(station_import_dialog)
+ station_import_list=TextEdit.new()
+ station_import_list.editable=false
+ station_import_list.custom_minimum_size=Vector2(420,200)
+ station_import_dialog.add_child(station_import_list)
  for action in [save_collection_button,load_collection_button,replace_collection_button]:
   var dialog=FileDialog.new()
   dialog.title=action.text
@@ -1520,12 +1525,14 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  var prepared=prepare_station_import(content,replace_list)
  if prepared.is_empty():return false
  station_import_preview={"prepared":prepared,"generation":generation,"stations":collected_stations.duplicate()}
- var stations=format_station_list(prepared.additions.slice(0,12),", ")
- if prepared.additions.size()>12:stations+=" 외 %d개" % (prepared.additions.size()-12)
  var current_count=collected_stations.size()
  var next_count=prepared.additions.size() if replace_list else current_count+prepared.additions.size()
- station_import_dialog.dialog_text="%s\n담은 목록 %d개 → %d개\n대상 STA(m): %s" % [prepared.summary,current_count,next_count,stations]
- station_import_dialog.popup_centered(Vector2i(520,175))
+ station_import_dialog.dialog_text="%s\n담은 목록 %d개 → %d개\n대상 STA (m)" % [prepared.summary,current_count,next_count]
+ station_import_list.text=format_station_list(prepared.additions,"\n")
+ station_import_list.set_caret_line(0)
+ station_import_list.set_caret_column(0)
+ station_import_list.scroll_vertical=0
+ station_import_dialog.popup_centered(Vector2i(520,360))
  return true
 
 
