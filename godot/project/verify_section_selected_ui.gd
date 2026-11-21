@@ -543,5 +543,6 @@ func run():
  assert(app.section_dxf.collected_stations==before_move_first)
  assert(app.section_dxf.redo_collection_edit())
  assert(app.section_dxf.collected_stations==after_move_last)
+ assert(app.section_dxf.collection_position.text.ends_with("/ %d" % after_move_last.size()))
  print("PASS COLLECTION MOVE LAST")
  quit(0)
