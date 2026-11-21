@@ -529,12 +529,9 @@ func full_range():
 
 func add_current_station():
  var state=snapshot_provider.call()
- if not begin_input.text.is_valid_float() or not end_input.text.is_valid_float():
-  status.text="출력 구간을 먼저 지정하세요."
-  return
  var station=state.station
- var begin=begin_input.text.to_float()
- var finish=state.length if end_input.text==str(state.length) else end_input.text.to_float()
+ var begin=parse_search_station(begin_input.text)
+ var finish=state.length if end_input.text==str(state.length) else parse_search_station(end_input.text)
  if not is_finite(begin) or not is_finite(finish) or begin<0 or finish>state.length or finish-begin<1:
   status.text="유효한 출력 구간을 먼저 지정하세요."
   return
@@ -564,10 +561,12 @@ func start_calculation():
   return
  var state=snapshot_provider.call()
  invalidate()
- if not begin_input.text.is_valid_float() or not end_input.text.is_valid_float():
-  status.text="시작·끝 STA를 숫자로 입력하세요."
+ var begin=parse_search_station(begin_input.text)
+ var finish=state.length if end_input.text==str(state.length) else parse_search_station(end_input.text)
+ if not is_finite(begin) or not is_finite(finish):
+  status.text="시작·끝 STA를 미터 또는 km+m 형식으로 입력하세요."
   return
- var bounds={"begin":begin_input.text.to_float(),"end":state.length if end_input.text==str(state.length) else end_input.text.to_float()}
+ var bounds={"begin":begin,"end":finish}
  requested_inputs=input_signature()
  requested_revision=state.revision
  requested_generation=generation

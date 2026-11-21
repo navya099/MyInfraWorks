@@ -627,4 +627,12 @@ func run():
  app.section_dxf.review_end.text="0+100"
  assert(not app.section_dxf.apply_review_range())
  assert(app.section_dxf.review_range.end==1025.0)
+ app.section_dxf.begin_input.text="0+125.5"
+ app.section_dxf.end_input.text="1+025"
+ app.section_dxf.start_calculation()
+ while app.section_dxf.worker!=null:await process_frame
+ assert(app.section_dxf.result.begin==125.5 and app.section_dxf.result.end==1025.0)
+ app.set_station_distance(200.0)
+ app.section_dxf.add_current_station()
+ assert(is_equal_approx(app.section_dxf.extra_input.text.to_float(),200.0))
  quit(0)
