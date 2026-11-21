@@ -567,19 +567,19 @@ func run():
  assert(app.section_dxf.collection_jump_first.disabled)
  assert(app.section_dxf.collected_stations==stepping_order)
  print("PASS COLLECTION ENDPOINT NAVIGATION")
- assert(app.section_dxf.collection_number.max_value==stepping_order.size())
- app.section_dxf.collection_number.value=2
+ app.section_dxf.collection_number.text="2"
  app.section_dxf.collection_jump_number.pressed.emit()
  assert(app.section_dxf.collection_picker.selected==1)
  assert(is_equal_approx(app.model.station*app.model.length(),stepping_order[1]))
  assert(app.section_dxf.collected_stations==stepping_order)
- var number_editor=app.section_dxf.collection_number.get_line_edit()
+ var number_editor=app.section_dxf.collection_number
  number_editor.text="1"
  number_editor.text_submitted.emit("1")
  assert(app.section_dxf.collection_picker.selected==0)
  assert(is_equal_approx(app.model.station*app.model.length(),stepping_order[0]))
  for invalid_number in ["","abc","1.5","0","999"]:
-  number_editor.text_submitted.emit(invalid_number)
+  number_editor.text=invalid_number
+  app.section_dxf.collection_jump_number.pressed.emit()
   assert(app.section_dxf.status.text=="목록 번호는 1~%d 사이의 정수로 입력하세요." % stepping_order.size())
   assert(is_equal_approx(app.model.station*app.model.length(),stepping_order[0]))
  assert(app.section_dxf.collection_picker.selected==0)
