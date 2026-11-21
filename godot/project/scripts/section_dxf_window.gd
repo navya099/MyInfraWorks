@@ -479,19 +479,23 @@ func _ready():
  load_collection_button.text="STA 파일 불러오기"
  load_collection_button.tooltip_text="산출 후 TXT 파일의 STA를 담은 목록에 추가합니다."
  number_row.add_child(load_collection_button)
- for exporting in [true,false]:
+ var replace_collection_button=Button.new()
+ replace_collection_button.text="STA 파일로 교체"
+ replace_collection_button.tooltip_text="파일 검증 후 담은 목록 전체를 교체합니다. STA 편집 되돌리기를 사용할 수 있습니다."
+ number_row.add_child(replace_collection_button)
+ for action in [save_collection_button,load_collection_button,replace_collection_button]:
   var dialog=FileDialog.new()
+  dialog.title=action.text
   dialog.access=FileDialog.ACCESS_FILESYSTEM
-  dialog.file_mode=FileDialog.FILE_MODE_SAVE_FILE if exporting else FileDialog.FILE_MODE_OPEN_FILE
+  dialog.file_mode=FileDialog.FILE_MODE_SAVE_FILE if action==save_collection_button else FileDialog.FILE_MODE_OPEN_FILE
   dialog.filters=PackedStringArray(["*.txt ; STA 목록"])
   add_child(dialog)
-  if exporting:
+  if action==save_collection_button:
    dialog.current_file="stations.txt"
    dialog.file_selected.connect(save_collected_stations)
-   save_collection_button.pressed.connect(dialog.popup_centered_ratio.bind(0.7))
   else:
-   dialog.file_selected.connect(load_collected_stations)
-   load_collection_button.pressed.connect(dialog.popup_centered_ratio.bind(0.7))
+   dialog.file_selected.connect(load_collected_stations.bind(action==replace_collection_button))
+  action.pressed.connect(dialog.popup_centered_ratio.bind(0.7))
  collection_down=Button.new()
  collection_down.text="STA 아래로"
  collection_down.pressed.connect(move_collected_station.bind(1))
@@ -1266,9 +1270,9 @@ func copy_collected_stations(separator: String=", "):
  return true
 
 
-func paste_collected_stations(content):
+func paste_collected_stations(content, replace_list: bool=false):
  if result_text().is_empty():
-  status.text="횡단을 산출한 뒤 STA를 붙여넣으세요."
+  status.text="횡단을 산출한 뒤 STA 목록을 가져오세요."
   return false
  var additions: Array[float]=[]
  var lines=content.split("\n")
@@ -1290,19 +1294,24 @@ func paste_collected_stations(content):
    if station<result.begin or station>result.end:
     status.text="%d번째 줄, %d번째 열: 출력 구간 밖 STA가 있습니다." % [index+1,column+1]
     return false
-   if not collected_stations.has(station) and not additions.has(station):
+   if (replace_list or not collected_stations.has(station)) and not additions.has(station):
     additions.append(station)
  if additions.is_empty():
   status.text="추가 0개 · 중복 %d개 건너뜀" % input_count if input_count>0 else "붙여넣을 STA가 없습니다."
   return false
- if collected_stations.size()+additions.size()>100:
+ if not replace_list and collected_stations.size()+additions.size()>100:
   status.text="담은 STA는 최대 100개입니다."
+  return false
+ if replace_list and collected_stations==additions:
+  status.text="파일의 STA 목록이 현재 목록과 같습니다."
   return false
  collection_revision=result_revision
  remember_collection()
+ if replace_list:collected_stations.clear()
  collected_stations.append_array(additions)
  refresh_collection_view()
- status.text="추가 %d개 · 중복 %d개 건너뜀" % [additions.size(),input_count-additions.size()]
+ var action_label="교체" if replace_list else "추가"
+ status.text="%s %d개 · 중복 %d개 건너뜀" % [action_label,additions.size(),input_count-additions.size()]
  return true
 
 
@@ -1460,7 +1469,7 @@ func save_collected_stations(path: String) -> bool:
  return true
 
 
-func load_collected_stations(path: String) -> bool:
+func load_collected_stations(path: String, replace_list: bool=false) -> bool:
  var file=FileAccess.open(path,FileAccess.READ)
  if file==null:
   status.text="STA 목록 파일을 열지 못했습니다."
@@ -1474,4 +1483,4 @@ func load_collected_stations(path: String) -> bool:
   status.text="STA 목록 파일을 끝까지 읽지 못했습니다."
   return false
  var content=bytes.get_string_from_utf8().trim_prefix("\ufeff")
- return paste_collected_stations(content)
+ return paste_collected_stations(content,replace_list)
