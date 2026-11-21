@@ -620,4 +620,11 @@ func run():
  assert(app.section_dxf.collection_search_button.disabled)
  assert(app.section_dxf.collection_current_button.disabled)
  print("PASS COLLECTION NUMBER AND NEAREST NAVIGATION")
+ app.section_dxf.review_begin.text="0+125.5"
+ app.section_dxf.review_end.text="1+025"
+ assert(app.section_dxf.apply_review_range())
+ assert(app.section_dxf.review_range=={"begin":125.5,"end":1025.0})
+ app.section_dxf.review_end.text="0+100"
+ assert(not app.section_dxf.apply_review_range())
+ assert(app.section_dxf.review_range.end==1025.0)
  quit(0)

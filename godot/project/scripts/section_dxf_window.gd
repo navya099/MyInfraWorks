@@ -1047,10 +1047,13 @@ func apply_review_range():
  var finish=review_end.text.strip_edges()
  if begin.is_empty() and finish.is_empty():
   review_range={}
- elif not begin.is_valid_float() or not finish.is_valid_float() or not is_finite(begin.to_float()) or not is_finite(finish.to_float()) or begin.to_float()<0 or finish.to_float()<begin.to_float():
-  status.text="목록 범위는 0 이상 시작≤끝 STA로 입력하세요. 빈 두 칸은 전체입니다."
-  return false
- else:review_range={"begin":begin.to_float(),"end":finish.to_float()}
+ else:
+  var begin_m=parse_search_station(begin)
+  var end_m=parse_search_station(finish)
+  if not is_finite(begin_m) or not is_finite(end_m) or begin_m>end_m:
+   status.text="시작·끝 STA를 미터 또는 km+m 형식으로 입력하세요 (시작 ≤ 끝). 두 칸을 비우면 전체입니다."
+   return false
+  review_range={"begin":begin_m,"end":end_m}
  render_result()
  return true
 
