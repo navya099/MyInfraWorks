@@ -16,6 +16,8 @@ var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 var copy_collection_button: Button
 var collection_previous: Button
+var collection_jump_first: Button
+var collection_jump_last: Button
 var collection_next: Button
 var collection_position: Label
 var collection_last: Button
@@ -419,6 +421,14 @@ func _ready():
  collection_next.text="다음 담은 STA"
  collection_next.pressed.connect(step_collected_station.bind(1))
  worst_row.add_child(collection_next)
+ collection_jump_first=Button.new()
+ collection_jump_first.text="첫 담은 STA"
+ collection_jump_first.pressed.connect(navigate_collected_station.bind(0))
+ worst_row.add_child(collection_jump_first)
+ collection_jump_last=Button.new()
+ collection_jump_last.text="마지막 담은 STA"
+ collection_jump_last.pressed.connect(func():navigate_collected_station(collected_stations.size()-1))
+ worst_row.add_child(collection_jump_last)
  collection_down=Button.new()
  collection_down.text="STA 아래로"
  collection_down.pressed.connect(move_collected_station.bind(1))
@@ -1268,6 +1278,8 @@ func update_collection_move_buttons():
  collection_last.disabled=collection_down.disabled
  collection_previous.disabled=collection_up.disabled
  collection_next.disabled=collection_down.disabled
+ collection_jump_first.disabled=collection_previous.disabled
+ collection_jump_last.disabled=collection_next.disabled
 
 func move_collected_station(direction):
  return move_collected_station_to(collection_picker.selected+direction)
@@ -1290,12 +1302,13 @@ func move_collected_station_to(target):
 
 
 func step_collected_station(direction):
+ return navigate_collected_station(collection_picker.selected+direction)
+
+func navigate_collected_station(target):
  if collection_revision!=revision_provider.call():
   update_collection_button()
   return false
- var index=collection_picker.selected
- var target=index+direction
- if index<0 or index>=collected_stations.size() or target<0 or target>=collected_stations.size():
+ if target<0 or target>=collected_stations.size():
   return false
  collection_picker.select(target)
  update_collection_move_buttons()
