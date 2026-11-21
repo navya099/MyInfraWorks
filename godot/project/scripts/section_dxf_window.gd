@@ -1396,4 +1396,8 @@ func navigate_nearest_collected(target: float):
   var best_distance=absf(collected_stations[best]-target)
   if distance<best_distance or (distance==best_distance and collected_stations[index]<collected_stations[best]):
    best=index
- return navigate_collected_station(best)
+ var destination=collected_stations[best]
+ if not navigate_collected_station(best):
+  return false
+ status.text="기준 STA %.3fm → 담은 STA %.3fm (측점 차이 %.3fm)" % [target,destination,absf(destination-target)]
+ return true

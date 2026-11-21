@@ -599,6 +599,7 @@ func run():
  assert(app.section_dxf.paste_collected_stations("20, 40"))
  app.set_station_distance(20.1)
  app.section_dxf.collection_current_button.pressed.emit()
+ assert(app.section_dxf.status.text=="기준 STA 20.100m → 담은 STA 20.000m (측점 차이 0.100m)")
  assert(is_equal_approx(app.model.station*app.model.length(),20.0))
  assert(app.section_dxf.collected_stations[app.section_dxf.collection_picker.selected]==20.0)
  app.section_dxf.reset_settings()
