@@ -19,6 +19,7 @@ var collection_previous: Button
 var collection_jump_first: Button
 var collection_number_range: Label
 var collection_search: LineEdit
+var collection_current_button: Button
 var collection_search_button: Button
 var collection_number: LineEdit
 var collection_jump_number: Button
@@ -460,6 +461,10 @@ func _ready():
  collection_search_button.text="가까운 담은 STA"
  collection_search_button.pressed.connect(func():find_collected_station(collection_search.text))
  number_row.add_child(collection_search_button)
+ collection_current_button=Button.new()
+ collection_current_button.text="현재 위치에서 가까운 담은 STA"
+ collection_current_button.pressed.connect(find_collected_from_current)
+ number_row.add_child(collection_current_button)
  collection_down=Button.new()
  collection_down.text="STA 아래로"
  collection_down.pressed.connect(move_collected_station.bind(1))
@@ -1309,6 +1314,7 @@ func update_collection_move_buttons():
  collection_jump_number.disabled=count==0
  collection_search.editable=count>0
  collection_search_button.disabled=count==0
+ collection_current_button.disabled=count==0
  if count==0:collection_search.clear()
  collection_up.disabled=index<=0 or index>=collected_stations.size()
  collection_first.disabled=collection_up.disabled
@@ -1377,7 +1383,13 @@ func find_collected_station(value: String):
  if not token.is_valid_float() or not is_finite(token.to_float()) or token.to_float()<0:
   status.text="담은 STA 검색은 0 이상의 유한한 미터 값으로 입력하세요."
   return false
- var target=token.to_float()
+ return navigate_nearest_collected(token.to_float())
+
+func find_collected_from_current():
+ return navigate_nearest_collected(snapshot_provider.call().station)
+
+func navigate_nearest_collected(target: float):
+ if collected_stations.is_empty() or not is_finite(target):return false
  var best=0
  for index in range(1,collected_stations.size()):
   var distance=absf(collected_stations[index]-target)
