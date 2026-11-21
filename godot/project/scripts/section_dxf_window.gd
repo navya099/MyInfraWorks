@@ -17,6 +17,7 @@ var collection_jump_button: Button
 var copy_collection_button: Button
 var collection_previous: Button
 var collection_jump_first: Button
+var collection_number_range: Label
 var collection_number: LineEdit
 var collection_jump_number: Button
 var collection_jump_last: Button
@@ -444,6 +445,8 @@ func _ready():
  collection_jump_number.text="목록 번호로 이동"
  collection_jump_number.pressed.connect(func():submit_collection_number(collection_number.text))
  number_row.add_child(collection_jump_number)
+ collection_number_range=Label.new()
+ number_row.add_child(collection_number_range)
  collection_down=Button.new()
  collection_down.text="STA 아래로"
  collection_down.pressed.connect(move_collected_station.bind(1))
@@ -1288,6 +1291,7 @@ func update_collection_move_buttons():
  var count=collected_stations.size()
  collection_position.text="선택 %d / %d" % [index+1 if index>=0 and index<count else 0,count]
  collection_number.text=str(index+1) if index>=0 and index<count else ""
+ collection_number_range.text="입력 범위 1~%d" % count if count>0 else "담은 측점 없음"
  collection_number.editable=count>0
  collection_jump_number.disabled=count==0
  collection_up.disabled=index<=0 or index>=collected_stations.size()

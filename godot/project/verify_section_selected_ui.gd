@@ -567,6 +567,7 @@ func run():
  assert(app.section_dxf.collection_jump_first.disabled)
  assert(app.section_dxf.collected_stations==stepping_order)
  print("PASS COLLECTION ENDPOINT NAVIGATION")
+ assert(app.section_dxf.collection_number_range.text=="입력 범위 1~%d" % stepping_order.size())
  app.section_dxf.collection_number.text="2"
  app.section_dxf.collection_jump_number.pressed.emit()
  assert(app.section_dxf.collection_picker.selected==1)
@@ -586,5 +587,6 @@ func run():
  app.section_dxf.reset_settings()
  assert(app.section_dxf.collection_jump_number.disabled)
  assert(not app.section_dxf.collection_number.editable)
+ assert(app.section_dxf.collection_number_range.text=="담은 측점 없음")
  print("PASS COLLECTION NUMBER NAVIGATION")
  quit(0)
