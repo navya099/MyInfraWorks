@@ -241,7 +241,7 @@ func _ready():
   navigation_row.add_child(button)
   navigation_buttons.append(button)
  search_input=LineEdit.new()
- search_input.placeholder_text="검색 STA(m)"
+ search_input.placeholder_text="검색 STA (m 또는 km+m)"
  search_input.custom_minimum_size.x=180
  search_input.max_length=32
  navigation_row.add_child(search_input)
@@ -806,11 +806,10 @@ func move_result(direction):
 
 func find_result():
  if result_text().is_empty() or row_stations.is_empty():return false
- var token=search_input.text.strip_edges()
- if not token.is_valid_float() or not is_finite(token.to_float()) or token.to_float()<0:
-  status.text="검색 STA는 0 이상의 유한한 미터 값으로 입력하세요."
+ var target=parse_search_station(search_input.text)
+ if not is_finite(target):
+  status.text="검색 STA에 0 이상의 미터 값 또는 1+234.567 형식을 입력하세요."
   return false
- var target=token.to_float()
  var rows=row_stations.keys()
  rows.sort()
  var best=rows[0]
@@ -1379,13 +1378,13 @@ func handle_collection_number_input(event: InputEvent):
 
 func find_collected_station(value: String):
  if collected_stations.is_empty():return false
- var target=parse_collection_search(value)
+ var target=parse_search_station(value)
  if not is_finite(target):
   status.text="담은 STA 검색에 0 이상의 미터 값 또는 1+234.567 형식을 입력하세요."
   return false
  return navigate_nearest_collected(target)
 
-static func parse_collection_search(value: String) -> float:
+static func parse_search_station(value: String) -> float:
  var token=value.strip_edges()
  if token.is_valid_float():
   var meters=token.to_float()
