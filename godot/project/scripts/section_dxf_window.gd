@@ -1242,17 +1242,19 @@ func paste_collected_stations(content):
  for index in range(lines.size()):
   var line=lines[index]
   if line.strip_edges().is_empty():continue
-  for token in line.replace("\t",",").split(","):
+  var fields=line.replace("\t",",").split(",")
+  for column in range(fields.size()):
+   var token=fields[column]
    input_count+=1
    if input_count>100:
     status.text="한 번에 최대 100개 STA를 붙여넣을 수 있습니다."
     return false
    var station=CrossDxf.parse_station(token)
    if not is_finite(station):
-    status.text="%d번째 줄: STA를 미터 값 또는 km+m 형식으로 입력하세요." % (index+1)
+    status.text="%d번째 줄, %d번째 열: STA를 미터 값 또는 km+m 형식으로 입력하세요." % [index+1,column+1]
     return false
    if station<result.begin or station>result.end:
-    status.text="%d번째 줄: 출력 구간 밖 STA가 있습니다." % (index+1)
+    status.text="%d번째 줄, %d번째 열: 출력 구간 밖 STA가 있습니다." % [index+1,column+1]
     return false
    if not collected_stations.has(station) and not additions.has(station):
     additions.append(station)
