@@ -441,6 +441,7 @@ func _ready():
  collection_number.tooltip_text="담은 STA 목록 번호"
  number_row.add_child(collection_number)
  collection_number.text_submitted.connect(submit_collection_number)
+ collection_number.gui_input.connect(handle_collection_number_input)
  collection_jump_number=Button.new()
  collection_jump_number.text="목록 번호로 이동"
  collection_jump_number.pressed.connect(func():submit_collection_number(collection_number.text))
@@ -1346,3 +1347,10 @@ func submit_collection_number(value: String):
   status.text="목록 번호는 1~%d 사이의 정수로 입력하세요." % count
   return
  navigate_collected_station(entered_number.to_int()-1)
+
+
+func handle_collection_number_input(event: InputEvent):
+ if event is InputEventKey and event.pressed and event.keycode==KEY_ESCAPE:
+  update_collection_move_buttons()
+  collection_number.caret_column=collection_number.text.length()
+  collection_number.accept_event()

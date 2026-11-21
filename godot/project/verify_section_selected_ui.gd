@@ -584,6 +584,13 @@ func run():
   assert(app.section_dxf.status.text=="목록 번호는 1~%d 사이의 정수로 입력하세요." % stepping_order.size())
   assert(is_equal_approx(app.model.station*app.model.length(),stepping_order[0]))
  assert(app.section_dxf.collection_picker.selected==0)
+ number_editor.text="999"
+ var cancel_number=InputEventKey.new()
+ cancel_number.keycode=KEY_ESCAPE
+ cancel_number.pressed=true
+ number_editor.gui_input.emit(cancel_number)
+ assert(number_editor.text=="1")
+ assert(app.section_dxf.collection_picker.selected==0)
  app.section_dxf.reset_settings()
  assert(app.section_dxf.collection_jump_number.disabled)
  assert(not app.section_dxf.collection_number.editable)
