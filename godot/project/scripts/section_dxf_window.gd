@@ -1236,7 +1236,11 @@ func paste_collected_stations(content):
  if result_text().is_empty():
   status.text="횡단을 산출한 뒤 STA를 붙여넣으세요."
   return false
- var parsed=CrossDxf.parse_extra(content)
+ var rows=PackedStringArray()
+ for line in content.split("\n"):
+  var station_row=line.strip_edges()
+  if not station_row.is_empty():rows.append(station_row)
+ var parsed=CrossDxf.parse_extra(",".join(rows))
  if not parsed.ok:
   status.text=parsed.error
   return false
