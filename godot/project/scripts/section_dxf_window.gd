@@ -14,6 +14,7 @@ var undo_collection_button: Button
 var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
+var copy_collection_column_button: Button
 var copy_collection_button: Button
 var collection_previous: Button
 var collection_jump_first: Button
@@ -389,6 +390,10 @@ func _ready():
  copy_collection_button.text="담은 STA 복사"
  copy_collection_button.pressed.connect(copy_collected_stations)
  worst_row.add_child(copy_collection_button)
+ copy_collection_column_button=Button.new()
+ copy_collection_column_button.text="담은 STA 한 열로 복사"
+ copy_collection_column_button.pressed.connect(copy_collected_stations.bind("\n"))
+ worst_row.add_child(copy_collection_column_button)
  var paste_button=Button.new()
  paste_button.text="STA 붙여넣기"
  paste_button.pressed.connect(func():paste_collected_stations(DisplayServer.clipboard_get()))
@@ -1083,11 +1088,11 @@ func recalculate_selected():
  if not row_stations.has(row):return false
  return recalculate_stations([row_stations[row]])
 
-static func format_station_list(station_values):
+static func format_station_list(station_values,separator: String=", "):
  var stations=PackedStringArray()
  for station in station_values:
   stations.append(JSON.stringify(station,"",true,true))
- return ", ".join(stations)
+ return separator.join(stations)
 
 func recalculate_stations(station_values):
  var station_list=format_station_list(station_values)
@@ -1129,6 +1134,7 @@ func update_collection_button():
     break
  remove_displayed_button.disabled=not has_visible_match
  copy_collection_button.disabled=empty
+ copy_collection_column_button.disabled=empty
  update_collection_move_buttons()
  collection_picker.disabled=empty
  remove_collection_button.disabled=empty
@@ -1224,10 +1230,10 @@ func refresh_collection_view():
   update_collection_button()
 
 
-func copy_collected_stations():
+func copy_collected_stations(separator: String=", "):
  update_collection_button()
  if collected_stations.is_empty():return false
- DisplayServer.clipboard_set(format_station_list(collected_stations))
+ DisplayServer.clipboard_set(format_station_list(collected_stations,separator))
  status.text="담은 STA %d개를 복사했습니다." % collected_stations.size()
  return true
 
