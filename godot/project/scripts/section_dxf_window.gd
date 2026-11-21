@@ -14,6 +14,8 @@ var undo_collection_button: Button
 var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
+const STATION_LIST_MAX_BYTES=64*1024
+var save_collection_button: Button
 var copy_collection_column_button: Button
 var copy_collection_button: Button
 var collection_previous: Button
@@ -470,6 +472,26 @@ func _ready():
  collection_current_button.text="현재 위치에서 가까운 담은 STA"
  collection_current_button.pressed.connect(find_collected_from_current)
  number_row.add_child(collection_current_button)
+ save_collection_button=Button.new()
+ save_collection_button.text="담은 STA 저장"
+ number_row.add_child(save_collection_button)
+ var load_collection_button=Button.new()
+ load_collection_button.text="STA 파일 불러오기"
+ load_collection_button.tooltip_text="산출 후 TXT 파일의 STA를 담은 목록에 추가합니다."
+ number_row.add_child(load_collection_button)
+ for exporting in [true,false]:
+  var dialog=FileDialog.new()
+  dialog.access=FileDialog.ACCESS_FILESYSTEM
+  dialog.file_mode=FileDialog.FILE_MODE_SAVE_FILE if exporting else FileDialog.FILE_MODE_OPEN_FILE
+  dialog.filters=PackedStringArray(["*.txt ; STA 목록"])
+  add_child(dialog)
+  if exporting:
+   dialog.current_file="stations.txt"
+   dialog.file_selected.connect(save_collected_stations)
+   save_collection_button.pressed.connect(dialog.popup_centered_ratio.bind(0.7))
+  else:
+   dialog.file_selected.connect(load_collected_stations)
+   load_collection_button.pressed.connect(dialog.popup_centered_ratio.bind(0.7))
  collection_down=Button.new()
  collection_down.text="STA 아래로"
  collection_down.pressed.connect(move_collected_station.bind(1))
@@ -738,21 +760,26 @@ func copy_result():
 func save_report(path):
  var content=result_text(report_include_summary.button_pressed)
  if content.is_empty():return false
- var temporary=path+".tmp"
- var file=FileAccess.open(temporary,FileAccess.WRITE)
- if file==null:
-  status.text="결과 TXT 파일을 열지 못했습니다."
+ if not write_text_file(path,content+"\n"):
+  status.text="결과 TXT 저장에 실패했습니다."
   return false
- file.store_string(content+"\n")
+ status.text="결과 TXT 저장 완료: "+path
+ return true
+
+
+static func write_text_file(path: String, content: String) -> bool:
+ var temporary=path+".tmp_"+str(Time.get_ticks_usec())
+ var file=FileAccess.open(temporary,FileAccess.WRITE)
+ if file==null:return false
+ file.store_string(content)
  file.flush()
  var error=file.get_error()
  file.close()
  if error!=OK or DirAccess.rename_absolute(temporary,path)!=OK:
   DirAccess.remove_absolute(temporary)
-  status.text="결과 TXT 저장에 실패했습니다."
   return false
- status.text="결과 TXT 저장 완료: "+path
  return true
+
 
 
 static func missing_summary(sections,lateral_count):
@@ -1135,6 +1162,7 @@ func update_collection_button():
  remove_displayed_button.disabled=not has_visible_match
  copy_collection_button.disabled=empty
  copy_collection_column_button.disabled=empty
+ save_collection_button.disabled=empty
  update_collection_move_buttons()
  collection_picker.disabled=empty
  remove_collection_button.disabled=empty
@@ -1419,3 +1447,31 @@ func navigate_nearest_collected(target: float):
   return false
  status.text="기준 STA %.3fm → 담은 STA %.3fm (측점 차이 %.3fm)" % [target,destination,absf(destination-target)]
  return true
+
+
+func save_collected_stations(path: String) -> bool:
+ update_collection_button()
+ if collected_stations.is_empty():return false
+ var content=format_station_list(collected_stations,"\n")+"\n"
+ if not write_text_file(path,content):
+  status.text="STA 목록을 저장하지 못했습니다."
+  return false
+ status.text="담은 STA %d개를 저장했습니다." % collected_stations.size()
+ return true
+
+
+func load_collected_stations(path: String) -> bool:
+ var file=FileAccess.open(path,FileAccess.READ)
+ if file==null:
+  status.text="STA 목록 파일을 열지 못했습니다."
+  return false
+ var length=file.get_length()
+ if length>STATION_LIST_MAX_BYTES:
+  status.text="STA 목록 파일은 64KB 이하여야 합니다."
+  return false
+ var bytes=file.get_buffer(length)
+ if bytes.size()!=length:
+  status.text="STA 목록 파일을 끝까지 읽지 못했습니다."
+  return false
+ var content=bytes.get_string_from_utf8().trim_prefix("\ufeff")
+ return paste_collected_stations(content)
