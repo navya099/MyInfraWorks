@@ -15,6 +15,8 @@ var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 const STATION_LIST_MAX_BYTES=64*1024
+var station_import_dialog: ConfirmationDialog
+var station_import_preview: Dictionary={}
 var save_collection_button: Button
 var copy_collection_column_button: Button
 var copy_collection_button: Button
@@ -483,6 +485,13 @@ func _ready():
  replace_collection_button.text="STA 파일로 교체"
  replace_collection_button.tooltip_text="파일 검증 후 담은 목록 전체를 교체합니다. STA 편집 되돌리기를 사용할 수 있습니다."
  number_row.add_child(replace_collection_button)
+ station_import_dialog=ConfirmationDialog.new()
+ station_import_dialog.title="STA 파일 가져오기 미리보기"
+ station_import_dialog.ok_button_text="적용"
+ station_import_dialog.cancel_button_text="취소"
+ station_import_dialog.confirmed.connect(apply_station_import_preview)
+ station_import_dialog.canceled.connect(func():station_import_preview.clear())
+ add_child(station_import_dialog)
  for action in [save_collection_button,load_collection_button,replace_collection_button]:
   var dialog=FileDialog.new()
   dialog.title=action.text
@@ -494,7 +503,7 @@ func _ready():
    dialog.current_file="stations.txt"
    dialog.file_selected.connect(save_collected_stations)
   else:
-   dialog.file_selected.connect(load_collected_stations.bind(action==replace_collection_button))
+   dialog.file_selected.connect(preview_station_import.bind(action==replace_collection_button))
   action.pressed.connect(dialog.popup_centered_ratio.bind(0.7))
  collection_down=Button.new()
  collection_down.text="STA 아래로"
@@ -1271,9 +1280,15 @@ func copy_collected_stations(separator: String=", "):
 
 
 func paste_collected_stations(content, replace_list: bool=false):
+ var prepared=prepare_station_import(content,replace_list)
+ if prepared.is_empty():return false
+ return apply_station_import(prepared)
+
+
+func prepare_station_import(content: String, replace_list: bool) -> Dictionary:
  if result_text().is_empty():
   status.text="횡단을 산출한 뒤 STA 목록을 가져오세요."
-  return false
+  return {}
  var additions: Array[float]=[]
  var lines=content.split("\n")
  var input_count=0
@@ -1286,32 +1301,39 @@ func paste_collected_stations(content, replace_list: bool=false):
    input_count+=1
    if input_count>100:
     status.text="한 번에 최대 100개 STA를 붙여넣을 수 있습니다."
-    return false
+    return {}
    var station=CrossDxf.parse_station(token)
    if not is_finite(station):
     status.text="%d번째 줄, %d번째 열: STA를 미터 값 또는 km+m 형식으로 입력하세요." % [index+1,column+1]
-    return false
+    return {}
    if station<result.begin or station>result.end:
     status.text="%d번째 줄, %d번째 열: 출력 구간 밖 STA가 있습니다." % [index+1,column+1]
-    return false
+    return {}
    if (replace_list or not collected_stations.has(station)) and not additions.has(station):
     additions.append(station)
  if additions.is_empty():
   status.text="추가 0개 · 중복 %d개 건너뜀" % input_count if input_count>0 else "붙여넣을 STA가 없습니다."
-  return false
+  return {}
  if not replace_list and collected_stations.size()+additions.size()>100:
   status.text="담은 STA는 최대 100개입니다."
-  return false
+  return {}
  if replace_list and collected_stations==additions:
   status.text="파일의 STA 목록이 현재 목록과 같습니다."
-  return false
+  return {}
+ var action_label="교체" if replace_list else "추가"
+ var summary="%s %d개 · 중복 %d개 건너뜀" % [action_label,additions.size(),input_count-additions.size()]
+ return {"additions":additions,"replace_list":replace_list,"summary":summary}
+
+
+func apply_station_import(prepared: Dictionary) -> bool:
+ var additions=prepared.additions
+ var replace_list=prepared.replace_list
  collection_revision=result_revision
  remember_collection()
  if replace_list:collected_stations.clear()
  collected_stations.append_array(additions)
  refresh_collection_view()
- var action_label="교체" if replace_list else "추가"
- status.text="%s %d개 · 중복 %d개 건너뜀" % [action_label,additions.size(),input_count-additions.size()]
+ status.text=prepared.summary
  return true
 
 
@@ -1469,18 +1491,49 @@ func save_collected_stations(path: String) -> bool:
  return true
 
 
-func load_collected_stations(path: String, replace_list: bool=false) -> bool:
+func read_station_file(path: String) -> Variant:
  var file=FileAccess.open(path,FileAccess.READ)
  if file==null:
   status.text="STA 목록 파일을 열지 못했습니다."
-  return false
+  return null
  var length=file.get_length()
  if length>STATION_LIST_MAX_BYTES:
   status.text="STA 목록 파일은 64KB 이하여야 합니다."
-  return false
+  return null
  var bytes=file.get_buffer(length)
  if bytes.size()!=length:
   status.text="STA 목록 파일을 끝까지 읽지 못했습니다."
-  return false
- var content=bytes.get_string_from_utf8().trim_prefix("\ufeff")
+  return null
+ return bytes.get_string_from_utf8().trim_prefix("\ufeff")
+
+
+func load_collected_stations(path: String, replace_list: bool=false) -> bool:
+ var content=read_station_file(path)
+ if content==null:return false
  return paste_collected_stations(content,replace_list)
+
+
+func preview_station_import(path: String, replace_list: bool) -> bool:
+ station_import_preview.clear()
+ var content=read_station_file(path)
+ if content==null:return false
+ var prepared=prepare_station_import(content,replace_list)
+ if prepared.is_empty():return false
+ station_import_preview={"prepared":prepared,"generation":generation,"stations":collected_stations.duplicate()}
+ var stations=format_station_list(prepared.additions.slice(0,12),", ")
+ if prepared.additions.size()>12:stations+=" 외 %d개" % (prepared.additions.size()-12)
+ var current_count=collected_stations.size()
+ var next_count=prepared.additions.size() if replace_list else current_count+prepared.additions.size()
+ station_import_dialog.dialog_text="%s\n담은 목록 %d개 → %d개\n대상 STA(m): %s" % [prepared.summary,current_count,next_count,stations]
+ station_import_dialog.popup_centered(Vector2i(520,175))
+ return true
+
+
+func apply_station_import_preview() -> bool:
+ var preview=station_import_preview
+ station_import_preview={}
+ if preview.is_empty():return false
+ if result_text().is_empty() or generation!=preview.generation or collected_stations!=preview.stations:
+  status.text="산출 결과 또는 목록이 바뀌었습니다. 파일을 다시 선택하세요."
+  return false
+ return apply_station_import(preview.prepared)
