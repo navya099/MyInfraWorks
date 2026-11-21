@@ -18,6 +18,8 @@ var copy_collection_button: Button
 var collection_previous: Button
 var collection_jump_first: Button
 var collection_number_range: Label
+var collection_search: LineEdit
+var collection_search_button: Button
 var collection_number: LineEdit
 var collection_jump_number: Button
 var collection_jump_last: Button
@@ -448,6 +450,16 @@ func _ready():
  number_row.add_child(collection_jump_number)
  collection_number_range=Label.new()
  number_row.add_child(collection_number_range)
+ collection_search=LineEdit.new()
+ collection_search.placeholder_text="담은 STA 검색 (m)"
+ collection_search.custom_minimum_size.x=180
+ collection_search.max_length=32
+ collection_search.text_submitted.connect(find_collected_station)
+ number_row.add_child(collection_search)
+ collection_search_button=Button.new()
+ collection_search_button.text="가까운 담은 STA"
+ collection_search_button.pressed.connect(func():find_collected_station(collection_search.text))
+ number_row.add_child(collection_search_button)
  collection_down=Button.new()
  collection_down.text="STA 아래로"
  collection_down.pressed.connect(move_collected_station.bind(1))
@@ -1295,6 +1307,9 @@ func update_collection_move_buttons():
  collection_number_range.text="입력 범위 1~%d" % count if count>0 else "담은 측점 없음"
  collection_number.editable=count>0
  collection_jump_number.disabled=count==0
+ collection_search.editable=count>0
+ collection_search_button.disabled=count==0
+ if count==0:collection_search.clear()
  collection_up.disabled=index<=0 or index>=collected_stations.size()
  collection_first.disabled=collection_up.disabled
  collection_down.disabled=index<0 or index>=collected_stations.size()-1
@@ -1354,3 +1369,19 @@ func handle_collection_number_input(event: InputEvent):
   update_collection_move_buttons()
   collection_number.caret_column=collection_number.text.length()
   collection_number.accept_event()
+
+
+func find_collected_station(value: String):
+ if collected_stations.is_empty():return false
+ var token=value.strip_edges()
+ if not token.is_valid_float() or not is_finite(token.to_float()) or token.to_float()<0:
+  status.text="담은 STA 검색은 0 이상의 유한한 미터 값으로 입력하세요."
+  return false
+ var target=token.to_float()
+ var best=0
+ for index in range(1,collected_stations.size()):
+  var distance=absf(collected_stations[index]-target)
+  var best_distance=absf(collected_stations[best]-target)
+  if distance<best_distance or (distance==best_distance and collected_stations[index]<collected_stations[best]):
+   best=index
+ return navigate_collected_station(best)
