@@ -1236,21 +1236,26 @@ func paste_collected_stations(content):
  if result_text().is_empty():
   status.text="횡단을 산출한 뒤 STA를 붙여넣으세요."
   return false
- var rows=PackedStringArray()
- for line in content.split("\n"):
-  var station_row=line.strip_edges()
-  if not station_row.is_empty():rows.append(station_row)
- var parsed=CrossDxf.parse_extra(",".join(rows))
- if not parsed.ok:
-  status.text=parsed.error
-  return false
  var additions: Array[float]=[]
- for station in parsed.stations:
-  if station<result.begin or station>result.end:
-   status.text="출력 구간 밖 STA가 있습니다."
-   return false
-  if not collected_stations.has(station) and not additions.has(station):
-   additions.append(station)
+ var lines=content.split("\n")
+ var input_count=0
+ for index in range(lines.size()):
+  var line=lines[index].strip_edges()
+  if line.is_empty():continue
+  for token in line.split(","):
+   input_count+=1
+   if input_count>100:
+    status.text="한 번에 최대 100개 STA를 붙여넣을 수 있습니다."
+    return false
+   var station=CrossDxf.parse_station(token)
+   if not is_finite(station):
+    status.text="%d번째 줄: STA를 미터 값 또는 km+m 형식으로 입력하세요." % (index+1)
+    return false
+   if station<result.begin or station>result.end:
+    status.text="%d번째 줄: 출력 구간 밖 STA가 있습니다." % (index+1)
+    return false
+   if not collected_stations.has(station) and not additions.has(station):
+    additions.append(station)
  if additions.is_empty():
   status.text="새로 담을 STA가 없습니다."
   return false
