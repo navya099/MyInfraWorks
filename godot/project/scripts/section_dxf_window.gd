@@ -1537,9 +1537,11 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  if prepared.is_empty():return false
  station_import_preview={"prepared":prepared,"generation":generation,"stations":collected_stations.duplicate()}
  var current_count=collected_stations.size()
- var next_count=prepared.additions.size() if replace_list else current_count+prepared.additions.size()
- station_import_dialog.dialog_text="%s\n담은 목록 %d개 → %d개\n대상 STA (m)" % [prepared.summary,current_count,next_count]
- station_import_list.text=format_station_list(prepared.additions,"\n")
+ var final_stations: Array[float]=[]
+ if not replace_list:final_stations.append_array(collected_stations)
+ final_stations.append_array(prepared.additions)
+ station_import_dialog.dialog_text="%s\n담은 목록 %d개 → %d개\n적용 후 담은 STA (m)" % [prepared.summary,current_count,final_stations.size()]
+ station_import_list.text=format_station_list(final_stations,"\n")
  station_import_list.set_caret_line(0)
  station_import_list.set_caret_column(0)
  station_import_list.scroll_vertical=0
