@@ -15,6 +15,7 @@ var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 var copy_collection_button: Button
+var collection_last: Button
 var collection_first: Button
 var collection_up: Button
 var collection_down: Button
@@ -401,6 +402,10 @@ func _ready():
  collection_first.text="STA 맨 앞으로"
  collection_first.pressed.connect(move_collected_station_to.bind(0))
  worst_row.add_child(collection_first)
+ collection_last=Button.new()
+ collection_last.text="STA 맨 뒤로"
+ collection_last.pressed.connect(func():move_collected_station_to(collected_stations.size()-1))
+ worst_row.add_child(collection_last)
  collection_down=Button.new()
  collection_down.text="STA 아래로"
  collection_down.pressed.connect(move_collected_station.bind(1))
@@ -1245,6 +1250,7 @@ func update_collection_move_buttons():
  collection_up.disabled=index<=0 or index>=collected_stations.size()
  collection_first.disabled=collection_up.disabled
  collection_down.disabled=index<0 or index>=collected_stations.size()-1
+ collection_last.disabled=collection_down.disabled
 
 func move_collected_station(direction):
  return move_collected_station_to(collection_picker.selected+direction)
