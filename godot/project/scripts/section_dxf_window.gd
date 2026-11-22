@@ -27,6 +27,7 @@ var station_import_list: TextEdit
 var station_import_dialog: ConfirmationDialog
 var station_import_error_dialog: AcceptDialog
 var station_import_error_list: TextEdit
+var station_import_copy_errors_button: Button
 var station_import_preview: Dictionary={}
 var save_collection_button: Button
 var copy_collection_column_button: Button
@@ -511,6 +512,8 @@ func _ready():
  station_import_error_list.editable=false
  station_import_error_list.custom_minimum_size=Vector2(420,180)
  station_import_error_dialog.add_child(station_import_error_list)
+ station_import_copy_errors_button=station_import_error_dialog.add_button("오류 내역 복사")
+ station_import_copy_errors_button.pressed.connect(copy_station_import_errors)
  var preview_lists=VBoxContainer.new()
  station_import_dialog.add_child(preview_lists)
  station_import_new_only=CheckBox.new()
@@ -1369,7 +1372,7 @@ func prepare_station_import(content: String, replace_list: bool, file_preview: b
     if not file_preview:
      status.text=detail
      return {}
-    errors.append(detail)
+    errors.append("%s  |  입력값 %s" % [detail,JSON.stringify(token)])
     continue
    var already_collected=not replace_list and collected_stations.has(station)
    var location="%d줄 %d열" % [index+1,column+1]
@@ -1598,6 +1601,7 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
   status.text="STA 파일 검증 오류 %d개" % prepared.errors.size()
   station_import_error_dialog.dialog_text=status.text
   station_import_error_list.text="\n".join(prepared.errors)
+  station_import_copy_errors_button.text="오류 내역 복사"
   station_import_error_list.set_caret_line(0)
   station_import_error_list.set_caret_column(0)
   station_import_error_list.scroll_vertical=0
@@ -1643,6 +1647,13 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  if has_duplicates:preview_height+=115
  station_import_dialog.popup_centered(Vector2i(520,preview_height))
  return true
+
+
+func copy_station_import_errors() -> void:
+ if not station_import_error_dialog.visible or station_import_error_list.text.is_empty():
+  return
+ DisplayServer.clipboard_set(station_import_error_list.text)
+ station_import_copy_errors_button.text="복사됨"
 
 
 func copy_station_import_duplicates() -> void:
