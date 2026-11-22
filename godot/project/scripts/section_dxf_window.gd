@@ -15,6 +15,8 @@ var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 const STATION_LIST_MAX_BYTES=64*1024
+var station_import_duplicates_title: Label
+var station_import_duplicates_list: TextEdit
 var station_import_removed_title: Label
 var station_import_removed_list: TextEdit
 var station_import_new_only: CheckBox
@@ -515,6 +517,12 @@ func _ready():
  station_import_removed_list.editable=false
  station_import_removed_list.custom_minimum_size.y=90
  preview_lists.add_child(station_import_removed_list)
+ station_import_duplicates_title=Label.new()
+ preview_lists.add_child(station_import_duplicates_title)
+ station_import_duplicates_list=TextEdit.new()
+ station_import_duplicates_list.editable=false
+ station_import_duplicates_list.custom_minimum_size.y=90
+ preview_lists.add_child(station_import_duplicates_list)
  for action in [save_collection_button,load_collection_button,replace_collection_button]:
   var dialog=FileDialog.new()
   dialog.title=action.text
@@ -1308,11 +1316,12 @@ func paste_collected_stations(content, replace_list: bool=false):
  return apply_station_import(prepared)
 
 
-func prepare_station_import(content: String, replace_list: bool) -> Dictionary:
+func prepare_station_import(content: String, replace_list: bool, preview_duplicates: bool=false) -> Dictionary:
  if result_text().is_empty():
   status.text="횡단을 산출한 뒤 STA 목록을 가져오세요."
   return {}
  var additions: Array[float]=[]
+ var duplicates=PackedStringArray()
  var lines=content.split("\n")
  var input_count=0
  for index in range(lines.size()):
@@ -1332,20 +1341,28 @@ func prepare_station_import(content: String, replace_list: bool) -> Dictionary:
    if station<result.begin or station>result.end:
     status.text="%d번째 줄, %d번째 열: 출력 구간 밖 STA가 있습니다." % [index+1,column+1]
     return {}
-   if (replace_list or not collected_stations.has(station)) and not additions.has(station):
-    additions.append(station)
- if additions.is_empty():
-  status.text="추가 0개 · 중복 %d개 건너뜀" % input_count if input_count>0 else "붙여넣을 STA가 없습니다."
+   var already_collected=not replace_list and collected_stations.has(station)
+   if already_collected or additions.has(station):
+    var reason="이미 담은 STA" if already_collected else "파일 내 중복"
+    duplicates.append("%d줄 %d열  |  %s  |  %s" % [index+1,column+1,token.strip_edges(),reason])
+    continue
+   additions.append(station)
+ var show_skipped=preview_duplicates and not duplicates.is_empty()
+ if additions.is_empty() and not show_skipped:
+  status.text="추가 0개 · 중복 %d개 건너뜀" % duplicates.size() if not duplicates.is_empty() else "붙여넣을 STA가 없습니다."
   return {}
  if not replace_list and collected_stations.size()+additions.size()>100:
   status.text="담은 STA는 최대 100개입니다."
   return {}
- if replace_list and collected_stations==additions:
+ var same_replacement=replace_list and collected_stations==additions
+ if same_replacement and not show_skipped:
   status.text="파일의 STA 목록이 현재 목록과 같습니다."
   return {}
  var action_label="교체" if replace_list else "추가"
- var summary="%s %d개 · 중복 %d개 건너뜀" % [action_label,additions.size(),input_count-additions.size()]
- return {"additions":additions,"replace_list":replace_list,"summary":summary}
+ var no_changes=additions.is_empty() or same_replacement
+ var summary="%s %d개 · 중복 %d개 건너뜀" % [action_label,additions.size(),duplicates.size()]
+ if no_changes:summary="목록 변경 없음 · 중복 %d개 건너뜀" % duplicates.size()
+ return {"additions":additions,"replace_list":replace_list,"summary":summary,"duplicates":duplicates,"no_changes":no_changes}
 
 
 func apply_station_import(prepared: Dictionary) -> bool:
@@ -1540,7 +1557,7 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  station_import_preview.clear()
  var content=read_station_file(path)
  if content==null:return false
- var prepared=prepare_station_import(content,replace_list)
+ var prepared=prepare_station_import(content,replace_list,true)
  if prepared.is_empty():return false
  var current_count=collected_stations.size()
  var final_stations: Array[float]=[]
@@ -1567,7 +1584,19 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  station_import_removed_list.text=format_station_list(removed,"\n")
  station_import_removed_list.set_caret_line(0)
  station_import_removed_list.scroll_vertical=0
- station_import_dialog.popup_centered(Vector2i(520,460 if not removed.is_empty() else 360))
+ var has_duplicates=not prepared.duplicates.is_empty()
+ station_import_duplicates_title.visible=has_duplicates
+ station_import_duplicates_title.text="건너뛴 중복 STA %d개" % prepared.duplicates.size()
+ station_import_duplicates_list.visible=has_duplicates
+ station_import_duplicates_list.text="\n".join(prepared.duplicates)
+ station_import_duplicates_list.set_caret_line(0)
+ station_import_duplicates_list.set_caret_column(0)
+ station_import_duplicates_list.scroll_vertical=0
+ station_import_dialog.get_ok_button().disabled=prepared.no_changes
+ var preview_height=360
+ if not removed.is_empty():preview_height+=100
+ if has_duplicates:preview_height+=115
+ station_import_dialog.popup_centered(Vector2i(520,preview_height))
  return true
 
 
@@ -1584,7 +1613,7 @@ func update_station_import_list(new_only: bool) -> void:
 func apply_station_import_preview() -> bool:
  var preview=station_import_preview
  station_import_preview={}
- if preview.is_empty():return false
+ if preview.is_empty() or preview.prepared.no_changes:return false
  if result_text().is_empty() or generation!=preview.generation or collected_stations!=preview.stations:
   status.text="산출 결과 또는 목록이 바뀌었습니다. 파일을 다시 선택하세요."
   return false
