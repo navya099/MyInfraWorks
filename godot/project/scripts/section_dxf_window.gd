@@ -25,6 +25,8 @@ var station_import_new_only: CheckBox
 var station_import_list_title: Label
 var station_import_list: TextEdit
 var station_import_dialog: ConfirmationDialog
+var station_import_error_dialog: AcceptDialog
+var station_import_error_list: TextEdit
 var station_import_preview: Dictionary={}
 var save_collection_button: Button
 var copy_collection_column_button: Button
@@ -501,6 +503,14 @@ func _ready():
  station_import_dialog.confirmed.connect(apply_station_import_preview)
  station_import_dialog.canceled.connect(func():station_import_preview.clear())
  add_child(station_import_dialog)
+ station_import_error_dialog=AcceptDialog.new()
+ station_import_error_dialog.title="STA 파일 검증 오류"
+ station_import_error_dialog.ok_button_text="닫기"
+ add_child(station_import_error_dialog)
+ station_import_error_list=TextEdit.new()
+ station_import_error_list.editable=false
+ station_import_error_list.custom_minimum_size=Vector2(420,180)
+ station_import_error_dialog.add_child(station_import_error_list)
  var preview_lists=VBoxContainer.new()
  station_import_dialog.add_child(preview_lists)
  station_import_new_only=CheckBox.new()
@@ -1325,13 +1335,14 @@ func paste_collected_stations(content, replace_list: bool=false):
  return apply_station_import(prepared)
 
 
-func prepare_station_import(content: String, replace_list: bool, preview_duplicates: bool=false) -> Dictionary:
+func prepare_station_import(content: String, replace_list: bool, file_preview: bool=false) -> Dictionary:
  if result_text().is_empty():
   status.text="횡단을 산출한 뒤 STA 목록을 가져오세요."
   return {}
  var additions: Array[float]=[]
  var first_locations: Dictionary={}
  var duplicates=PackedStringArray()
+ var errors=PackedStringArray()
  var lines=content.split("\n")
  var input_count=0
  for index in range(lines.size()):
@@ -1342,15 +1353,24 @@ func prepare_station_import(content: String, replace_list: bool, preview_duplica
    var token=fields[column]
    input_count+=1
    if input_count>100:
+    if file_preview:
+     errors.append("%d번째 줄, %d번째 열: 파일당 최대 100개 STA까지 검증할 수 있습니다." % [index+1,column+1])
+     return {"errors":errors}
     status.text="한 번에 최대 100개 STA를 붙여넣을 수 있습니다."
     return {}
    var station=CrossDxf.parse_station(token)
+   var error=""
    if not is_finite(station):
-    status.text="%d번째 줄, %d번째 열: STA를 미터 값 또는 km+m 형식으로 입력하세요." % [index+1,column+1]
-    return {}
-   if station<result.begin or station>result.end:
-    status.text="%d번째 줄, %d번째 열: 출력 구간 밖 STA가 있습니다." % [index+1,column+1]
-    return {}
+    error="STA를 미터 값 또는 km+m 형식으로 입력하세요."
+   elif station<result.begin or station>result.end:
+    error="출력 구간 밖 STA가 있습니다."
+   if not error.is_empty():
+    var detail="%d번째 줄, %d번째 열: %s" % [index+1,column+1,error]
+    if not file_preview:
+     status.text=detail
+     return {}
+    errors.append(detail)
+    continue
    var already_collected=not replace_list and collected_stations.has(station)
    var location="%d줄 %d열" % [index+1,column+1]
    var first_location=first_locations.get(station,"")
@@ -1361,7 +1381,8 @@ func prepare_station_import(content: String, replace_list: bool, preview_duplica
     duplicates.append("%s  |  %s  |  %s" % [location,token.strip_edges(),reason])
     continue
    additions.append(station)
- var show_skipped=preview_duplicates and not duplicates.is_empty()
+ if not errors.is_empty():return {"errors":errors}
+ var show_skipped=file_preview and not duplicates.is_empty()
  if additions.is_empty() and not show_skipped:
   status.text="추가 0개 · 중복 %d개 건너뜀" % duplicates.size() if not duplicates.is_empty() else "붙여넣을 STA가 없습니다."
   return {}
@@ -1573,6 +1594,15 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  if content==null:return false
  var prepared=prepare_station_import(content,replace_list,true)
  if prepared.is_empty():return false
+ if prepared.has("errors"):
+  status.text="STA 파일 검증 오류 %d개" % prepared.errors.size()
+  station_import_error_dialog.dialog_text=status.text
+  station_import_error_list.text="\n".join(prepared.errors)
+  station_import_error_list.set_caret_line(0)
+  station_import_error_list.set_caret_column(0)
+  station_import_error_list.scroll_vertical=0
+  station_import_error_dialog.popup_centered(Vector2i(560,340))
+  return false
  var current_count=collected_stations.size()
  var final_stations: Array[float]=[]
  if not replace_list:final_stations.append_array(collected_stations)
