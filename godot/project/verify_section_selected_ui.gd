@@ -726,6 +726,29 @@ func run():
   app.section_dxf.station_import_dialog.canceled.emit()
   app.section_dxf.station_import_dialog.hide()
  print("PASS STATION IMPORT VALIDATION RETRY")
+ var alternate_file="user://station-list-alternate.txt"
+ assert(app.section_dxf.write_text_file(alternate_file,"600\n500.25\n"))
+ for replace_list in [false,true]:
+  assert(app.section_dxf.write_text_file(invalid_station_file,"STA\n"))
+  assert(not app.section_dxf.preview_station_import(invalid_station_file,replace_list))
+  var previous_errors=app.section_dxf.station_import_error_list.text
+  app.section_dxf.station_import_select_file_button.pressed.emit()
+  var file_dialog=app.section_dxf.station_import_file_dialogs[replace_list]
+  assert(file_dialog.visible and not app.section_dxf.station_import_error_dialog.visible)
+  file_dialog.canceled.emit()
+  file_dialog.hide()
+  await process_frame
+  assert(app.section_dxf.station_import_error_dialog.visible)
+  assert(app.section_dxf.station_import_error_list.text==previous_errors)
+  app.section_dxf.station_import_select_file_button.pressed.emit()
+  file_dialog.hide()
+  file_dialog.file_selected.emit(alternate_file)
+  assert(app.section_dxf.station_import_dialog.visible)
+  assert(app.section_dxf.station_import_preview.prepared.replace_list==replace_list)
+  assert(app.section_dxf.collected_stations==saved_stations)
+  app.section_dxf.station_import_dialog.canceled.emit()
+  app.section_dxf.station_import_dialog.hide()
+ print("PASS STATION IMPORT SELECT ANOTHER FILE")
  var replacement_station_file="user://station-list-replace.txt"
  assert(app.section_dxf.write_text_file(replacement_station_file,"600\n500.25\n600\n"))
  assert(app.section_dxf.preview_station_import(replacement_station_file,true))

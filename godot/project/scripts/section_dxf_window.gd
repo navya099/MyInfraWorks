@@ -29,6 +29,9 @@ var station_import_error_dialog: AcceptDialog
 var station_import_error_list: TextEdit
 var station_import_copy_errors_button: Button
 var station_import_retry_button: Button
+var station_import_select_file_button: Button
+var station_import_file_dialogs: Dictionary[bool,FileDialog]={}
+var station_import_selecting_after_error=false
 var station_import_retry_path: String
 var station_import_retry_replace: bool
 var station_import_preview: Dictionary={}
@@ -519,6 +522,8 @@ func _ready():
  station_import_copy_errors_button.pressed.connect(copy_station_import_errors)
  station_import_retry_button=station_import_error_dialog.add_button("같은 파일 다시 읽기")
  station_import_retry_button.pressed.connect(retry_station_import)
+ station_import_select_file_button=station_import_error_dialog.add_button("다른 파일 선택")
+ station_import_select_file_button.pressed.connect(select_another_station_file)
  var preview_lists=VBoxContainer.new()
  station_import_dialog.add_child(preview_lists)
  station_import_new_only=CheckBox.new()
@@ -561,7 +566,10 @@ func _ready():
    dialog.current_file="stations.txt"
    dialog.file_selected.connect(save_collected_stations)
   else:
-   dialog.file_selected.connect(preview_station_import.bind(action==replace_collection_button))
+   var replace_list=action==replace_collection_button
+   station_import_file_dialogs[replace_list]=dialog
+   dialog.file_selected.connect(preview_station_import.bind(replace_list))
+   dialog.canceled.connect(restore_station_import_error)
   action.pressed.connect(dialog.popup_centered_ratio.bind(0.7))
  collection_down=Button.new()
  collection_down.text="STA 아래로"
@@ -1597,6 +1605,7 @@ func load_collected_stations(path: String, replace_list: bool=false) -> bool:
 
 
 func preview_station_import(path: String, replace_list: bool) -> bool:
+ station_import_selecting_after_error=false
  station_import_preview.clear()
  var content=read_station_file(path)
  if content==null:return false
@@ -1654,6 +1663,23 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  if has_duplicates:preview_height+=115
  station_import_dialog.popup_centered(Vector2i(520,preview_height))
  return true
+
+
+func select_another_station_file() -> void:
+ if not station_import_error_dialog.visible:
+  return
+ var dialog=station_import_file_dialogs[station_import_retry_replace]
+ dialog.current_dir=ProjectSettings.globalize_path(station_import_retry_path).get_base_dir()
+ station_import_selecting_after_error=true
+ station_import_error_dialog.hide()
+ dialog.popup_centered_ratio(0.7)
+
+
+func restore_station_import_error() -> void:
+ if not station_import_selecting_after_error:
+  return
+ station_import_selecting_after_error=false
+ station_import_error_dialog.popup_centered.call_deferred(Vector2i(560,340))
 
 
 func retry_station_import() -> void:
