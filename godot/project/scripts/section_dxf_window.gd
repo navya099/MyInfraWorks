@@ -28,6 +28,9 @@ var station_import_dialog: ConfirmationDialog
 var station_import_error_dialog: AcceptDialog
 var station_import_error_list: TextEdit
 var station_import_copy_errors_button: Button
+var station_import_retry_button: Button
+var station_import_retry_path: String
+var station_import_retry_replace: bool
 var station_import_preview: Dictionary={}
 var save_collection_button: Button
 var copy_collection_column_button: Button
@@ -514,6 +517,8 @@ func _ready():
  station_import_error_dialog.add_child(station_import_error_list)
  station_import_copy_errors_button=station_import_error_dialog.add_button("오류 내역 복사")
  station_import_copy_errors_button.pressed.connect(copy_station_import_errors)
+ station_import_retry_button=station_import_error_dialog.add_button("같은 파일 다시 읽기")
+ station_import_retry_button.pressed.connect(retry_station_import)
  var preview_lists=VBoxContainer.new()
  station_import_dialog.add_child(preview_lists)
  station_import_new_only=CheckBox.new()
@@ -1598,6 +1603,8 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  var prepared=prepare_station_import(content,replace_list,true)
  if prepared.is_empty():return false
  if prepared.has("errors"):
+  station_import_retry_path=path
+  station_import_retry_replace=replace_list
   status.text="STA 파일 검증 오류 %d개" % prepared.errors.size()
   station_import_error_dialog.dialog_text=status.text
   station_import_error_list.text="\n".join(prepared.errors)
@@ -1647,6 +1654,14 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  if has_duplicates:preview_height+=115
  station_import_dialog.popup_centered(Vector2i(520,preview_height))
  return true
+
+
+func retry_station_import() -> void:
+ if not station_import_error_dialog.visible:
+  return
+ station_import_error_dialog.hide()
+ if preview_station_import(station_import_retry_path,station_import_retry_replace):
+  status.text="STA 파일 검증을 완료했습니다."
 
 
 func copy_station_import_errors() -> void:
