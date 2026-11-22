@@ -727,6 +727,7 @@ func run():
  assert(not app.section_dxf.station_import_removed_title.visible)
  assert(not app.section_dxf.station_import_removed_list.visible)
  assert(not app.section_dxf.station_import_duplicates_list.visible)
+ assert(not app.section_dxf.station_import_copy_duplicates_button.is_visible_in_tree())
  app.section_dxf.station_import_new_only.button_pressed=true
  assert(app.section_dxf.station_import_list.text==app.section_dxf.format_station_list(long_list,"\n"))
  assert(app.section_dxf.collected_stations==[600.0,500.25])
@@ -756,6 +757,11 @@ func run():
  assert(app.section_dxf.preview_station_import(replacement_station_file,false))
  assert(app.section_dxf.station_import_duplicates_list.text=="1줄 1열  |  600  |  이미 담은 STA\n1줄 2열  |  0+600  |  이미 담은 STA (최초 1줄 1열)")
  assert(app.section_dxf.station_import_dialog.get_ok_button().disabled)
+ assert(app.section_dxf.station_import_copy_duplicates_button.is_visible_in_tree())
+ app.section_dxf.station_import_copy_duplicates_button.pressed.emit()
+ assert(app.section_dxf.station_import_copy_duplicates_button.text=="복사됨")
+ if DisplayServer.get_name()!="headless":
+  assert(DisplayServer.clipboard_get().replace("\r\n","\n")==app.section_dxf.station_import_duplicates_list.text)
  assert(not app.section_dxf.apply_station_import_preview())
  app.section_dxf.station_import_dialog.hide()
  assert(app.section_dxf.collected_stations==before_duplicate_preview)
@@ -771,6 +777,7 @@ func run():
  assert(app.section_dxf.station_import_duplicates_title.text=="건너뛴 중복 STA 2개")
  assert(app.section_dxf.station_import_duplicates_list.text=="1줄 1열  |  600  |  이미 담은 STA\n1줄 3열  |  0+900  |  파일 내 중복 (최초 1줄 2열)")
  assert(not app.section_dxf.station_import_dialog.get_ok_button().disabled)
+ assert(app.section_dxf.station_import_copy_duplicates_button.text=="중복 내역 복사")
  app.section_dxf.station_import_dialog.confirmed.emit()
  app.section_dxf.station_import_dialog.hide()
  assert(app.section_dxf.collected_stations==[500.25,800.0,600.0,900.0])

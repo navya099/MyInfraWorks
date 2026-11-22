@@ -15,7 +15,9 @@ var collection_revision=-1
 var collected_stations: Array[float]=[]
 var collection_jump_button: Button
 const STATION_LIST_MAX_BYTES=64*1024
+var station_import_duplicates_row: HBoxContainer
 var station_import_duplicates_title: Label
+var station_import_copy_duplicates_button: Button
 var station_import_duplicates_list: TextEdit
 var station_import_removed_title: Label
 var station_import_removed_list: TextEdit
@@ -517,8 +519,15 @@ func _ready():
  station_import_removed_list.editable=false
  station_import_removed_list.custom_minimum_size.y=90
  preview_lists.add_child(station_import_removed_list)
+ station_import_duplicates_row=HBoxContainer.new()
+ preview_lists.add_child(station_import_duplicates_row)
  station_import_duplicates_title=Label.new()
- preview_lists.add_child(station_import_duplicates_title)
+ station_import_duplicates_title.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+ station_import_duplicates_row.add_child(station_import_duplicates_title)
+ station_import_copy_duplicates_button=Button.new()
+ station_import_copy_duplicates_button.text="중복 내역 복사"
+ station_import_copy_duplicates_button.pressed.connect(copy_station_import_duplicates)
+ station_import_duplicates_row.add_child(station_import_copy_duplicates_button)
  station_import_duplicates_list=TextEdit.new()
  station_import_duplicates_list.editable=false
  station_import_duplicates_list.custom_minimum_size.y=90
@@ -1590,8 +1599,9 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  station_import_removed_list.set_caret_line(0)
  station_import_removed_list.scroll_vertical=0
  var has_duplicates=not prepared.duplicates.is_empty()
- station_import_duplicates_title.visible=has_duplicates
+ station_import_duplicates_row.visible=has_duplicates
  station_import_duplicates_title.text="건너뛴 중복 STA %d개" % prepared.duplicates.size()
+ station_import_copy_duplicates_button.text="중복 내역 복사"
  station_import_duplicates_list.visible=has_duplicates
  station_import_duplicates_list.text="\n".join(prepared.duplicates)
  station_import_duplicates_list.set_caret_line(0)
@@ -1603,6 +1613,13 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  if has_duplicates:preview_height+=115
  station_import_dialog.popup_centered(Vector2i(520,preview_height))
  return true
+
+
+func copy_station_import_duplicates() -> void:
+ if station_import_preview.is_empty() or station_import_preview.prepared.duplicates.is_empty():
+  return
+ DisplayServer.clipboard_set(station_import_duplicates_list.text)
+ station_import_copy_duplicates_button.text="복사됨"
 
 
 func update_station_import_list(new_only: bool) -> void:
