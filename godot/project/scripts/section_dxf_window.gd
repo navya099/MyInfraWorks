@@ -1321,6 +1321,7 @@ func prepare_station_import(content: String, replace_list: bool, preview_duplica
   status.text="횡단을 산출한 뒤 STA 목록을 가져오세요."
   return {}
  var additions: Array[float]=[]
+ var first_locations: Dictionary={}
  var duplicates=PackedStringArray()
  var lines=content.split("\n")
  var input_count=0
@@ -1342,9 +1343,13 @@ func prepare_station_import(content: String, replace_list: bool, preview_duplica
     status.text="%d번째 줄, %d번째 열: 출력 구간 밖 STA가 있습니다." % [index+1,column+1]
     return {}
    var already_collected=not replace_list and collected_stations.has(station)
-   if already_collected or additions.has(station):
+   var location="%d줄 %d열" % [index+1,column+1]
+   var first_location=first_locations.get(station,"")
+   if first_location.is_empty():first_locations[station]=location
+   if already_collected or not first_location.is_empty():
     var reason="이미 담은 STA" if already_collected else "파일 내 중복"
-    duplicates.append("%d줄 %d열  |  %s  |  %s" % [index+1,column+1,token.strip_edges(),reason])
+    if not first_location.is_empty():reason+=" (최초 %s)" % first_location
+    duplicates.append("%s  |  %s  |  %s" % [location,token.strip_edges(),reason])
     continue
    additions.append(station)
  var show_skipped=preview_duplicates and not duplicates.is_empty()
