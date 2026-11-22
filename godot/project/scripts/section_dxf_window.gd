@@ -17,6 +17,8 @@ var collection_jump_button: Button
 const STATION_LIST_MAX_BYTES=64*1024
 var station_import_removed_title: Label
 var station_import_removed_list: TextEdit
+var station_import_new_only: CheckBox
+var station_import_list_title: Label
 var station_import_list: TextEdit
 var station_import_dialog: ConfirmationDialog
 var station_import_preview: Dictionary={}
@@ -497,6 +499,11 @@ func _ready():
  add_child(station_import_dialog)
  var preview_lists=VBoxContainer.new()
  station_import_dialog.add_child(preview_lists)
+ station_import_new_only=CheckBox.new()
+ station_import_new_only.toggled.connect(update_station_import_list)
+ preview_lists.add_child(station_import_new_only)
+ station_import_list_title=Label.new()
+ preview_lists.add_child(station_import_list_title)
  station_import_list=TextEdit.new()
  station_import_list.editable=false
  station_import_list.custom_minimum_size=Vector2(420,200)
@@ -1535,16 +1542,20 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  if content==null:return false
  var prepared=prepare_station_import(content,replace_list)
  if prepared.is_empty():return false
- station_import_preview={"prepared":prepared,"generation":generation,"stations":collected_stations.duplicate()}
  var current_count=collected_stations.size()
  var final_stations: Array[float]=[]
  if not replace_list:final_stations.append_array(collected_stations)
  final_stations.append_array(prepared.additions)
- station_import_dialog.dialog_text="%s\n담은 목록 %d개 → %d개\n적용 후 담은 STA (m)" % [prepared.summary,current_count,final_stations.size()]
- station_import_list.text=format_station_list(final_stations,"\n")
- station_import_list.set_caret_line(0)
- station_import_list.set_caret_column(0)
- station_import_list.scroll_vertical=0
+ var new_stations: Array[float]=[]
+ for station in prepared.additions:
+  if not collected_stations.has(station):
+   new_stations.append(station)
+ station_import_preview={"prepared":prepared,"generation":generation,"stations":collected_stations.duplicate(),"final_stations":final_stations,"new_stations":new_stations}
+ station_import_dialog.dialog_text="%s\n담은 목록 %d개 → %d개" % [prepared.summary,current_count,final_stations.size()]
+ station_import_new_only.text="신규 STA만 보기 (%d개)" % new_stations.size()
+ station_import_new_only.set_pressed_no_signal(false)
+ station_import_new_only.disabled=new_stations.is_empty()
+ update_station_import_list(false)
  var removed: Array[float]=[]
  if replace_list:
   for station in collected_stations:
@@ -1558,6 +1569,16 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  station_import_removed_list.scroll_vertical=0
  station_import_dialog.popup_centered(Vector2i(520,460 if not removed.is_empty() else 360))
  return true
+
+
+func update_station_import_list(new_only: bool) -> void:
+ if station_import_preview.is_empty():return
+ var stations=station_import_preview.new_stations if new_only else station_import_preview.final_stations
+ station_import_list_title.text="신규 STA (m)" if new_only else "적용 후 담은 STA (m)"
+ station_import_list.text=format_station_list(stations,"\n")
+ station_import_list.set_caret_line(0)
+ station_import_list.set_caret_column(0)
+ station_import_list.scroll_vertical=0
 
 
 func apply_station_import_preview() -> bool:
