@@ -27,6 +27,9 @@ var station_import_list: TextEdit
 var station_import_dialog: ConfirmationDialog
 var station_import_reload_button: Button
 var station_import_switch_mode_button: Button
+var station_import_order_button: Button
+var station_import_order_dialog: AcceptDialog
+var station_import_order_table: Tree
 var station_import_preview_select_file_button: Button
 var station_import_error_dialog: AcceptDialog
 var station_import_error_list: TextEdit
@@ -557,6 +560,27 @@ func _ready():
  station_import_switch_mode_button=Button.new()
  station_import_switch_mode_button.pressed.connect(reload_station_import_preview.bind(true))
  preview_options.add_child(station_import_switch_mode_button)
+ station_import_order_dialog=AcceptDialog.new()
+ station_import_order_dialog.title="유지 STA 순서 비교"
+ station_import_order_dialog.ok_button_text="닫기"
+ station_import_order_dialog.transient=true
+ station_import_order_dialog.exclusive=true
+ station_import_dialog.add_child(station_import_order_dialog)
+ station_import_order_table=Tree.new()
+ station_import_order_table.custom_minimum_size=Vector2(390,190)
+ station_import_order_table.columns=3
+ station_import_order_table.hide_root=true
+ station_import_order_table.column_titles_visible=true
+ station_import_order_table.set_column_title(0,"순번")
+ station_import_order_table.set_column_expand(0,false)
+ station_import_order_table.set_column_title(1,"현재 (m)")
+ station_import_order_table.set_column_title(2,"교체 후 (m)")
+ station_import_order_dialog.add_child(station_import_order_table)
+ station_import_order_button=Button.new()
+ station_import_order_button.text="순서 비교"
+ station_import_order_button.hide()
+ station_import_order_button.pressed.connect(station_import_order_dialog.popup_centered.bind(Vector2i(460,300)))
+ preview_options.add_child(station_import_order_button)
  station_import_list_title=Label.new()
  preview_lists.add_child(station_import_list_title)
  station_import_list=TextEdit.new()
@@ -1685,6 +1709,8 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  station_import_new_only.disabled=new_stations.is_empty()
  update_station_import_list(false)
  var removed: Array[float]=[]
+ station_import_order_button.hide()
+ station_import_order_table.clear()
  if replace_list:
   var retained_in_current_order: Array[float]=[]
   for station in collected_stations:
@@ -1695,6 +1721,15 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
   station_import_dialog.dialog_text+="\n유지 %d개 · 신규 %d개 · 제외 %d개" % [retained_in_file_order.size(),new_stations.size(),removed.size()]
   if retained_in_current_order!=retained_in_file_order:
    station_import_dialog.dialog_text+=" · 유지 STA 순서 변경"
+   var current_rows=format_station_list(retained_in_current_order,"\n").split("\n")
+   var replacement_rows=format_station_list(retained_in_file_order,"\n").split("\n")
+   var order_root=station_import_order_table.create_item()
+   for index in range(current_rows.size()):
+    var row=station_import_order_table.create_item(order_root)
+    row.set_text(0,str(index+1))
+    row.set_text(1,current_rows[index])
+    row.set_text(2,replacement_rows[index])
+   station_import_order_button.show()
  station_import_removed_title.visible=replace_list
  station_import_removed_title.text="제외될 STA %d개 (m)" % removed.size() if not removed.is_empty() else "제외될 STA 없음"
  station_import_removed_list.visible=not removed.is_empty()
