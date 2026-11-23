@@ -32,6 +32,7 @@ var station_import_error_dialog: AcceptDialog
 var station_import_error_list: TextEdit
 var station_import_copy_errors_button: Button
 var station_import_retry_button: Button
+var station_import_capacity_replace_button: Button
 var station_import_select_file_button: Button
 var station_import_file_dialogs: Dictionary[bool,FileDialog]={}
 var station_import_previous_dialog: Window
@@ -538,6 +539,9 @@ func _ready():
  station_import_copy_errors_button.pressed.connect(copy_station_import_errors)
  station_import_retry_button=station_import_error_dialog.add_button("같은 파일 다시 읽기")
  station_import_retry_button.pressed.connect(retry_station_import)
+ station_import_capacity_replace_button=station_import_error_dialog.add_button("교체 미리보기",true)
+ station_import_capacity_replace_button.hide()
+ station_import_capacity_replace_button.pressed.connect(retry_station_import.bind(true))
  station_import_select_file_button=station_import_error_dialog.add_button("다른 파일 선택")
  station_import_select_file_button.pressed.connect(func():
   select_another_station_file(station_import_retry_path,station_import_retry_replace,station_import_error_dialog)
@@ -1426,8 +1430,13 @@ func prepare_station_import(content: String, replace_list: bool, file_preview: b
  if additions.is_empty() and not show_skipped:
   status.text="추가 0개 · 중복 %d개 건너뜀" % duplicates.size() if not duplicates.is_empty() else "붙여넣을 STA가 없습니다."
   return {}
- if not replace_list and collected_stations.size()+additions.size()>100:
-  status.text="담은 STA는 최대 100개입니다."
+ var append_total=collected_stations.size()+additions.size()
+ if not replace_list and append_total>100:
+  var limit_message="담은 STA는 최대 100개입니다."
+  if file_preview:
+   var counts="현재 %d개 + 신규 %d개 = %d개" % [collected_stations.size(),additions.size(),append_total]
+   return {"errors":PackedStringArray([counts,limit_message]),"append_over_limit":true}
+  status.text=limit_message
   return {}
  var same_replacement=replace_list and collected_stations==additions
  if same_replacement and not file_preview:
@@ -1642,7 +1651,10 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  if prepared.has("errors"):
   station_import_retry_path=path
   station_import_retry_replace=replace_list
-  status.text="STA 파일 검증 오류 %d개" % prepared.errors.size()
+  var append_over_limit: bool=prepared.get("append_over_limit",false)
+  station_import_capacity_replace_button.visible=append_over_limit
+  station_import_error_dialog.title="STA 추가 한도 초과" if append_over_limit else "STA 파일 검증 오류"
+  status.text="STA 추가 한도 초과" if append_over_limit else "STA 파일 검증 오류 %d개" % prepared.errors.size()
   station_import_error_dialog.dialog_text="%s\n%s" % [file_context,status.text]
   station_import_error_list.text="\n".join(prepared.errors)
   station_import_copy_errors_button.text="오류 내역 복사"
@@ -1725,11 +1737,14 @@ func reload_station_import_preview(switch_mode: bool=false) -> void:
   status.text="STA 파일 미리보기를 갱신했습니다."
 
 
-func retry_station_import() -> void:
+func retry_station_import(show_replacement: bool=false) -> void:
  if not station_import_error_dialog.visible:
   return
+ if show_replacement and not station_import_capacity_replace_button.visible:
+  return
+ var replace_list=show_replacement or station_import_retry_replace
  station_import_error_dialog.hide()
- if preview_station_import(station_import_retry_path,station_import_retry_replace):
+ if preview_station_import(station_import_retry_path,replace_list):
   status.text="STA 파일 검증을 완료했습니다."
 
 
