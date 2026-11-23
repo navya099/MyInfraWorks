@@ -1668,8 +1668,11 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  if not replace_list:final_stations.append_array(collected_stations)
  final_stations.append_array(prepared.additions)
  var new_stations: Array[float]=[]
+ var retained_in_file_order: Array[float]=[]
  for station in prepared.additions:
-  if not collected_stations.has(station):
+  if collected_stations.has(station):
+   retained_in_file_order.append(station)
+  else:
    new_stations.append(station)
  station_import_preview={"prepared":prepared,"generation":generation,"stations":collected_stations.duplicate(),"final_stations":final_stations,"new_stations":new_stations,"path":path,"content":content}
  station_import_dialog.dialog_text="%s\n%s\n담은 목록 %d개 → %d개" % [file_context,prepared.summary,current_count,final_stations.size()]
@@ -1683,9 +1686,15 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  update_station_import_list(false)
  var removed: Array[float]=[]
  if replace_list:
+  var retained_in_current_order: Array[float]=[]
   for station in collected_stations:
-   if not prepared.additions.has(station):
+   if prepared.additions.has(station):
+    retained_in_current_order.append(station)
+   else:
     removed.append(station)
+  station_import_dialog.dialog_text+="\n유지 %d개 · 신규 %d개 · 제외 %d개" % [retained_in_file_order.size(),new_stations.size(),removed.size()]
+  if retained_in_current_order!=retained_in_file_order:
+   station_import_dialog.dialog_text+=" · 유지 STA 순서 변경"
  station_import_removed_title.visible=replace_list
  station_import_removed_title.text="제외될 STA %d개 (m)" % removed.size() if not removed.is_empty() else "제외될 STA 없음"
  station_import_removed_list.visible=not removed.is_empty()
@@ -1702,7 +1711,7 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  station_import_duplicates_list.set_caret_column(0)
  station_import_duplicates_list.scroll_vertical=0
  station_import_dialog.get_ok_button().disabled=prepared.no_changes
- var preview_height=360
+ var preview_height=384 if replace_list else 360
  if not removed.is_empty():preview_height+=100
  if has_duplicates:preview_height+=115
  station_import_dialog.popup_centered(Vector2i(520,preview_height))
