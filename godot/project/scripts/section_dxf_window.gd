@@ -25,6 +25,7 @@ var station_import_new_only: CheckBox
 var station_import_list_title: Label
 var station_import_list: TextEdit
 var station_import_dialog: ConfirmationDialog
+var station_import_reload_button: Button
 var station_import_error_dialog: AcceptDialog
 var station_import_error_list: TextEdit
 var station_import_copy_errors_button: Button
@@ -515,6 +516,8 @@ func _ready():
  )
  station_import_dialog.canceled.connect(func():station_import_preview.clear())
  add_child(station_import_dialog)
+ station_import_reload_button=station_import_dialog.add_button("같은 파일 다시 읽기")
+ station_import_reload_button.pressed.connect(reload_station_import_preview)
  station_import_error_dialog=AcceptDialog.new()
  station_import_error_dialog.title="STA 파일 검증 오류"
  station_import_error_dialog.dialog_autowrap=true
@@ -1688,6 +1691,16 @@ func restore_station_import_error() -> void:
   return
  station_import_selecting_after_error=false
  station_import_error_dialog.popup_centered.call_deferred(Vector2i(560,340))
+
+
+func reload_station_import_preview() -> void:
+ if not station_import_dialog.visible or station_import_preview.is_empty():
+  return
+ var path: String=station_import_preview.path
+ var replace_list: bool=station_import_preview.prepared.replace_list
+ station_import_dialog.hide()
+ if preview_station_import(path,replace_list):
+  status.text="STA 파일 미리보기를 갱신했습니다."
 
 
 func retry_station_import() -> void:
