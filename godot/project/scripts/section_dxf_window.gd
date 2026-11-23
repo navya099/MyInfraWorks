@@ -26,6 +26,7 @@ var station_import_list_title: Label
 var station_import_list: TextEdit
 var station_import_dialog: ConfirmationDialog
 var station_import_reload_button: Button
+var station_import_switch_mode_button: Button
 var station_import_preview_select_file_button: Button
 var station_import_error_dialog: AcceptDialog
 var station_import_error_list: TextEdit
@@ -543,9 +544,15 @@ func _ready():
  )
  var preview_lists=VBoxContainer.new()
  station_import_dialog.add_child(preview_lists)
+ var preview_options=HBoxContainer.new()
+ preview_lists.add_child(preview_options)
  station_import_new_only=CheckBox.new()
+ station_import_new_only.size_flags_horizontal=Control.SIZE_EXPAND_FILL
  station_import_new_only.toggled.connect(update_station_import_list)
- preview_lists.add_child(station_import_new_only)
+ preview_options.add_child(station_import_new_only)
+ station_import_switch_mode_button=Button.new()
+ station_import_switch_mode_button.pressed.connect(reload_station_import_preview.bind(true))
+ preview_options.add_child(station_import_switch_mode_button)
  station_import_list_title=Label.new()
  preview_lists.add_child(station_import_list_title)
  station_import_list=TextEdit.new()
@@ -1423,13 +1430,15 @@ func prepare_station_import(content: String, replace_list: bool, file_preview: b
   status.text="담은 STA는 최대 100개입니다."
   return {}
  var same_replacement=replace_list and collected_stations==additions
- if same_replacement and not show_skipped:
+ if same_replacement and not file_preview:
   status.text="파일의 STA 목록이 현재 목록과 같습니다."
   return {}
  var action_label="교체" if replace_list else "추가"
  var no_changes=additions.is_empty() or same_replacement
  var summary="%s %d개 · 중복 %d개 건너뜀" % [action_label,additions.size(),duplicates.size()]
- if no_changes:summary="목록 변경 없음 · 중복 %d개 건너뜀" % duplicates.size()
+ if no_changes:
+  summary="목록 변경 없음"
+  if not duplicates.is_empty():summary+=" · 중복 %d개 건너뜀" % duplicates.size()
  return {"additions":additions,"replace_list":replace_list,"summary":summary,"duplicates":duplicates,"no_changes":no_changes}
 
 
@@ -1652,6 +1661,10 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
    new_stations.append(station)
  station_import_preview={"prepared":prepared,"generation":generation,"stations":collected_stations.duplicate(),"final_stations":final_stations,"new_stations":new_stations,"path":path,"content":content}
  station_import_dialog.dialog_text="%s\n%s\n담은 목록 %d개 → %d개" % [file_context,prepared.summary,current_count,final_stations.size()]
+ station_import_switch_mode_button.text="추가 모드로 전환" if replace_list else "교체 모드로 전환"
+ var append_over_limit=replace_list and current_count+new_stations.size()>100
+ station_import_switch_mode_button.disabled=append_over_limit
+ station_import_switch_mode_button.tooltip_text="추가하면 담은 STA 개수가 최대 100개를 초과합니다." if append_over_limit else ""
  station_import_new_only.text="신규 STA만 보기 (%d개)" % new_stations.size()
  station_import_new_only.set_pressed_no_signal(false)
  station_import_new_only.disabled=new_stations.is_empty()
@@ -1701,11 +1714,12 @@ func restore_station_import_dialog() -> void:
  station_import_previous_dialog=null
 
 
-func reload_station_import_preview() -> void:
+func reload_station_import_preview(switch_mode: bool=false) -> void:
  if not station_import_dialog.visible or station_import_preview.is_empty():
   return
  var path: String=station_import_preview.path
  var replace_list: bool=station_import_preview.prepared.replace_list
+ if switch_mode:replace_list=not replace_list
  station_import_dialog.hide()
  if preview_station_import(path,replace_list):
   status.text="STA 파일 미리보기를 갱신했습니다."
