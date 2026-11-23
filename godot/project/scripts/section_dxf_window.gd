@@ -505,6 +505,7 @@ func _ready():
  number_row.add_child(replace_collection_button)
  station_import_dialog=ConfirmationDialog.new()
  station_import_dialog.title="STA 파일 가져오기 미리보기"
+ station_import_dialog.dialog_autowrap=true
  station_import_dialog.ok_button_text="적용"
  station_import_dialog.cancel_button_text="취소"
  station_import_dialog.confirmed.connect(apply_station_import_preview)
@@ -512,6 +513,7 @@ func _ready():
  add_child(station_import_dialog)
  station_import_error_dialog=AcceptDialog.new()
  station_import_error_dialog.title="STA 파일 검증 오류"
+ station_import_error_dialog.dialog_autowrap=true
  station_import_error_dialog.ok_button_text="닫기"
  add_child(station_import_error_dialog)
  station_import_error_list=TextEdit.new()
@@ -1611,11 +1613,13 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  if content==null:return false
  var prepared=prepare_station_import(content,replace_list,true)
  if prepared.is_empty():return false
+ var mode="교체 모드" if replace_list else "추가 모드"
+ var file_context="%s · %s" % [path.get_file(),mode]
  if prepared.has("errors"):
   station_import_retry_path=path
   station_import_retry_replace=replace_list
   status.text="STA 파일 검증 오류 %d개" % prepared.errors.size()
-  station_import_error_dialog.dialog_text=status.text
+  station_import_error_dialog.dialog_text="%s\n%s" % [file_context,status.text]
   station_import_error_list.text="\n".join(prepared.errors)
   station_import_copy_errors_button.text="오류 내역 복사"
   station_import_error_list.set_caret_line(0)
@@ -1632,7 +1636,7 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
   if not collected_stations.has(station):
    new_stations.append(station)
  station_import_preview={"prepared":prepared,"generation":generation,"stations":collected_stations.duplicate(),"final_stations":final_stations,"new_stations":new_stations}
- station_import_dialog.dialog_text="%s\n담은 목록 %d개 → %d개" % [prepared.summary,current_count,final_stations.size()]
+ station_import_dialog.dialog_text="%s\n%s\n담은 목록 %d개 → %d개" % [file_context,prepared.summary,current_count,final_stations.size()]
  station_import_new_only.text="신규 STA만 보기 (%d개)" % new_stations.size()
  station_import_new_only.set_pressed_no_signal(false)
  station_import_new_only.disabled=new_stations.is_empty()
