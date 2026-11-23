@@ -754,6 +754,30 @@ func run():
   app.section_dxf.station_import_dialog.canceled.emit()
   app.section_dxf.station_import_dialog.hide()
  print("PASS STATION IMPORT SELECT ANOTHER FILE")
+ var first_preview_file="user://station-first-preview.txt"
+ assert(app.section_dxf.write_text_file(first_preview_file,"600.125\n"))
+ for replace_list in [false,true]:
+  assert(app.section_dxf.preview_station_import(first_preview_file,replace_list))
+  app.section_dxf.station_import_new_only.button_pressed=true
+  app.section_dxf.station_import_preview_select_file_button.pressed.emit()
+  var file_dialog=app.section_dxf.station_import_file_dialogs[replace_list]
+  assert(file_dialog.visible and not app.section_dxf.station_import_dialog.visible)
+  file_dialog.canceled.emit()
+  file_dialog.hide()
+  await process_frame
+  assert(app.section_dxf.station_import_dialog.visible)
+  assert(app.section_dxf.station_import_new_only.button_pressed)
+  assert(app.section_dxf.station_import_list.get_line(0).to_float()==600.125)
+  app.section_dxf.station_import_preview_select_file_button.pressed.emit()
+  file_dialog.hide()
+  file_dialog.file_selected.emit(alternate_file)
+  assert(app.section_dxf.station_import_dialog.visible)
+  assert(app.section_dxf.station_import_preview.path==alternate_file)
+  assert(app.section_dxf.station_import_preview.prepared.replace_list==replace_list)
+  assert(app.section_dxf.collected_stations==saved_stations)
+  app.section_dxf.station_import_dialog.canceled.emit()
+  app.section_dxf.station_import_dialog.hide()
+ print("PASS STATION IMPORT SWITCH FROM PREVIEW")
  assert(app.section_dxf.write_text_file(alternate_file,"600\n500.25\n"))
  assert(app.section_dxf.preview_station_import(alternate_file,true))
  assert(app.section_dxf.write_text_file(alternate_file,"601\n500.25\n"))

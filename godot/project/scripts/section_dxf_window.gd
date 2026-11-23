@@ -26,13 +26,14 @@ var station_import_list_title: Label
 var station_import_list: TextEdit
 var station_import_dialog: ConfirmationDialog
 var station_import_reload_button: Button
+var station_import_preview_select_file_button: Button
 var station_import_error_dialog: AcceptDialog
 var station_import_error_list: TextEdit
 var station_import_copy_errors_button: Button
 var station_import_retry_button: Button
 var station_import_select_file_button: Button
 var station_import_file_dialogs: Dictionary[bool,FileDialog]={}
-var station_import_selecting_after_error=false
+var station_import_previous_dialog: Window
 var station_import_retry_path: String
 var station_import_retry_replace: bool
 var station_import_preview: Dictionary={}
@@ -518,6 +519,11 @@ func _ready():
  add_child(station_import_dialog)
  station_import_reload_button=station_import_dialog.add_button("같은 파일 다시 읽기")
  station_import_reload_button.pressed.connect(reload_station_import_preview)
+ station_import_preview_select_file_button=station_import_dialog.add_button("다른 파일 선택")
+ station_import_preview_select_file_button.pressed.connect(func():
+  if not station_import_preview.is_empty():
+   select_another_station_file(station_import_preview.path,station_import_preview.prepared.replace_list,station_import_dialog)
+ )
  station_import_error_dialog=AcceptDialog.new()
  station_import_error_dialog.title="STA 파일 검증 오류"
  station_import_error_dialog.dialog_autowrap=true
@@ -532,7 +538,9 @@ func _ready():
  station_import_retry_button=station_import_error_dialog.add_button("같은 파일 다시 읽기")
  station_import_retry_button.pressed.connect(retry_station_import)
  station_import_select_file_button=station_import_error_dialog.add_button("다른 파일 선택")
- station_import_select_file_button.pressed.connect(select_another_station_file)
+ station_import_select_file_button.pressed.connect(func():
+  select_another_station_file(station_import_retry_path,station_import_retry_replace,station_import_error_dialog)
+ )
  var preview_lists=VBoxContainer.new()
  station_import_dialog.add_child(preview_lists)
  station_import_new_only=CheckBox.new()
@@ -578,7 +586,7 @@ func _ready():
    var replace_list=action==replace_collection_button
    station_import_file_dialogs[replace_list]=dialog
    dialog.file_selected.connect(preview_station_import.bind(replace_list))
-   dialog.canceled.connect(restore_station_import_error)
+   dialog.canceled.connect(restore_station_import_dialog)
   action.pressed.connect(dialog.popup_centered_ratio.bind(0.7))
  collection_down=Button.new()
  collection_down.text="STA 아래로"
@@ -1614,7 +1622,7 @@ func load_collected_stations(path: String, replace_list: bool=false) -> bool:
 
 
 func preview_station_import(path: String, replace_list: bool) -> bool:
- station_import_selecting_after_error=false
+ station_import_previous_dialog=null
  station_import_preview.clear()
  var content=read_station_file(path)
  if content==null:return false
@@ -1676,21 +1684,21 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  return true
 
 
-func select_another_station_file() -> void:
- if not station_import_error_dialog.visible:
+func select_another_station_file(path: String, replace_list: bool, source: Window) -> void:
+ if not source.visible:
   return
- var dialog=station_import_file_dialogs[station_import_retry_replace]
- dialog.current_dir=ProjectSettings.globalize_path(station_import_retry_path).get_base_dir()
- station_import_selecting_after_error=true
- station_import_error_dialog.hide()
+ var dialog=station_import_file_dialogs[replace_list]
+ dialog.current_dir=ProjectSettings.globalize_path(path).get_base_dir()
+ station_import_previous_dialog=source
+ source.hide()
  dialog.popup_centered_ratio(0.7)
 
 
-func restore_station_import_error() -> void:
- if not station_import_selecting_after_error:
+func restore_station_import_dialog() -> void:
+ if station_import_previous_dialog==null:
   return
- station_import_selecting_after_error=false
- station_import_error_dialog.popup_centered.call_deferred(Vector2i(560,340))
+ station_import_previous_dialog.popup_centered.call_deferred(station_import_previous_dialog.size)
+ station_import_previous_dialog=null
 
 
 func reload_station_import_preview() -> void:
