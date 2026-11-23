@@ -508,7 +508,11 @@ func _ready():
  station_import_dialog.dialog_autowrap=true
  station_import_dialog.ok_button_text="적용"
  station_import_dialog.cancel_button_text="취소"
- station_import_dialog.confirmed.connect(apply_station_import_preview)
+ station_import_dialog.dialog_hide_on_ok=false
+ station_import_dialog.confirmed.connect(func():
+  station_import_dialog.hide()
+  apply_station_import_preview()
+ )
  station_import_dialog.canceled.connect(func():station_import_preview.clear())
  add_child(station_import_dialog)
  station_import_error_dialog=AcceptDialog.new()
@@ -1635,7 +1639,7 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  for station in prepared.additions:
   if not collected_stations.has(station):
    new_stations.append(station)
- station_import_preview={"prepared":prepared,"generation":generation,"stations":collected_stations.duplicate(),"final_stations":final_stations,"new_stations":new_stations}
+ station_import_preview={"prepared":prepared,"generation":generation,"stations":collected_stations.duplicate(),"final_stations":final_stations,"new_stations":new_stations,"path":path,"content":content}
  station_import_dialog.dialog_text="%s\n%s\n담은 목록 %d개 → %d개" % [file_context,prepared.summary,current_count,final_stations.size()]
  station_import_new_only.text="신규 STA만 보기 (%d개)" % new_stations.size()
  station_import_new_only.set_pressed_no_signal(false)
@@ -1724,5 +1728,12 @@ func apply_station_import_preview() -> bool:
  if preview.is_empty() or preview.prepared.no_changes:return false
  if result_text().is_empty() or generation!=preview.generation or collected_stations!=preview.stations:
   status.text="산출 결과 또는 목록이 바뀌었습니다. 파일을 다시 선택하세요."
+  return false
+ var current_content=read_station_file(preview.path)
+ if current_content==null:return false
+ if current_content!=preview.content:
+  if preview_station_import(preview.path,preview.prepared.replace_list):
+   status.text="파일이 변경되었습니다. 새 미리보기를 확인한 뒤 적용하세요."
+   station_import_dialog.dialog_text+="\n"+status.text
   return false
  return apply_station_import(preview.prepared)
