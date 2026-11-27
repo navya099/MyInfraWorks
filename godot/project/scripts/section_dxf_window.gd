@@ -30,6 +30,7 @@ var station_import_switch_mode_button: Button
 var station_import_order_button: Button
 var station_import_order_dialog: AcceptDialog
 var station_import_order_table: Tree
+var station_import_copy_order_button: Button
 var station_import_preview_select_file_button: Button
 var station_import_error_dialog: AcceptDialog
 var station_import_error_list: TextEdit
@@ -576,10 +577,15 @@ func _ready():
  station_import_order_table.set_column_title(1,"현재 (m)")
  station_import_order_table.set_column_title(2,"교체 후 (m)")
  station_import_order_dialog.add_child(station_import_order_table)
+ station_import_copy_order_button=station_import_order_dialog.add_button("비교표 복사")
+ station_import_copy_order_button.pressed.connect(copy_station_import_order)
  station_import_order_button=Button.new()
  station_import_order_button.text="순서 비교"
  station_import_order_button.hide()
- station_import_order_button.pressed.connect(station_import_order_dialog.popup_centered.bind(Vector2i(460,300)))
+ station_import_order_button.pressed.connect(func():
+  station_import_copy_order_button.text="비교표 복사"
+  station_import_order_dialog.popup_centered(Vector2i(460,300))
+ )
  preview_options.add_child(station_import_order_button)
  station_import_list_title=Label.new()
  preview_lists.add_child(station_import_list_title)
@@ -1790,6 +1796,32 @@ func retry_station_import(show_replacement: bool=false) -> void:
  station_import_error_dialog.hide()
  if preview_station_import(station_import_retry_path,replace_list):
   status.text="STA 파일 검증을 완료했습니다."
+
+
+func station_import_order_text() -> String:
+ var root=station_import_order_table.get_root()
+ if root==null:
+  return ""
+ var headings=PackedStringArray()
+ for column in range(station_import_order_table.columns):
+  headings.append(station_import_order_table.get_column_title(column))
+ var lines=PackedStringArray(["\t".join(headings)])
+ for row in root.get_children():
+  var cells=PackedStringArray()
+  for column in range(station_import_order_table.columns):
+   cells.append(row.get_text(column))
+  lines.append("\t".join(cells))
+ return "\n".join(lines)
+
+
+func copy_station_import_order() -> void:
+ if not station_import_order_dialog.visible:
+  return
+ var content=station_import_order_text()
+ if content.is_empty():
+  return
+ DisplayServer.clipboard_set(content)
+ station_import_copy_order_button.text="복사됨"
 
 
 func copy_station_import_errors() -> void:

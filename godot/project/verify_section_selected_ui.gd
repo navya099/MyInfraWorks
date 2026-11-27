@@ -940,6 +940,14 @@ func run():
  assert(order_rows.size()==2)
  assert(order_rows[0].get_text(1).to_float()==600.0 and order_rows[0].get_text(2).to_float()==500.25)
  assert(order_rows[1].get_text(1).to_float()==500.25 and order_rows[1].get_text(2).to_float()==600.0)
+ var expected_order_text="순번\t현재 (m)\t교체 후 (m)\n1\t%s\t%s\n2\t%s\t%s" % [order_rows[0].get_text(1),order_rows[0].get_text(2),order_rows[1].get_text(1),order_rows[1].get_text(2)]
+ assert(app.section_dxf.station_import_order_text()==expected_order_text)
+ app.section_dxf.station_import_copy_order_button.pressed.emit()
+ assert(app.section_dxf.station_import_copy_order_button.text=="복사됨")
+ assert(app.section_dxf.station_import_order_dialog.visible)
+ if DisplayServer.get_name()!="headless":
+  assert(DisplayServer.clipboard_get().replace("\r\n","\n")==expected_order_text)
+ print("PASS STATION IMPORT ORDER COMPARISON COPY")
  app.section_dxf.station_import_order_dialog.get_ok_button().pressed.emit()
  assert(not app.section_dxf.station_import_order_dialog.visible)
  assert(app.section_dxf.station_import_dialog.visible)
