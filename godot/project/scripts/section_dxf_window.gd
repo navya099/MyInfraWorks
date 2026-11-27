@@ -30,6 +30,7 @@ var station_import_switch_mode_button: Button
 var station_import_order_button: Button
 var station_import_order_dialog: AcceptDialog
 var station_import_order_table: Tree
+var station_import_order_changed_only: CheckBox
 var station_import_copy_order_button: Button
 var station_import_preview_select_file_button: Button
 var station_import_error_dialog: AcceptDialog
@@ -567,8 +568,15 @@ func _ready():
  station_import_order_dialog.transient=true
  station_import_order_dialog.exclusive=true
  station_import_dialog.add_child(station_import_order_dialog)
+ var order_content=VBoxContainer.new()
+ station_import_order_dialog.add_child(order_content)
+ station_import_order_changed_only=CheckBox.new()
+ station_import_order_changed_only.text="변경된 순번만 보기"
+ station_import_order_changed_only.toggled.connect(update_station_import_order_filter)
+ order_content.add_child(station_import_order_changed_only)
  station_import_order_table=Tree.new()
  station_import_order_table.custom_minimum_size=Vector2(390,190)
+ station_import_order_table.size_flags_vertical=Control.SIZE_EXPAND_FILL
  station_import_order_table.columns=3
  station_import_order_table.hide_root=true
  station_import_order_table.column_titles_visible=true
@@ -576,14 +584,14 @@ func _ready():
  station_import_order_table.set_column_expand(0,false)
  station_import_order_table.set_column_title(1,"현재 (m)")
  station_import_order_table.set_column_title(2,"교체 후 (m)")
- station_import_order_dialog.add_child(station_import_order_table)
+ order_content.add_child(station_import_order_table)
  station_import_copy_order_button=station_import_order_dialog.add_button("비교표 복사")
  station_import_copy_order_button.pressed.connect(copy_station_import_order)
  station_import_order_button=Button.new()
  station_import_order_button.text="순서 비교"
  station_import_order_button.hide()
  station_import_order_button.pressed.connect(func():
-  station_import_copy_order_button.text="비교표 복사"
+  update_station_import_order_filter(station_import_order_changed_only.button_pressed)
   station_import_order_dialog.popup_centered(Vector2i(460,300))
  )
  preview_options.add_child(station_import_order_button)
@@ -1716,6 +1724,7 @@ func preview_station_import(path: String, replace_list: bool) -> bool:
  update_station_import_list(false)
  var removed: Array[float]=[]
  station_import_order_button.hide()
+ station_import_order_changed_only.set_pressed_no_signal(false)
  station_import_order_table.clear()
  if replace_list:
   var retained_in_current_order: Array[float]=[]
@@ -1798,6 +1807,15 @@ func retry_station_import(show_replacement: bool=false) -> void:
   status.text="STA 파일 검증을 완료했습니다."
 
 
+func update_station_import_order_filter(changed_only: bool) -> void:
+ var root=station_import_order_table.get_root()
+ if root==null:
+  return
+ for row in root.get_children():
+  row.visible=not changed_only or row.get_text(1)!=row.get_text(2)
+ station_import_copy_order_button.text="표시된 행 복사" if changed_only else "비교표 복사"
+
+
 func station_import_order_text() -> String:
  var root=station_import_order_table.get_root()
  if root==null:
@@ -1807,6 +1825,8 @@ func station_import_order_text() -> String:
   headings.append(station_import_order_table.get_column_title(column))
  var lines=PackedStringArray(["\t".join(headings)])
  for row in root.get_children():
+  if not row.visible:
+   continue
   var cells=PackedStringArray()
   for column in range(station_import_order_table.columns):
    cells.append(row.get_text(column))
